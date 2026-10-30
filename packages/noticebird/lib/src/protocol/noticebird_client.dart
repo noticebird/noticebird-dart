@@ -602,7 +602,9 @@ final class NoticebirdClient {
   ///
   /// The [CaptureResult] carries the event's id
   /// ([CaptureResult.eventId]), for a feedback report about this error;
-  /// [eventIdOf] answers it later from the error alone. Never throws.
+  /// [eventIdOf] answers it later from the error alone. A capture the
+  /// filter ignores is no capture: [eventIdOf] keeps answering the error's
+  /// earlier one. Never throws.
   Future<CaptureResult> captureException(
     Object error,
     StackTrace stackTrace, {
@@ -613,6 +615,9 @@ final class NoticebirdClient {
     List<String>? groupingKey,
     bool filtered = true,
   }) {
+    if (filtered && !_accepts(error)) {
+      return Future.value(const CaptureResult(CaptureOutcome.ignored));
+    }
     final capture = _capture(
       error,
       stackTrace,
@@ -621,7 +626,6 @@ final class NoticebirdClient {
       tags: tags,
       extra: extra,
       groupingKey: groupingKey,
-      filtered: filtered,
     );
     try {
       if (_canKey(error)) _captures[error] = capture;
@@ -635,11 +639,13 @@ final class NoticebirdClient {
   /// The id of the event the last capture of [error] made
   /// ([CaptureResult.eventId]), once that capture has settled: what a
   /// feedback report about the error names as its `relatedEventId`, also
-  /// when a global handler captured it without waiting. `null` when [error]
-  /// was not captured by this client, when its capture made no event that
-  /// went anywhere, and for an error that is a string, a number, a boolean
-  /// or a record, which cannot be told apart from an equal value thrown
-  /// elsewhere. Never throws.
+  /// when a global handler captured it without waiting. A capture
+  /// [NoticebirdConfig.shouldCapture] ignored does not count, so an error
+  /// the host reported and rethrew keeps the id of its report. `null` when
+  /// [error] was not captured by this client, when its capture made no
+  /// event that went anywhere, and for an error that is a string, a number,
+  /// a boolean or a record, which cannot be told apart from an equal value
+  /// thrown elsewhere. Never throws.
   Future<String?> eventIdOf(Object error) async {
     try {
       if (!_canKey(error)) return null;
@@ -666,11 +672,7 @@ final class NoticebirdClient {
     required Map<AllowedTag, TagScalar> tags,
     required Map<String, Object?> extra,
     required List<String>? groupingKey,
-    required bool filtered,
   }) async {
-    if (filtered && !_accepts(error)) {
-      return const CaptureResult(CaptureOutcome.ignored);
-    }
     final transport = _transport;
     if (transport == null) return const CaptureResult(CaptureOutcome.discarded);
     String? key;

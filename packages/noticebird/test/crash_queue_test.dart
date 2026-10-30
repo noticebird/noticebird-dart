@@ -34,6 +34,7 @@ NoticebirdClient _client({
   CrashOfflineStore? store,
   FeedbackConfig? feedback,
   DateTime Function()? clock,
+  bool Function(Object error)? shouldCapture,
 }) => NoticebirdClient(
   config: NoticebirdConfig(
     privacyProfile: CrashPrivacyProfile.privacyDefault,
@@ -43,6 +44,7 @@ NoticebirdClient _client({
     deduplicationWindow: Duration.zero,
     offlineStore: store,
     feedback: feedback,
+    shouldCapture: shouldCapture,
   ),
   transport: transport,
   clock: clock,
@@ -113,6 +115,31 @@ void main() {
 
       expect(id, isNotNull);
       expect(jsonDecode(transport.bodies.single)['eventId'], id);
+    });
+
+    test('keeps the id of the real capture when a later capture of the same '
+        'error is ignored by the filter', () async {
+      final transport = _Transport();
+      final error = StateError('converted');
+      // The host reports its converted errors at its own report point; every
+      // other channel leaves them to it.
+      final reporter = _client(
+        transport: transport,
+        shouldCapture: (candidate) => !identical(candidate, error),
+      );
+
+      final reported = await reporter.captureException(
+        error,
+        _stack,
+        filtered: false,
+      );
+      // Rethrown after its conversion, it reaches a global channel.
+      final ignored = await reporter.captureException(error, _stack);
+
+      expect(ignored.outcome, CaptureOutcome.ignored);
+      expect(reported.eventId, isNotNull);
+      expect(await reporter.eventIdOf(error), reported.eventId);
+      expect(transport.bodies, hasLength(1));
     });
 
     test('answers null for an error never captured, one discarded, and one '
