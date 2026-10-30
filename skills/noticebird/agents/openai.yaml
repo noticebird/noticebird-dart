@@ -1,0 +1,4 @@
+interface:
+  display_name: "Noticebird SDK"
+  short_description: "Integrate and debug the noticebird Flutter SDK"
+  default_prompt: "Use $noticebird to wire up, extend or debug crash reporting in this app."

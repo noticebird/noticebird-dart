@@ -1,0 +1,31 @@
+{
+  "description": "Step 1: a slot for the screenshot of valid/screenshot.json. The server names where and how the bytes go: its uploadUrl 0, resolved against this request's URL, is that same URL. The slot expires 22 hours after it was made.",
+  "request": {
+    "method": "POST",
+    "path": "/v1/feedback/3b0c6f2e-8d41-4a77-9c5e-1f2a3b4c5d6e/attachments/0",
+    "headers": {
+      "authorization": "Bearer noticebird_pk_conformance_kit_example_key",
+      "content-type": "application/json"
+    },
+    "body": {
+      "contentType": "image/png",
+      "byteLength": 68,
+      "sha256": "7ac2abfce2be8b46dd9826d597d94edeefc1570b4a992622721b90a1850e3ee9"
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "uploaded": false,
+      "uploadUrl": "0",
+      "uploadMethod": "PUT",
+      "uploadHeaders": {
+        "content-type": "image/png"
+      },
+      "expiresAt": "2026-10-30T12:05:00.000Z"
+    }
+  }
+}

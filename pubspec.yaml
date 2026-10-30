@@ -1,0 +1,13 @@
+name: noticebird_sdk_workspace
+description: Workspace for the public crash reporting protocol and Flutter SDK.
+publish_to: none
+
+environment:
+  sdk: ">=3.8.0 <4.0.0"
+
+workspace:
+  - packages/noticebird_protocol
+  - packages/noticebird
+  - packages/noticebird/example
+  - packages/noticebird_native
+  - packages/noticebird_native/example

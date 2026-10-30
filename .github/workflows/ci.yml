@@ -1,0 +1,142 @@
+name: SDK CI
+
+# CI runs on request only, to spare the hosted Actions minutes: on a pull
+# request, on a manual dispatch, or on a push whose head commit message
+# carries `[ci]`. Every job repeats that gate, because `on:` cannot filter a
+# push by its commit message. The local checks in CONTRIBUTING.md are the
+# gate while working.
+on:
+  pull_request:
+  push:
+    branches: [main, develop]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  protocol:
+    name: Protocol tests
+    if: github.event_name != 'push' || contains(github.event.head_commit.message, '[ci]')
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/noticebird_protocol
+    steps:
+      - uses: actions/checkout@v4
+      # This package is pure Dart, but it is a member of a pub workspace whose
+      # other members depend on the Flutter SDK, so resolution needs Flutter.
+      # Everything after `pub get` still runs on plain Dart.
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - run: dart format --output=none --set-exit-if-changed .
+      - run: dart analyze
+      - run: dart test
+
+  flutter_sdk:
+    name: Flutter SDK tests
+    if: github.event_name != 'push' || contains(github.event.head_commit.message, '[ci]')
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/noticebird
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - name: Verify the toolchain left checked-in files untouched
+        run: |
+          dirty="$(git status --porcelain -- .)"
+          if [ -n "$dirty" ]; then
+            echo "::error::'flutter pub get' modified checked-in files; commit the result or pin the toolchain."
+            echo "$dirty"
+            git diff -- .
+            exit 1
+          fi
+      - run: dart format --output=none --set-exit-if-changed .
+      - run: flutter analyze
+      - run: flutter test
+      - run: flutter pub publish --dry-run
+
+  native_dart:
+    name: Native add-on Dart tests
+    if: github.event_name != 'push' || contains(github.event.head_commit.message, '[ci]')
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/noticebird_native
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - run: dart format --output=none --set-exit-if-changed lib test example/lib example/test
+      - run: flutter analyze
+      - run: flutter test
+      - run: flutter test
+        working-directory: packages/noticebird_native/example
+
+  ios_normalizer:
+    name: iOS normalizer tests
+    if: github.event_name != 'push' || contains(github.event.head_commit.message, '[ci]')
+    # The normalizer is Foundation-only by design, so it builds and tests on
+    # the hosted Linux image's Swift toolchain; the MetricKit plugin itself is
+    # built on the owner's Mac per release.
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/noticebird_native/ios/noticebird_native/NativeCrashNormalizer
+    steps:
+      - uses: actions/checkout@v4
+      - run: swift --version
+      - run: swift test
+
+  android_native:
+    name: Android collector tests and example build
+    if: github.event_name != 'push' || contains(github.event.head_commit.message, '[ci]')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - name: Build the example (compiles the plugin)
+        working-directory: packages/noticebird_native/example
+        run: flutter build apk --debug
+      - name: JVM unit tests of the collector
+        working-directory: packages/noticebird_native/example/android
+        run: ./gradlew :noticebird_native:testDebugUnitTest
+
+  security:
+    name: Repository safety checks
+    if: github.event_name != 'push' || contains(github.event.head_commit.message, '[ci]')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Check for committed private configuration
+        run: bash .github/scripts/check-private-config.sh
+      - name: Verify package boundaries
+        # The packages depend only on published packages and on each other by
+        # version: no path or git dependency on an app or a service.
+        run: |
+          ! grep -nE '^[[:space:]]+(path|git):' packages/noticebird/pubspec.yaml packages/noticebird_native/pubspec.yaml packages/noticebird_protocol/pubspec.yaml

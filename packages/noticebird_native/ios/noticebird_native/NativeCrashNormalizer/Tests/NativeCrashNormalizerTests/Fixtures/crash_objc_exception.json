@@ -1,0 +1,155 @@
+{
+  "version": "1.0.0",
+  "callStackTree": {
+    "callStackPerThread": true,
+    "callStacks": [
+      {
+        "threadAttributed": true,
+        "callStackRootFrames": [
+          {
+            "binaryName": "CoreFoundation",
+            "binaryUUID": "DDA24297-289C-30EC-8228-4C426AAD4D7F",
+            "offsetIntoBinaryTextSegment": 1254780,
+            "address": 6520173948,
+            "sampleCount": 1,
+            "subFrames": [
+              {
+                "binaryName": "libobjc.A.dylib",
+                "binaryUUID": "1F3C5B2E-7D4A-3E69-8B0C-5A6D7E8F9012",
+                "offsetIntoBinaryTextSegment": 99548,
+                "address": 6443369692,
+                "sampleCount": 1,
+                "subFrames": [
+                  {
+                    "binaryName": "CoreFoundation",
+                    "binaryUUID": "DDA24297-289C-30EC-8228-4C426AAD4D7F",
+                    "offsetIntoBinaryTextSegment": 1398744,
+                    "address": 6520317912,
+                    "sampleCount": 1,
+                    "subFrames": [
+                      {
+                        "binaryName": "Runner",
+                        "binaryUUID": "D2582493-9648-343B-9A08-C1981D4B845B",
+                        "offsetIntoBinaryTextSegment": 2373996,
+                        "address": 4338317676,
+                        "sampleCount": 1,
+                        "subFrames": [
+                          {
+                            "binaryName": "Runner",
+                            "binaryUUID": "D2582493-9648-343B-9A08-C1981D4B845B",
+                            "offsetIntoBinaryTextSegment": 2362780,
+                            "address": 4338306460,
+                            "sampleCount": 1,
+                            "subFrames": [
+                              {
+                                "binaryName": "Runner",
+                                "binaryUUID": "D2582493-9648-343B-9A08-C1981D4B845B",
+                                "offsetIntoBinaryTextSegment": 2363000,
+                                "address": 4338306680,
+                                "sampleCount": 1,
+                                "subFrames": [
+                                  {
+                                    "binaryName": "CoreFoundation",
+                                    "binaryUUID": "DDA24297-289C-30EC-8228-4C426AAD4D7F",
+                                    "offsetIntoBinaryTextSegment": 194052,
+                                    "address": 6519113220,
+                                    "sampleCount": 1,
+                                    "subFrames": [
+                                      {
+                                        "binaryName": "CoreFoundation",
+                                        "binaryUUID": "DDA24297-289C-30EC-8228-4C426AAD4D7F",
+                                        "offsetIntoBinaryTextSegment": 189772,
+                                        "address": 6519108940,
+                                        "sampleCount": 1,
+                                        "subFrames": [
+                                          {
+                                            "binaryName": "GraphicsServices",
+                                            "binaryUUID": "D0A89589-718A-3D3A-96DA-D2C99BB19040",
+                                            "offsetIntoBinaryTextSegment": 5272,
+                                            "address": 9295361176,
+                                            "sampleCount": 1,
+                                            "subFrames": [
+                                              {
+                                                "binaryName": "UIKitCore",
+                                                "binaryUUID": "9EE8C19A-A370-3599-823B-34B84131AAD7",
+                                                "offsetIntoBinaryTextSegment": 1184324,
+                                                "address": 6616597060,
+                                                "sampleCount": 1,
+                                                "subFrames": [
+                                                  {
+                                                    "binaryName": "UIKitCore",
+                                                    "binaryUUID": "9EE8C19A-A370-3599-823B-34B84131AAD7",
+                                                    "offsetIntoBinaryTextSegment": 573784,
+                                                    "address": 6615986520,
+                                                    "sampleCount": 1,
+                                                    "subFrames": [
+                                                      {
+                                                        "binaryName": "Runner",
+                                                        "binaryUUID": "D2582493-9648-343B-9A08-C1981D4B845B",
+                                                        "offsetIntoBinaryTextSegment": 20248,
+                                                        "address": 4335963928,
+                                                        "sampleCount": 1,
+                                                        "subFrames": [
+                                                          {
+                                                            "binaryName": "dyld",
+                                                            "binaryUUID": "02F772FD-9E38-35A4-B9FA-9CCE3A090E6D",
+                                                            "offsetIntoBinaryTextSegment": 19484,
+                                                            "address": 6464642076,
+                                                            "sampleCount": 1
+                                                          }
+                                                        ]
+                                                      }
+                                                    ]
+                                                  }
+                                                ]
+                                              }
+                                            ]
+                                          }
+                                        ]
+                                      }
+                                    ]
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "diagnosticMetaData": {
+    "appBuildVersion": "78",
+    "appVersion": "0.0.10",
+    "bundleIdentifier": "com.example.app",
+    "deviceType": "iPhone16,2",
+    "isTestFlightApp": false,
+    "lowPowerModeEnabled": false,
+    "osVersion": "iPhone OS 26.5.2 (23F84)",
+    "platformArchitecture": "arm64e",
+    "regionFormat": "US",
+    "exceptionType": 10,
+    "exceptionCode": 0,
+    "signal": 6,
+    "pid": 5121,
+    "terminationReason": "Namespace SIGNAL, Code 0x6",
+    "objectiveCexceptionReason": {
+      "composedMessage": "*** -[__NSArrayM objectAtIndexedSubscript:]: index 5 beyond bounds [0 .. 2]",
+      "formatString": "*** -[__NSArrayM objectAtIndexedSubscript:]: index %lu beyond bounds [0 .. %lu]",
+      "arguments": [
+        "5",
+        "2"
+      ],
+      "exceptionType": "NSException",
+      "className": "NSException",
+      "exceptionName": "NSRangeException"
+    }
+  }
+}

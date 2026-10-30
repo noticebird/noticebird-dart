@@ -1,0 +1,22 @@
+{
+  "description": "A reporter assertion the server does not verify, here signed with a key the project does not have. The reason is one of malformed, key, signature, claims or time; the client sends the report once more without its assertion, or rejects it as unverified when its host requires verification.",
+  "request": {
+    "method": "POST",
+    "path": "/v1/feedback",
+    "headers": {
+      "authorization": "Bearer noticebird_pk_conformance_kit_example_key",
+      "content-type": "application/json"
+    },
+    "bodyFile": "valid/full.json"
+  },
+  "response": {
+    "status": 401,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "error": "invalid_reporter_assertion",
+      "reason": "key"
+    }
+  }
+}

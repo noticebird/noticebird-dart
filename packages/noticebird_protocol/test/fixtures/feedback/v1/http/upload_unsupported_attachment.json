@@ -1,0 +1,25 @@
+{
+  "description": "Bytes whose file signature is not the declared type: final.",
+  "given": [
+    "slot_pending_mismatch.json"
+  ],
+  "request": {
+    "method": "PUT",
+    "path": "/v1/feedback/e3b0c442-98fc-4c14-9afb-f4c8996fb924/attachments/0",
+    "headers": {
+      "authorization": "Bearer noticebird_pk_conformance_kit_example_key",
+      "content-type": "image/webp",
+      "content-length": "68"
+    },
+    "bodyFile": "http/screenshot.png"
+  },
+  "response": {
+    "status": 415,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "error": "unsupported_attachment"
+    }
+  }
+}

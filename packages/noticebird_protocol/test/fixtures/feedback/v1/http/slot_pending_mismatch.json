@@ -1,0 +1,31 @@
+{
+  "description": "A slot that declares WebP for the PNG bytes of http/screenshot.png.",
+  "request": {
+    "method": "POST",
+    "path": "/v1/feedback/e3b0c442-98fc-4c14-9afb-f4c8996fb924/attachments/0",
+    "headers": {
+      "authorization": "Bearer noticebird_pk_conformance_kit_example_key",
+      "content-type": "application/json"
+    },
+    "body": {
+      "contentType": "image/webp",
+      "byteLength": 68,
+      "sha256": "7ac2abfce2be8b46dd9826d597d94edeefc1570b4a992622721b90a1850e3ee9"
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "uploaded": false,
+      "uploadUrl": "0",
+      "uploadMethod": "PUT",
+      "uploadHeaders": {
+        "content-type": "image/webp"
+      },
+      "expiresAt": "2026-10-30T12:05:00.000Z"
+    }
+  }
+}

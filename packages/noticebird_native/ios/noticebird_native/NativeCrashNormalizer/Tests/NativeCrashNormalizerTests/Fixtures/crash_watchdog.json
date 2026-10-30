@@ -1,0 +1,198 @@
+{
+  "version": "1.0.0",
+  "callStackTree": {
+    "callStackPerThread": true,
+    "callStacks": [
+      {
+        "threadAttributed": true,
+        "callStackRootFrames": [
+          {
+            "binaryName": "libsystem_kernel.dylib",
+            "binaryUUID": "F70C76E3-1352-3A17-BA3E-95F85CBD1D5B",
+            "offsetIntoBinaryTextSegment": 26088,
+            "address": 9456723432,
+            "sampleCount": 1,
+            "subFrames": [
+              {
+                "binaryName": "libsystem_pthread.dylib",
+                "binaryUUID": "39DACBE1-6BF6-3956-9F6C-802BEA4EC760",
+                "offsetIntoBinaryTextSegment": 11080,
+                "address": 8115039048,
+                "sampleCount": 1,
+                "subFrames": [
+                  {
+                    "binaryName": "App",
+                    "binaryUUID": "6D1F0B52-8E3A-3C47-9F21-0A7C5B9E4D13",
+                    "offsetIntoBinaryTextSegment": 1843200,
+                    "address": 4358365184,
+                    "sampleCount": 1,
+                    "subFrames": [
+                      {
+                        "binaryName": "App",
+                        "binaryUUID": "6D1F0B52-8E3A-3C47-9F21-0A7C5B9E4D13",
+                        "offsetIntoBinaryTextSegment": 1790212,
+                        "address": 4358312196,
+                        "sampleCount": 1,
+                        "subFrames": [
+                          {
+                            "binaryName": "Flutter",
+                            "binaryUUID": "4C4C44E5-5555-3144-A13D-CC7994841AAC",
+                            "offsetIntoBinaryTextSegment": 6054692,
+                            "address": 4396868388,
+                            "sampleCount": 1,
+                            "subFrames": [
+                              {
+                                "binaryName": "Flutter",
+                                "binaryUUID": "4C4C44E5-5555-3144-A13D-CC7994841AAC",
+                                "offsetIntoBinaryTextSegment": 10483772,
+                                "address": 4401297468,
+                                "sampleCount": 1,
+                                "subFrames": [
+                                  {
+                                    "binaryName": "Flutter",
+                                    "binaryUUID": "4C4C44E5-5555-3144-A13D-CC7994841AAC",
+                                    "offsetIntoBinaryTextSegment": 1355592,
+                                    "address": 4392169288,
+                                    "sampleCount": 1,
+                                    "subFrames": [
+                                      {
+                                        "binaryName": "Flutter",
+                                        "binaryUUID": "4C4C44E5-5555-3144-A13D-CC7994841AAC",
+                                        "offsetIntoBinaryTextSegment": 728444,
+                                        "address": 4391542140,
+                                        "sampleCount": 1,
+                                        "subFrames": [
+                                          {
+                                            "binaryName": "Flutter",
+                                            "binaryUUID": "4C4C44E5-5555-3144-A13D-CC7994841AAC",
+                                            "offsetIntoBinaryTextSegment": 747612,
+                                            "address": 4391561308,
+                                            "sampleCount": 1,
+                                            "subFrames": [
+                                              {
+                                                "binaryName": "CoreFoundation",
+                                                "binaryUUID": "DDA24297-289C-30EC-8228-4C426AAD4D7F",
+                                                "offsetIntoBinaryTextSegment": 452960,
+                                                "address": 6519372128,
+                                                "sampleCount": 1,
+                                                "subFrames": [
+                                                  {
+                                                    "binaryName": "CoreFoundation",
+                                                    "binaryUUID": "DDA24297-289C-30EC-8228-4C426AAD4D7F",
+                                                    "offsetIntoBinaryTextSegment": 452184,
+                                                    "address": 6519371352,
+                                                    "sampleCount": 1,
+                                                    "subFrames": [
+                                                      {
+                                                        "binaryName": "CoreFoundation",
+                                                        "binaryUUID": "DDA24297-289C-30EC-8228-4C426AAD4D7F",
+                                                        "offsetIntoBinaryTextSegment": 451020,
+                                                        "address": 6519370188,
+                                                        "sampleCount": 1,
+                                                        "subFrames": [
+                                                          {
+                                                            "binaryName": "CoreFoundation",
+                                                            "binaryUUID": "DDA24297-289C-30EC-8228-4C426AAD4D7F",
+                                                            "offsetIntoBinaryTextSegment": 194052,
+                                                            "address": 6519113220,
+                                                            "sampleCount": 1,
+                                                            "subFrames": [
+                                                              {
+                                                                "binaryName": "CoreFoundation",
+                                                                "binaryUUID": "DDA24297-289C-30EC-8228-4C426AAD4D7F",
+                                                                "offsetIntoBinaryTextSegment": 189772,
+                                                                "address": 6519108940,
+                                                                "sampleCount": 1,
+                                                                "subFrames": [
+                                                                  {
+                                                                    "binaryName": "GraphicsServices",
+                                                                    "binaryUUID": "D0A89589-718A-3D3A-96DA-D2C99BB19040",
+                                                                    "offsetIntoBinaryTextSegment": 5272,
+                                                                    "address": 9295361176,
+                                                                    "sampleCount": 1,
+                                                                    "subFrames": [
+                                                                      {
+                                                                        "binaryName": "UIKitCore",
+                                                                        "binaryUUID": "9EE8C19A-A370-3599-823B-34B84131AAD7",
+                                                                        "offsetIntoBinaryTextSegment": 1184324,
+                                                                        "address": 6616597060,
+                                                                        "sampleCount": 1,
+                                                                        "subFrames": [
+                                                                          {
+                                                                            "binaryName": "UIKitCore",
+                                                                            "binaryUUID": "9EE8C19A-A370-3599-823B-34B84131AAD7",
+                                                                            "offsetIntoBinaryTextSegment": 573784,
+                                                                            "address": 6615986520,
+                                                                            "sampleCount": 1,
+                                                                            "subFrames": [
+                                                                              {
+                                                                                "binaryName": "Runner",
+                                                                                "binaryUUID": "D2582493-9648-343B-9A08-C1981D4B845B",
+                                                                                "offsetIntoBinaryTextSegment": 20248,
+                                                                                "address": 4335963928,
+                                                                                "sampleCount": 1,
+                                                                                "subFrames": [
+                                                                                  {
+                                                                                    "binaryName": "dyld",
+                                                                                    "binaryUUID": "02F772FD-9E38-35A4-B9FA-9CCE3A090E6D",
+                                                                                    "offsetIntoBinaryTextSegment": 19484,
+                                                                                    "address": 6464642076,
+                                                                                    "sampleCount": 1
+                                                                                  }
+                                                                                ]
+                                                                              }
+                                                                            ]
+                                                                          }
+                                                                        ]
+                                                                      }
+                                                                    ]
+                                                                  }
+                                                                ]
+                                                              }
+                                                            ]
+                                                          }
+                                                        ]
+                                                      }
+                                                    ]
+                                                  }
+                                                ]
+                                              }
+                                            ]
+                                          }
+                                        ]
+                                      }
+                                    ]
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "diagnosticMetaData": {
+    "appBuildVersion": "78",
+    "appVersion": "0.0.10",
+    "bundleIdentifier": "com.example.app",
+    "deviceType": "iPhone16,2",
+    "isTestFlightApp": false,
+    "lowPowerModeEnabled": false,
+    "osVersion": "iPhone OS 26.5.2 (23F84)",
+    "platformArchitecture": "arm64e",
+    "regionFormat": "US",
+    "exceptionType": 10,
+    "exceptionCode": 0,
+    "signal": 9,
+    "pid": 5120,
+    "terminationReason": "Namespace FRONTBOARD, Code 0x8badf00d"
+  }
+}

@@ -1,0 +1,40 @@
+name: Publish SDK packages
+
+on:
+  workflow_dispatch:
+    inputs:
+      package:
+        description: Package directory to publish
+        required: true
+        type: choice
+        options:
+          - packages/noticebird_protocol
+          - packages/noticebird
+      confirm:
+        description: Type PUBLISH to enable publication
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    if: inputs.confirm == 'PUBLISH'
+    runs-on: ubuntu-latest
+    environment: pub-dev
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Verify immutable tag
+        run: |
+          git describe --exact-match --tags HEAD
+          git diff --exit-code HEAD^ HEAD -- ${{ inputs.package }}
+      - name: Publish selected package
+        working-directory: ${{ inputs.package }}
+        run: flutter pub publish --force

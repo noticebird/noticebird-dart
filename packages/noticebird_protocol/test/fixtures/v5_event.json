@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 5,
+  "eventId": "0197f232-2bd8-7000-8000-000000000005",
+  "occurredAt": "2026-07-11T10:15:00.000Z",
+  "severity": "error",
+  "handled": false,
+  "exception": {
+    "type": "SyncRefused",
+    "sanitizedMessage": "Refused: 23505 on collections",
+    "stackTrace": "#0 SyncWriter.push (package:app_sync/sync_writer.dart:88:5)"
+  },
+  "app": {
+    "name": "justorganize",
+    "version": "1.0.0",
+    "build": "100",
+    "release": "justorganize@1.0.0+100"
+  },
+  "platform": {
+    "name": "macos",
+    "osVersion": "15.5",
+    "deviceClass": "desktop"
+  },
+  "routeTemplate": "/lists/:listId",
+  "sessionId": "random_session_123456",
+  "user": {
+    "id": "user_abc123"
+  },
+  "tags": {
+    "feature": "lists",
+    "foreground": true
+  },
+  "extra": {
+    "retry_count": 2
+  },
+  "breadcrumbs": [
+    {
+      "occurredAt": "2026-07-11T10:14:59.000Z",
+      "category": "navigation",
+      "action": "route.push",
+      "level": "info",
+      "data": {
+        "component": "list-detail"
+      }
+    }
+  ],
+  "groupingKey": [
+    "sync-refusal",
+    "23505",
+    "collections"
+  ]
+}

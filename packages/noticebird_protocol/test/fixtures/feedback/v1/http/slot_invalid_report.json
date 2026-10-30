@@ -1,0 +1,27 @@
+{
+  "description": "A slot body the protocol refuses, here a content type v1 does not take: final, with the violation and its path in the slot body.",
+  "request": {
+    "method": "POST",
+    "path": "/v1/feedback/3b0c6f2e-8d41-4a77-9c5e-1f2a3b4c5d6e/attachments/0",
+    "headers": {
+      "authorization": "Bearer noticebird_pk_conformance_kit_example_key",
+      "content-type": "application/json"
+    },
+    "body": {
+      "contentType": "image/gif",
+      "byteLength": 68,
+      "sha256": "7ac2abfce2be8b46dd9826d597d94edeefc1570b4a992622721b90a1850e3ee9"
+    }
+  },
+  "response": {
+    "status": 400,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "error": "invalid_report",
+      "violation": "invalidValue",
+      "path": "$.contentType"
+    }
+  }
+}

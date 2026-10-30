@@ -1,0 +1,21 @@
+{
+  "description": "A key the server does not know, or one that is revoked or expired: final.",
+  "request": {
+    "method": "POST",
+    "path": "/v1/feedback",
+    "headers": {
+      "authorization": "Bearer noticebird_pk_unknown_to_the_server_example",
+      "content-type": "application/json"
+    },
+    "bodyFile": "valid/minimal.json"
+  },
+  "response": {
+    "status": 401,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "error": "invalid_key"
+    }
+  }
+}

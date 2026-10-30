@@ -1,0 +1,22 @@
+{
+  "description": "A key that allows only other origins than the request's Origin: final. A request without an Origin, as from a mobile app, is not refused for it.",
+  "request": {
+    "method": "POST",
+    "path": "/v1/feedback",
+    "headers": {
+      "authorization": "Bearer noticebird_pk_conformance_kit_example_key",
+      "content-type": "application/json",
+      "origin": "https://elsewhere.example"
+    },
+    "bodyFile": "valid/minimal.json"
+  },
+  "response": {
+    "status": 401,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "error": "origin_not_allowed"
+    }
+  }
+}

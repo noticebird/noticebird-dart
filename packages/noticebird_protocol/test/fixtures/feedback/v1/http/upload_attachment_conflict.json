@@ -1,0 +1,25 @@
+{
+  "description": "An upload of other bytes than the slot declared, here http/other.png: final. Another content-length is refused before the body is read; bytes of the same length with another SHA-256 are refused once read.",
+  "given": [
+    "slot_pending.json"
+  ],
+  "request": {
+    "method": "PUT",
+    "path": "/v1/feedback/3b0c6f2e-8d41-4a77-9c5e-1f2a3b4c5d6e/attachments/0",
+    "headers": {
+      "authorization": "Bearer noticebird_pk_conformance_kit_example_key",
+      "content-type": "image/png",
+      "content-length": "70"
+    },
+    "bodyFile": "http/other.png"
+  },
+  "response": {
+    "status": 409,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "error": "attachment_conflict"
+    }
+  }
+}

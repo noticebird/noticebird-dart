@@ -1,0 +1,42 @@
+{
+  "callStackTree" : {
+    "callStacks" : [
+      {
+        "threadAttributed" : true,
+        "callStackRootFrames" : [
+          {
+            "binaryUUID" : "70B89F27-1634-3580-A695-57CDB41D7743",
+            "offsetIntoBinaryTextSegment" : 123,
+            "sampleCount" : 20,
+            "subFrames" : [
+              {
+                "binaryUUID" : "77A62F2E-8212-30F3-84C1-E8497440ACF8",
+                "offsetIntoBinaryTextSegment" : 123,
+                "sampleCount" : 20,
+                "binaryName" : "testBinaryName",
+                "address" : 74565
+              }
+            ],
+            "binaryName" : "testBinaryName",
+            "address" : 74565
+          }
+        ]
+      }
+    ],
+    "callStackPerThread" : true
+  },
+  "diagnosticMetaData" : {
+    "appBuildVersion" : "1",
+    "appVersion" : "1.0",
+    "regionFormat" : "US",
+    "exceptionType" : 1,
+    "exceptionCode" : 0,
+    "signal" : 11,
+    "osVersion" : "iPhone OS 14.0 (18A5319i)",
+    "deviceType" : "iPhone12,1",
+    "platformArchitecture" : "arm64e",
+    "terminationReason" : "Namespace SIGNAL, Code 0xb",
+    "virtualMemoryRegionInfo" : "0 is not in any region.  Bytes before following region: 4000000000 REGION TYPE                      START - END             [ VSIZE] PRT\/MAX SHRMOD  REGION DETAIL UNUSED SPACE AT START ---> __TEXT                 0000000000000000-0000000000000000 [   32K] r-x\/r-x SM=COW  ...pp\/Test"
+  },
+  "version" : "1.0.0"
+}

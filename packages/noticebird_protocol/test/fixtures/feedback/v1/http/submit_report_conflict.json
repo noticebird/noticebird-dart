@@ -1,0 +1,95 @@
+{
+  "description": "The same reportId with other content, here another user context: final.",
+  "given": [
+    "slot_pending.json",
+    "upload_stored.json",
+    "submit_accepted.json"
+  ],
+  "request": {
+    "method": "POST",
+    "path": "/v1/feedback",
+    "headers": {
+      "authorization": "Bearer noticebird_pk_conformance_kit_example_key",
+      "content-type": "application/json"
+    },
+    "body": {
+      "app": {
+        "build": "412",
+        "name": "justorganize",
+        "release": "justorganize@1.8.0+412",
+        "version": "1.8.0"
+      },
+      "attachments": [
+        {
+          "byteLength": 68,
+          "contentType": "image/png",
+          "index": 0,
+          "sha256": "7ac2abfce2be8b46dd9826d597d94edeefc1570b4a992622721b90a1850e3ee9"
+        }
+      ],
+      "createdAt": "2026-10-29T14:03:12.418Z",
+      "diagnostics": {
+        "sync": {
+          "lastPullAt": "2026-10-29T14:01:55.000Z",
+          "outboxPending": 3,
+          "realtimeConnected": true
+        },
+        "subscription": {
+          "tier": "premium"
+        }
+      },
+      "kind": "bug",
+      "message": "The list jumps back to the top when I tick off an item.",
+      "platform": {
+        "deviceClass": "phone",
+        "locale": "nl-NL",
+        "name": "ios",
+        "osVersion": "26.1"
+      },
+      "reportId": "3b0c6f2e-8d41-4a77-9c5e-1f2a3b4c5d6e",
+      "routeTemplate": "/collections/:collectionId",
+      "schemaVersion": 1,
+      "sessionId": "p_7Hq2xK9mR4tW1zY6",
+      "trail": [
+        {
+          "action": "route.push",
+          "category": "navigation",
+          "level": "info",
+          "occurredAt": "2026-10-29T14:02:40.112Z"
+        },
+        {
+          "action": "record.toggle",
+          "category": "ui",
+          "data": {
+            "component": "record_tile",
+            "feature": "collections"
+          },
+          "level": "info",
+          "occurredAt": "2026-10-29T14:03:01.903Z"
+        }
+      ],
+      "trigger": "shake",
+      "userContext": {
+        "beta": true,
+        "features": [
+          "sharing",
+          "widgets"
+        ],
+        "plan": {
+          "seats": 5,
+          "tier": "premium"
+        },
+        "role": "member"
+      }
+    }
+  },
+  "response": {
+    "status": 409,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "error": "report_conflict"
+    }
+  }
+}

@@ -1,0 +1,145 @@
+{
+  "version": "1.0.0",
+  "callStackTree": {
+    "callStackPerThread": false,
+    "callStacks": [
+      {
+        "callStackRootFrames": [
+          {
+            "binaryName": "libsystem_pthread.dylib",
+            "binaryUUID": "39DACBE1-6BF6-3956-9F6C-802BEA4EC760",
+            "offsetIntoBinaryTextSegment": 2260,
+            "address": 8115030228,
+            "sampleCount": 3,
+            "subFrames": [
+              {
+                "binaryName": "libsystem_kernel.dylib",
+                "binaryUUID": "F70C76E3-1352-3A17-BA3E-95F85CBD1D5B",
+                "offsetIntoBinaryTextSegment": 3284,
+                "address": 9456700628,
+                "sampleCount": 3
+              }
+            ]
+          },
+          {
+            "binaryName": "libsystem_pthread.dylib",
+            "binaryUUID": "39DACBE1-6BF6-3956-9F6C-802BEA4EC760",
+            "offsetIntoBinaryTextSegment": 2252,
+            "address": 8115030220,
+            "sampleCount": 99,
+            "subFrames": [
+              {
+                "binaryName": "libsystem_pthread.dylib",
+                "binaryUUID": "39DACBE1-6BF6-3956-9F6C-802BEA4EC760",
+                "offsetIntoBinaryTextSegment": 17464,
+                "address": 8115045432,
+                "sampleCount": 99,
+                "subFrames": [
+                  {
+                    "binaryName": "Flutter",
+                    "binaryUUID": "4C4C4482-5555-3144-A189-47CFFBA6D499",
+                    "offsetIntoBinaryTextSegment": 6179464,
+                    "address": 4390062728,
+                    "sampleCount": 99,
+                    "subFrames": [
+                      {
+                        "binaryName": "Flutter",
+                        "binaryUUID": "4C4C4482-5555-3144-A189-47CFFBA6D499",
+                        "offsetIntoBinaryTextSegment": 6316220,
+                        "address": 4390199484,
+                        "sampleCount": 99,
+                        "subFrames": [
+                          {
+                            "binaryName": "Flutter",
+                            "binaryUUID": "4C4C4482-5555-3144-A189-47CFFBA6D499",
+                            "offsetIntoBinaryTextSegment": 5870088,
+                            "address": 4389753352,
+                            "sampleCount": 99,
+                            "subFrames": [
+                              {
+                                "binaryName": "Flutter",
+                                "binaryUUID": "4C4C4482-5555-3144-A189-47CFFBA6D499",
+                                "offsetIntoBinaryTextSegment": 5011252,
+                                "address": 4388894516,
+                                "sampleCount": 1,
+                                "subFrames": [
+                                  {
+                                    "binaryName": "Flutter",
+                                    "binaryUUID": "4C4C4482-5555-3144-A189-47CFFBA6D499",
+                                    "offsetIntoBinaryTextSegment": 5181588,
+                                    "address": 4389064852,
+                                    "sampleCount": 1,
+                                    "subFrames": [
+                                      {
+                                        "binaryName": "Flutter",
+                                        "binaryUUID": "4C4C4482-5555-3144-A189-47CFFBA6D499",
+                                        "offsetIntoBinaryTextSegment": 5218968,
+                                        "address": 4389102232,
+                                        "sampleCount": 1,
+                                        "subFrames": [
+                                          {
+                                            "binaryName": "libsystem_kernel.dylib",
+                                            "binaryUUID": "F70C76E3-1352-3A17-BA3E-95F85CBD1D5B",
+                                            "offsetIntoBinaryTextSegment": 26500,
+                                            "address": 9456723844,
+                                            "sampleCount": 1
+                                          }
+                                        ]
+                                      }
+                                    ]
+                                  }
+                                ]
+                              },
+                              {
+                                "binaryName": "Flutter",
+                                "binaryUUID": "4C4C4482-5555-3144-A189-47CFFBA6D499",
+                                "offsetIntoBinaryTextSegment": 5011324,
+                                "address": 4388894588,
+                                "sampleCount": 98,
+                                "subFrames": [
+                                  {
+                                    "binaryName": "Flutter",
+                                    "binaryUUID": "4C4C4482-5555-3144-A189-47CFFBA6D499",
+                                    "offsetIntoBinaryTextSegment": 5204708,
+                                    "address": 4389087972,
+                                    "sampleCount": 98,
+                                    "subFrames": [
+                                      {
+                                        "binaryName": "libsystem_kernel.dylib",
+                                        "binaryUUID": "F70C76E3-1352-3A17-BA3E-95F85CBD1D5B",
+                                        "offsetIntoBinaryTextSegment": 20528,
+                                        "address": 9456717872,
+                                        "sampleCount": 98
+                                      }
+                                    ]
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "diagnosticMetaData": {
+    "appBuildVersion": "23",
+    "appVersion": "0.0.8",
+    "bundleIdentifier": "com.example.app",
+    "deviceType": "iPhone16,2",
+    "isTestFlightApp": false,
+    "lowPowerModeEnabled": false,
+    "osVersion": "iPhone OS 26.5.2 (23F84)",
+    "platformArchitecture": "arm64e",
+    "regionFormat": "US",
+    "writesCaused": "4,33 GB",
+    "pid": 61410
+  }
+}

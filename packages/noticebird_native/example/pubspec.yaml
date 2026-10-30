@@ -1,0 +1,23 @@
+name: noticebird_native_example
+description: Native crash lab for noticebird_native — deliberate native crashes to reproduce the device and emulator smokes.
+publish_to: 'none'
+version: 1.0.0+1
+resolution: workspace
+
+environment:
+  sdk: '>=3.8.0 <4.0.0'
+  flutter: '>=3.29.0'
+
+dependencies:
+  noticebird: ^0.3.0
+  noticebird_native: ^0.3.0
+  flutter:
+    sdk: flutter
+
+dev_dependencies:
+  flutter_lints: ^5.0.0
+  flutter_test:
+    sdk: flutter
+
+flutter:
+  uses-material-design: true
