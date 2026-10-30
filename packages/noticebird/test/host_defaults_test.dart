@@ -1,7 +1,7 @@
 import 'dart:convert';
 
 import 'package:noticebird/noticebird.dart';
-import 'package:flutter_test/flutter_test.dart';
+import 'package:test/test.dart';
 
 /// What every host would otherwise write itself: the running platform's
 /// metadata, a session id per app run, and a transport that sends nothing.

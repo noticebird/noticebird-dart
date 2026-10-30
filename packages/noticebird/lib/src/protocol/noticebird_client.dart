@@ -1,11 +1,10 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
-import 'dart:ui';
+import 'dart:typed_data';
 
 import 'package:noticebird_protocol/feedback.dart';
 import 'package:noticebird_protocol/noticebird_protocol.dart';
-import 'package:flutter/foundation.dart';
 
 import '../feedback/feedback_capture.dart';
 import '../feedback/feedback_config.dart';
@@ -124,9 +123,6 @@ final class NoticebirdClient {
   /// [CaptureOutcome.deduplicated] result. The id is null when that event
   /// was dropped.
   final Map<String, ({DateTime seenAt, String? eventId})> _lastByKey = {};
-  bool _handlersInstalled = false;
-  FlutterExceptionHandler? _previousFlutterHandler;
-  ErrorCallback? _previousPlatformHandler;
   String? _userId;
   CrashUser? _user;
   String? _liveDebugSessionId;
@@ -136,7 +132,6 @@ final class NoticebirdClient {
   Future<void>? _nativeStarted;
   bool _nativeDeliveryRequested = false;
 
-  bool get handlersInstalled => _handlersInstalled;
   int get pendingCount => _pending.length;
   bool get isLiveDebugSessionActive =>
       _isLiveDebugSessionActiveAt(_clock().toUtc());
@@ -269,7 +264,7 @@ final class NoticebirdClient {
     }
     String? route = _routeTemplate;
     if (routeTemplate != null) {
-      route = _isRouteTemplate(routeTemplate)
+      route = isRouteTemplate(routeTemplate)
           ? sanitizeRouteTemplate(routeTemplate)
           : hostMistakesThrow
           ? throw _rawRoute(routeTemplate)
@@ -458,11 +453,11 @@ final class NoticebirdClient {
   Future<int> get pendingFeedbackCount async =>
       await _feedbackQueue?.count() ?? 0;
 
-  /// The platform's locale as a language tag; the report leaves out one it
-  /// refuses.
-  static String? _locale() {
+  /// The app's locale as a language tag ([NoticebirdConfig.locale]); the
+  /// report leaves out one it refuses.
+  String? _locale() {
     try {
-      return PlatformDispatcher.instance.locale.toLanguageTag();
+      return _config.locale?.call();
     } catch (_) {
       return null;
     }
@@ -528,7 +523,7 @@ final class NoticebirdClient {
   /// (an e-mail address, an IPv4 address) is redacted, so it never reaches an
   /// event or the native run state.
   void setRouteTemplate(String? routeTemplate) {
-    if (routeTemplate != null && !_isRouteTemplate(routeTemplate)) {
+    if (routeTemplate != null && !isRouteTemplate(routeTemplate)) {
       if (hostMistakesThrow) throw _rawRoute(routeTemplate);
       _routeTemplate = null;
       _updateNativeRun();
@@ -542,11 +537,16 @@ final class NoticebirdClient {
 
   String? _routeTemplate;
 
-  /// Whether [route] is a template such as `/lists/:listId`, not a raw
-  /// route with an id in it.
-  static bool _isRouteTemplate(String route) =>
+  /// Whether [route] is a template such as `/lists/:listId`, the rule
+  /// [setRouteTemplate] holds a route to: it starts with `/`, is at most
+  /// [CrashEvent.maxRouteTemplateLength] characters, has no query or
+  /// fragment, and no segment that looks like an id (16 or more hex
+  /// characters, or 2 or more digits).
+  static bool isRouteTemplate(String route) =>
       route.startsWith('/') &&
       route.length <= CrashEvent.maxRouteTemplateLength &&
+      !route.contains('?') &&
+      !route.contains('#') &&
       !RegExp(r'/[0-9a-fA-F-]{16,}').hasMatch(route) &&
       !RegExp(r'/\d{2,}').hasMatch(route);
 
@@ -830,51 +830,12 @@ final class NoticebirdClient {
     }
   }
 
-  void installGlobalHandlers() {
-    if (_handlersInstalled) return;
-    _handlersInstalled = true;
-    _previousFlutterHandler = FlutterError.onError;
-    _previousPlatformHandler = PlatformDispatcher.instance.onError;
-    FlutterError.onError = (details) {
-      unawaited(
-        captureException(details.exception, details.stack ?? StackTrace.empty),
-      );
-      _previousFlutterHandler?.call(details);
-    };
-    PlatformDispatcher.instance.onError = (error, stack) {
-      unawaited(captureException(error, stack, severity: CrashSeverity.fatal));
-      // Chain to any previous handler; when none exists, report the error as
-      // handled so an uncaught platform error cannot take down the host app.
-      return _previousPlatformHandler?.call(error, stack) ?? true;
-    };
-  }
-
-  void uninstallGlobalHandlers() {
-    if (!_handlersInstalled) return;
-    FlutterError.onError = _previousFlutterHandler;
-    PlatformDispatcher.instance.onError = _previousPlatformHandler;
-    _handlersInstalled = false;
-  }
-
-  /// Installs the global handlers, starts delivering native crash reports
-  /// ([reportNativeCrashes] — `run` wraps `runApp`, so this is the engine
-  /// that shows the UI) and what earlier runs left queued ([flush]), and
-  /// runs [body] in a guarded zone.
-  Future<void> run(FutureOr<void> Function() body) async {
-    installGlobalHandlers();
-    unawaited(reportNativeCrashes());
-    unawaited(flush());
-    await runZonedGuarded(() async => body(), (error, stack) {
-      unawaited(captureException(error, stack, severity: CrashSeverity.fatal));
-    });
-  }
-
   /// Delivers the native crash reports of earlier runs: those waiting now,
   /// and for the rest of this run every report that arrives later.
   ///
-  /// Call it from the engine that shows the UI — `run` does. A host that owns
-  /// its bootstrap calls it from its UI start only, never from a headless
-  /// background engine, which may have seconds to live. A no-op without
+  /// Call it from the engine that shows the UI (`NoticebirdFlutter.start`
+  /// of `noticebird_flutter` does), never from a headless background
+  /// engine, which may have seconds to live. A no-op without
   /// [NoticebirdConfig.nativeCrashes], after the first call, and while the
   /// transport is a [DiscardingCrashTransport]: the reports stay with the
   /// collector, for a later run that uploads.
@@ -1403,7 +1364,8 @@ final class _Rerun {
 /// release build.
 void _debugNote(String note) {
   assert(() {
-    debugPrint('noticebird: $note');
+    // ignore: avoid_print
+    print('noticebird: $note');
     return true;
   }());
 }

@@ -9,12 +9,10 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
 import 'dart:typed_data';
-import 'dart:ui';
 
 import 'package:crypto/crypto.dart';
 import 'package:fake_async/fake_async.dart';
-import 'package:flutter/foundation.dart' show kDebugMode;
-import 'package:flutter_test/flutter_test.dart';
+import 'package:test/test.dart';
 import 'package:noticebird/feedback.dart';
 import 'package:noticebird/noticebird.dart';
 import 'package:noticebird/src/protocol/host_mistakes.dart';
@@ -65,7 +63,7 @@ void main() {
     assertions = [];
     assertionCalls = 0;
   });
-  tearDown(() => debugHostMistakesThrow = kDebugMode);
+  tearDown(() => debugHostMistakesThrow = isDebugBuild);
 
   Future<String?> provideAssertion() async {
     assertionCalls++;
@@ -94,6 +92,7 @@ void main() {
         platform: _platform,
         sessionIdFactory: sessionIdFactory ?? () => _sessionId,
         breadcrumbBuffer: NoticebirdConfig.maxBreadcrumbBuffer,
+        locale: () => 'nl-NL',
         feedback: feedback
             ? FeedbackConfig(
                 transport: transport,
@@ -190,10 +189,7 @@ void main() {
         'message': 'The list does not load',
         'contact': {'email': 'ada@example.com'},
         'app': _app.toJson(),
-        'platform': {
-          ..._platform.toJson(),
-          'locale': PlatformDispatcher.instance.locale.toLanguageTag(),
-        },
+        'platform': {..._platform.toJson(), 'locale': 'nl-NL'},
         'routeTemplate': '/lists/:listId',
         'sessionId': _sessionId,
         'relatedEventId': '0197f232-2bd8-7000-8000-000000000001',

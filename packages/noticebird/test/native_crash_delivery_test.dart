@@ -6,7 +6,7 @@ import 'package:http/testing.dart';
 import 'package:noticebird/noticebird.dart';
 import 'package:noticebird/src/protocol/native_crash_event.dart';
 import 'package:fake_async/fake_async.dart';
-import 'package:flutter_test/flutter_test.dart';
+import 'package:test/test.dart';
 
 import 'support/privacy_matches.dart';
 
@@ -1139,21 +1139,6 @@ void main() {
         ).reportNativeCrashes()).map((result) => result.outcome),
         [CaptureOutcome.sent],
       );
-    });
-
-    test('a collector that never answers does not block run()', () {
-      fakeAsync((async) {
-        final never = Completer<void>();
-        final collector = _FakeCollector()..onStart = () => never.future;
-        final reporter = client(collector);
-        var bodyRan = false;
-
-        unawaited(reporter.run(() => bodyRan = true));
-        async.flushMicrotasks();
-
-        expect(bodyRan, isTrue);
-        reporter.uninstallGlobalHandlers();
-      });
     });
 
     test('a collector that never answers does not block the caller', () {

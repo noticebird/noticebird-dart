@@ -1,9 +1,7 @@
 import 'dart:convert';
 
-import 'package:bloc/bloc.dart';
 import 'package:noticebird/noticebird.dart';
-import 'package:flutter/foundation.dart';
-import 'package:flutter_test/flutter_test.dart';
+import 'package:test/test.dart';
 
 final class _RecordingTransport implements CrashTransport {
   final events = <Map<String, dynamic>>[];
@@ -19,13 +17,9 @@ final class _ReportedElsewhere implements Exception {
   const _ReportedElsewhere();
 }
 
-final class _FailingCubit extends Cubit<int> {
-  _FailingCubit() : super(0);
-}
-
 /// One capture filter, set once on the config, that every channel honours —
-/// an explicit capture, the bloc observer, the global handlers and the zone of
-/// `run` — so a host that reports some errors at a single report point of its
+/// an explicit capture here, and the channels of `noticebird_flutter`
+/// (tested there) — so a host that reports some errors at a single report point of its
 /// own cannot have them reported a second time by a channel it forgot.
 void main() {
   late _RecordingTransport transport;
@@ -62,8 +56,6 @@ void main() {
     transport = _RecordingTransport();
     reporter = client(shouldCapture: (error) => error is! _ReportedElsewhere);
   });
-
-  tearDown(() => reporter.uninstallGlobalHandlers());
 
   test('an explicit capture of a filtered error is ignored', () async {
     final result = await reporter.captureException(
@@ -127,69 +119,6 @@ void main() {
     );
 
     expect(result.outcome, CaptureOutcome.sent);
-  });
-
-  test('the bloc observer honours the filter', () async {
-    final observer = ProtocolNoticebirdBlocObserver(reporter);
-    final cubit = _FailingCubit();
-    addTearDown(cubit.close);
-
-    observer.onError(cubit, const _ReportedElsewhere(), StackTrace.current);
-    observer.onError(cubit, StateError('boom'), StackTrace.current);
-    await pumpEventQueue();
-
-    expect(transport.events, hasLength(1));
-    expect(transport.events.single['exception']['type'], 'StateError');
-  });
-
-  test('FlutterError.onError honours the filter', () async {
-    final previous = FlutterError.onError;
-    FlutterError.onError = (_) {};
-    addTearDown(() => FlutterError.onError = previous);
-    reporter.installGlobalHandlers();
-
-    FlutterError.onError!(
-      FlutterErrorDetails(exception: const _ReportedElsewhere()),
-    );
-    FlutterError.onError!(FlutterErrorDetails(exception: StateError('boom')));
-    await pumpEventQueue();
-
-    expect(transport.events, hasLength(1));
-    expect(transport.events.single['exception']['type'], 'StateError');
-  });
-
-  test('the platform dispatcher handler honours the filter', () async {
-    final previous = PlatformDispatcher.instance.onError;
-    PlatformDispatcher.instance.onError = null;
-    addTearDown(() => PlatformDispatcher.instance.onError = previous);
-    reporter.installGlobalHandlers();
-
-    final handled = PlatformDispatcher.instance.onError!(
-      const _ReportedElsewhere(),
-      StackTrace.current,
-    );
-    await pumpEventQueue();
-
-    expect(handled, isTrue);
-    expect(transport.events, isEmpty);
-  });
-
-  test('the zone of run honours the filter', () async {
-    final previousFlutter = FlutterError.onError;
-    final previousPlatform = PlatformDispatcher.instance.onError;
-    addTearDown(() {
-      FlutterError.onError = previousFlutter;
-      PlatformDispatcher.instance.onError = previousPlatform;
-    });
-
-    await reporter.run(() {
-      Future<void>.error(const _ReportedElsewhere());
-      Future<void>.error(StateError('boom'));
-    });
-    await pumpEventQueue();
-
-    expect(transport.events, hasLength(1));
-    expect(transport.events.single['exception']['type'], 'StateError');
   });
 
   test('without a filter every error is captured', () async {

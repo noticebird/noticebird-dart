@@ -1,8 +1,8 @@
 import 'dart:convert';
 
 import 'package:bloc/bloc.dart';
-import 'package:noticebird/noticebird.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:noticebird_flutter/noticebird_flutter.dart';
 
 final class _RecordingTransport implements CrashTransport {
   final events = <Map<String, dynamic>>[];
@@ -24,7 +24,7 @@ final class _CounterCubit extends Cubit<int> {
 void main() {
   late _RecordingTransport transport;
   late NoticebirdClient reporter;
-  late ProtocolNoticebirdBlocObserver observer;
+  late NoticebirdBlocObserver observer;
 
   setUp(() {
     transport = _RecordingTransport();
@@ -46,7 +46,7 @@ void main() {
       ),
       transport: transport,
     );
-    observer = ProtocolNoticebirdBlocObserver(reporter);
+    observer = NoticebirdBlocObserver(client: reporter);
   });
 
   test('onChange adds a bloc breadcrumb tagged with component/operation', () {
@@ -141,7 +141,7 @@ void main() {
       transport: transport,
     );
     final cubit = _CounterCubit();
-    ProtocolNoticebirdBlocObserver(filtered).onError(
+    NoticebirdBlocObserver(client: filtered).onError(
       cubit,
       const BlocErrorReport(
         _ReportedElsewhere(),
@@ -154,6 +154,77 @@ void main() {
     expect(transport.events, isEmpty);
     cubit.close();
   });
+
+  test('an UntracedBloc leaves no breadcrumb, and its errors are still '
+      'captured', () async {
+    final cubit = _Untraced();
+    addTearDown(cubit.close);
+
+    observer
+      ..onChange(cubit, const Change(currentState: 0, nextState: 1))
+      ..onError(cubit, StateError('boom'), StackTrace.current);
+    await Future<void>.delayed(Duration.zero);
+
+    expect(reporter.recentBreadcrumbs, isEmpty);
+    expect(transport.events, hasLength(1));
+  });
+
+  test('counts the live blocs per type, without type arguments or a '
+      'leading underscore', () {
+    final counter = _CounterCubit();
+    final boxes = [_Box<int>(), _Box<String>()];
+    final untraced = _Untraced();
+    for (final bloc in <BlocBase<dynamic>>[counter, ...boxes, untraced]) {
+      observer.onCreate(bloc);
+    }
+    observer.onClose(untraced);
+
+    expect(observer.liveBlocCounts(), {
+      'count': 3,
+      'box': 2,
+      'counterCubit': 1,
+    });
+    for (final bloc in <BlocBase<dynamic>>[counter, ...boxes, untraced]) {
+      bloc.close();
+    }
+  });
+
+  test('counts at most 31 types, the newest', () {
+    final blocs = [for (var i = 0; i < 32; i++) _CounterCubit()];
+    for (final bloc in blocs) {
+      observer.onCreate(bloc);
+    }
+    observer.onCreate(_Untraced());
+
+    final counts = observer.liveBlocCounts();
+    expect(counts['count'], 33);
+    expect(counts, hasLength(3));
+    for (final bloc in blocs) {
+      bloc.close();
+    }
+  });
+
+  test('without a client it goes to the attached one', () {
+    Noticebird.attach(reporter);
+    addTearDown(Noticebird.detach);
+    final cubit = _CounterCubit();
+    addTearDown(cubit.close);
+
+    NoticebirdBlocObserver().onChange(
+      cubit,
+      const Change(currentState: 0, nextState: 1),
+    );
+
+    expect(reporter.recentBreadcrumbs, hasLength(1));
+  });
+}
+
+final class _Untraced extends Cubit<int> implements UntracedBloc {
+  _Untraced() : super(0);
+}
+
+final class _Box<T> extends Cubit<T?> {
+  _Box() : super(null);
 }
 
 final class _ReportedElsewhere implements Exception {

@@ -1,5 +1,5 @@
 import 'package:noticebird/noticebird.dart';
-import 'package:flutter_test/flutter_test.dart';
+import 'package:test/test.dart';
 
 /// A crash report must not be lost because one breadcrumb label was too long.
 /// The protocol stays strict — it is the wire contract — so the client clamps

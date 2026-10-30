@@ -1,5 +1,5 @@
 name: noticebird_example
-description: Minimal consumer app demonstrating the noticebird SDK.
+description: Minimal Flutter app on noticebird_flutter.
 publish_to: none
 resolution: workspace
 
@@ -8,7 +8,7 @@ environment:
   flutter: ">=3.29.0"
 
 dependencies:
-  noticebird: ^0.3.0
+  noticebird_flutter: ^0.3.0
   bloc: ^9.0.0
   flutter:
     sdk: flutter

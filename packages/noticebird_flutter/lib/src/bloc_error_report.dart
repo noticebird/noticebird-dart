@@ -1,7 +1,5 @@
 import 'package:bloc/bloc.dart';
-import 'package:noticebird_protocol/noticebird_protocol.dart';
-
-import 'noticebird_client.dart';
+import 'package:noticebird/noticebird.dart';
 
 /// An error a bloc hands to `addError`, with how it is to be reported.
 ///

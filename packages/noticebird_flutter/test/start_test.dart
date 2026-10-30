@@ -1,0 +1,242 @@
+// NoticebirdFlutter.start against fake platforms and a fake HTTP client: what
+// it wires (the client on the facade, the app's version, the default stores,
+// the handlers and the bloc observer, delivery when the connection returns),
+// a key that cannot work, a background start, and close.
+
+import 'dart:convert';
+import 'dart:io';
+
+import 'package:bloc/bloc.dart';
+import 'package:connectivity_plus_platform_interface/connectivity_plus_platform_interface.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
+import 'package:noticebird_flutter/feedback.dart';
+import 'package:noticebird_flutter/noticebird_flutter.dart';
+import 'package:package_info_plus_platform_interface/package_info_platform_interface.dart';
+import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
+
+import 'support/fake_platforms.dart';
+
+const _key = 'noticebird_pk_example00000000000000000';
+final _stack = StackTrace.fromString('#0 A.b (package:app/a.dart:1:1)');
+
+void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  late Directory support;
+  late FakeConnectivity connectivity;
+  late List<http.Request> requests;
+  late bool offline;
+  late http.Client httpClient;
+  NoticebirdFlutter? started;
+
+  setUp(() async {
+    support = await Directory.systemTemp.createTemp('noticebird_flutter_');
+    PackageInfoPlatform.instance = FakePackageInfo();
+    PathProviderPlatform.instance = FakePathProvider(support.path);
+    connectivity = FakeConnectivity();
+    ConnectivityPlatform.instance = connectivity;
+    requests = [];
+    offline = false;
+    httpClient = MockClient((request) async {
+      if (offline) throw const SocketException('offline');
+      requests.add(request);
+      return request.url.path.endsWith('/v1/feedback')
+          ? http.Response(
+              jsonEncode({
+                'ticket': {'number': 1, 'display': 'FB-1'},
+                'verified': false,
+              }),
+              201,
+            )
+          : http.Response('', 202);
+    });
+  });
+
+  tearDown(() async {
+    started?.close();
+    started = null;
+    await support.delete(recursive: true);
+  });
+
+  Future<NoticebirdFlutter> start({
+    String publishableKey = _key,
+    bool uploadCrashes = true,
+    bool background = false,
+    bool observeBlocs = true,
+  }) async => started = await NoticebirdFlutter.start(
+    publishableKey: publishableKey,
+    appName: 'example_app',
+    httpClient: httpClient,
+    uploadCrashes: uploadCrashes,
+    background: background,
+    observeBlocs: observeBlocs,
+  );
+
+  List<Map<String, Object?>> envelopes() => [
+    for (final request in requests)
+      if (request.url.path.endsWith('/v1/envelope'))
+        jsonDecode(request.body) as Map<String, Object?>,
+  ];
+
+  test('attaches a client named after the app and its installed '
+      'build', () async {
+    final noticebird = await start();
+
+    expect(Noticebird.instance, same(noticebird.client));
+    await Noticebird.captureException(StateError('boom'), _stack);
+
+    expect(envelopes().single['app'], {
+      'name': 'example_app',
+      'version': '2.4.0',
+      'build': '17',
+      'release': 'example_app@2.4.0+17',
+    });
+  });
+
+  test('a second start answers the running one', () async {
+    final first = await start();
+    expect(await start(), same(first));
+  });
+
+  test('keeps an event that did not get through in the support directory, '
+      'and sends it when the connection returns', () async {
+    await start();
+    offline = true;
+    await Noticebird.captureException(StateError('boom'), _stack);
+    expect(
+      File('${support.path}/noticebird/crashes/events.json').existsSync(),
+      isTrue,
+    );
+
+    offline = false;
+    connectivity.changes.add(const [ConnectivityResult.wifi]);
+    await pumpEventQueue();
+
+    expect(envelopes(), hasLength(1));
+    expect(Noticebird.instance!.pendingCount, 0);
+  });
+
+  test('a connection that goes away flushes nothing', () async {
+    await start();
+    requests.clear();
+    connectivity.changes.add(const [ConnectivityResult.none]);
+    await pumpEventQueue();
+    expect(requests, isEmpty);
+  });
+
+  test('sends feedback with the live blocs and the platform\'s locale, also '
+      'with crash uploads off', () async {
+    await start(uploadCrashes: false);
+    final cubit = _Counter();
+    addTearDown(cubit.close);
+
+    expect(
+      (await Noticebird.captureException(StateError('boom'), _stack))?.outcome,
+      CaptureOutcome.discarded,
+    );
+    final outcome = await Noticebird.captureFeedback(
+      kind: FeedbackKind.bug,
+      message: 'It broke',
+    );
+
+    expect(outcome, isA<FeedbackDelivered>());
+    final report =
+        jsonDecode(
+              requests
+                  .singleWhere((r) => r.url.path.endsWith('/v1/feedback'))
+                  .body,
+            )
+            as Map<String, Object?>;
+    expect((report['diagnostics']! as Map)['blocs'], {
+      'count': 1,
+      'counter': 1,
+    });
+    expect(
+      (report['platform']! as Map)['locale'],
+      WidgetsBindingLocale.languageTag,
+    );
+  });
+
+  test('a key that cannot work starts a client that uploads nothing and '
+      'sends no feedback', () async {
+    await start(publishableKey: '');
+
+    expect(
+      (await Noticebird.captureException(StateError('boom'), _stack))?.outcome,
+      CaptureOutcome.discarded,
+    );
+    expect(
+      await Noticebird.captureFeedback(kind: FeedbackKind.bug, message: 'x'),
+      const FeedbackDisabled(),
+    );
+    expect(requests, isEmpty);
+  });
+
+  test('a background start keeps no store and flushes nothing by '
+      'itself', () async {
+    await start(background: true);
+    offline = true;
+    await Noticebird.captureException(StateError('boom'), _stack);
+
+    expect(Directory('${support.path}/noticebird').existsSync(), isFalse);
+    offline = false;
+    connectivity.changes.add(const [ConnectivityResult.wifi]);
+    await pumpEventQueue();
+    expect(envelopes(), isEmpty);
+    expect(Noticebird.instance!.pendingCount, 1);
+  });
+
+  test('close puts back the handlers and the bloc observer it found, and '
+      'detaches the client', () async {
+    final flutterHandler = FlutterError.onError;
+    final blocObserver = Bloc.observer;
+    final noticebird = await start();
+    expect(FlutterError.onError, isNot(same(flutterHandler)));
+    expect(Bloc.observer, isA<MultiBlocObserver>());
+
+    noticebird.close();
+    noticebird.close();
+
+    expect(FlutterError.onError, same(flutterHandler));
+    expect(Bloc.observer, same(blocObserver));
+    expect(Noticebird.instance, isNull);
+    expect(await start(), isNot(same(noticebird)));
+  });
+
+  test('observeBlocs: false leaves Bloc.observer to the host', () async {
+    final blocObserver = Bloc.observer;
+    final noticebird = await start(observeBlocs: false);
+    expect(Bloc.observer, same(blocObserver));
+    expect(noticebird.blocObserver.liveBlocCounts(), {'count': 0});
+  });
+
+  test('reportZoneError reports a fatal event to the started client', () async {
+    await start();
+    final presented = <FlutterErrorDetails>[];
+    final present = FlutterError.presentError;
+    FlutterError.presentError = presented.add;
+    addTearDown(() => FlutterError.presentError = present);
+
+    NoticebirdFlutter.reportZoneError(StateError('zone'), _stack);
+    await pumpEventQueue();
+
+    expect(envelopes().single['severity'], 'fatal');
+    expect(presented.single.exception, isA<StateError>());
+  });
+}
+
+/// The locale a test binding reports, as a language tag.
+abstract final class WidgetsBindingLocale {
+  static String get languageTag => TestWidgetsFlutterBinding
+      .instance
+      .platformDispatcher
+      .locale
+      .toLanguageTag();
+}
+
+final class _Counter extends Cubit<int> {
+  _Counter() : super(0);
+}

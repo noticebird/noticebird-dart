@@ -5,8 +5,7 @@ import 'dart:io';
 import 'package:noticebird/noticebird.dart';
 import 'package:noticebird/src/protocol/crash_exception_type.dart';
 import 'package:noticebird/src/protocol/host_mistakes.dart';
-import 'package:flutter/foundation.dart';
-import 'package:flutter_test/flutter_test.dart';
+import 'package:test/test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
@@ -56,10 +55,6 @@ void main() {
       eventIdFactory: () =>
           '0197f232-2bd8-7000-8000-${(++eventSequence).toString().padLeft(12, '0')}',
     );
-  });
-
-  tearDown(() {
-    reporter.uninstallGlobalHandlers();
   });
 
   test(
@@ -541,7 +536,7 @@ void main() {
 
   test('a release build drops a raw route instead of throwing', () async {
     debugHostMistakesThrow = false;
-    addTearDown(() => debugHostMistakesThrow = kDebugMode);
+    addTearDown(() => debugHostMistakesThrow = isDebugBuild);
     final release = NoticebirdClient(
       config: config(),
       transport: transport,
@@ -556,18 +551,6 @@ void main() {
     );
     await release.captureException(StateError('boom'), StackTrace.empty);
     expect(transport.events.single, isNot(contains('routeTemplate')));
-  });
-
-  test('global error handler registration is idempotent and reversible', () {
-    final previous = FlutterError.onError;
-    reporter.installGlobalHandlers();
-    final installed = FlutterError.onError;
-    reporter.installGlobalHandlers();
-    expect(reporter.handlersInstalled, isTrue);
-    expect(FlutterError.onError, same(installed));
-
-    reporter.uninstallGlobalHandlers();
-    expect(FlutterError.onError, same(previous));
   });
 
   test(

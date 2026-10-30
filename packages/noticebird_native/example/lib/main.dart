@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:noticebird/noticebird.dart';
@@ -64,9 +65,11 @@ void main() {
     ),
   );
   Noticebird.attach(client);
-  // run() installs the handlers and delivers the native reports of earlier
-  // runs: it wraps runApp, so this is the engine that shows the UI.
-  client.run(() => runApp(const CrashLabApp()));
+  // The lab sends through a transport of its own, so it builds its client
+  // itself rather than with NoticebirdFlutter.start: it delivers the native
+  // reports of earlier runs from this engine, the one that shows the UI.
+  unawaited(client.reportNativeCrashes());
+  runApp(const CrashLabApp());
 }
 
 class CrashLabApp extends StatelessWidget {

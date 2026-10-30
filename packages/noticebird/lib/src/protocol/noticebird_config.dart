@@ -72,6 +72,7 @@ final class NoticebirdConfig {
     this.shouldCapture,
     this.nativeCrashes,
     this.feedback,
+    this.locale,
   }) : platform =
            platform ?? hostPlatformMetadata(privacyProfile: privacyProfile),
        sessionIdFactory = sessionIdFactory ?? _processSessionIdFactory,
@@ -158,9 +159,9 @@ final class NoticebirdConfig {
   final CrashPiiConfig pii;
 
   /// Whether an error is captured, asked once per capture on every channel:
-  /// an explicit `captureException`, `ProtocolNoticebirdBlocObserver`, the
-  /// handlers `installGlobalHandlers` installs and the zone of `run`. `false`
-  /// drops it as [CaptureOutcome.ignored].
+  /// an explicit `captureException`, and every channel of
+  /// `noticebird_flutter`: its error handlers, its zone handler and its bloc
+  /// observer. `false` drops it as [CaptureOutcome.ignored].
   ///
   /// It is how a host keeps errors it reports at a report point of its own
   /// from being reported again by whichever channel sees them next: set it
@@ -179,7 +180,7 @@ final class NoticebirdConfig {
   ///
   /// Share one config between every engine: each records its run, and only
   /// the engine that calls [NoticebirdClient.reportNativeCrashes] (which
-  /// `run` does) delivers. [shouldCapture] is asked with the
+  /// `NoticebirdFlutter.start` does) delivers. [shouldCapture] is asked with the
   /// [NativeCrashRecord] of each report.
   final NativeCrashCollector? nativeCrashes;
 
@@ -187,6 +188,11 @@ final class NoticebirdConfig {
   /// `null` (the default) is off, and `NoticebirdClient.captureFeedback`
   /// answers `FeedbackDisabled`.
   final FeedbackConfig? feedback;
+
+  /// The app's locale as a language tag (`nl-NL`), asked for each feedback
+  /// report; `null` (the default) sends none. `noticebird_flutter` passes
+  /// the platform's.
+  final String? Function()? locale;
 
   /// The largest [breadcrumbBuffer].
   static const maxBreadcrumbBuffer = 200;

@@ -8,6 +8,7 @@ environment:
 workspace:
   - packages/noticebird_protocol
   - packages/noticebird
-  - packages/noticebird/example
+  - packages/noticebird_flutter
+  - packages/noticebird_flutter/example
   - packages/noticebird_native
   - packages/noticebird_native/example

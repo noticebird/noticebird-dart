@@ -1,7 +1,7 @@
 import 'package:bloc/bloc.dart';
-import 'package:noticebird/feedback.dart';
-import 'package:noticebird/noticebird.dart';
 import 'package:flutter/material.dart';
+import 'package:noticebird_flutter/feedback.dart';
+import 'package:noticebird_flutter/noticebird_flutter.dart';
 
 /// Publishable ingest key for a single project/environment, issued by the
 /// Noticebird platform. Override it with
@@ -12,34 +12,16 @@ const _publishableKey = String.fromEnvironment(
   defaultValue: 'noticebird_pk_example00000000000000000',
 );
 
-void main() {
-  final transport = CrashHttpTransport(publishableKey: _publishableKey);
-  final reporter = NoticebirdClient(
-    // The platform and the session id are left to their defaults: the
-    // running platform, and one session id for the whole app run.
-    config: NoticebirdConfig(
-      privacyProfile: CrashPrivacyProfile.privacyDefault,
-      app: const AppMetadata(
-        name: 'noticebird_example',
-        version: '1.0.0',
-        build: '1',
-        release: 'noticebird_example@1.0.0+1',
-      ),
-      // User feedback goes to the same API, with the same publishable key
-      // and HTTP client.
-      feedback: FeedbackConfig(transport: FeedbackHttpTransport.of(transport)),
-    ),
-    transport: transport,
+Future<void> main() async {
+  // One start: the client, the error handlers, the bloc breadcrumbs, the
+  // offline stores in the support directory, and delivery at start, on
+  // resume and when the connection returns. It never throws on the
+  // platform, and the client never rethrows into the app.
+  final noticebird = await NoticebirdFlutter.start(
+    publishableKey: _publishableKey,
+    appName: 'noticebird_example',
   );
-
-  // Turn BLoC events, changes, and errors into bounded breadcrumbs that are
-  // attached to the next crash report.
-  Bloc.observer = ProtocolNoticebirdBlocObserver(reporter);
-
-  // run() installs the Flutter, platform, and zone error handlers, so any
-  // uncaught error inside the app is captured as a fatal event. The reporter
-  // guards its own failures and never rethrows into the host application.
-  reporter.run(() => runApp(ExampleApp(reporter: reporter)));
+  runApp(ExampleApp(reporter: noticebird.client));
 }
 
 /// A trivial cubit whose transitions the observer records as breadcrumbs.
@@ -57,6 +39,7 @@ class ExampleApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) => MaterialApp(
     title: 'noticebird example',
+    navigatorObservers: [NoticebirdNavigatorObserver(client: reporter)],
     theme: ThemeData(useMaterial3: true, colorSchemeSeed: Colors.indigo),
     home: HomePage(reporter: reporter),
   );
@@ -97,9 +80,12 @@ class _HomePageState extends State<HomePage> {
     // A feedback report, triaged apart from crashes: the client adds the app,
     // platform, session, route and breadcrumb trail, and redacts the message
     // on the device. It never throws; the outcome says what became of it.
+    // A real sheet takes the moment when it opens, and passes it on here.
+    final moment = widget.reporter.feedbackMoment();
     final outcome = await widget.reporter.captureFeedback(
       kind: FeedbackKind.bug,
       message: 'Example feedback: sync keeps failing',
+      moment: moment,
     );
     if (!mounted) return;
     setState(
@@ -159,8 +145,8 @@ class _HomePageState extends State<HomePage> {
 
   void _triggerUnhandledError() {
     // Thrown from a callback with no try/catch. Flutter routes it to the error
-    // handler that run() installed, so the reporter records it and the app
-    // keeps running instead of crashing.
+    // handler NoticebirdFlutter.start installed, so the reporter records it
+    // and the app keeps running instead of crashing.
     throw StateError('example unhandled failure');
   }
 

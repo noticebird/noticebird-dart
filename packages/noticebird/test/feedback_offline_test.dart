@@ -8,8 +8,8 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:flutter/foundation.dart';
-import 'package:flutter_test/flutter_test.dart';
+import 'dart:typed_data';
+import 'package:test/test.dart';
 import 'package:noticebird/feedback.dart';
 import 'package:noticebird/noticebird.dart';
 
@@ -130,21 +130,15 @@ void main() {
       });
     }
 
-    test('run delivers what an earlier run queued', () async {
+    test('a flush of a new client delivers what an earlier one '
+        'queued', () async {
       transport.submitAnswers.add(const FeedbackTransient());
       final reportId = await queued(client());
       now = now.add(FeedbackOfflineStore.firstRetryDelay);
 
       final restarted = client();
       final settled = settledOf(restarted);
-      final previousFlutter = FlutterError.onError;
-      final previousPlatform = PlatformDispatcher.instance.onError;
-      addTearDown(() {
-        FlutterError.onError = previousFlutter;
-        PlatformDispatcher.instance.onError = previousPlatform;
-      });
-      await restarted.run(() {});
-      await pumpEventQueue();
+      await restarted.flush();
 
       expect(settled.single.reportId, reportId);
       expect(settled.single.outcome, isA<FeedbackDelivered>());

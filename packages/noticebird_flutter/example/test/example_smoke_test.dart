@@ -2,10 +2,10 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:bloc/bloc.dart';
-import 'package:noticebird/feedback.dart';
-import 'package:noticebird/noticebird.dart';
-import 'package:noticebird_example/main.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:noticebird_example/main.dart';
+import 'package:noticebird_flutter/feedback.dart';
+import 'package:noticebird_flutter/noticebird_flutter.dart';
 
 final class _RecordingTransport implements CrashTransport {
   final events = <Map<String, dynamic>>[];
@@ -134,7 +134,7 @@ void main() {
   ) async {
     final transport = _RecordingTransport();
     final reporter = _buildReporter(transport);
-    Bloc.observer = ProtocolNoticebirdBlocObserver(reporter);
+    Bloc.observer = NoticebirdBlocObserver(client: reporter);
     await tester.pumpWidget(ExampleApp(reporter: reporter));
 
     await tester.tap(find.text('Start live debug session'));

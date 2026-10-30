@@ -1,7 +1,7 @@
 import 'dart:convert';
 
 import 'package:noticebird/noticebird.dart';
-import 'package:flutter_test/flutter_test.dart';
+import 'package:test/test.dart';
 
 void main() {
   late _RecordingTransport transport;
@@ -36,7 +36,6 @@ void main() {
 
   tearDown(() {
     Noticebird.detach();
-    reporter.uninstallGlobalHandlers();
   });
 
   test('is a no-op when nothing has been attached', () async {

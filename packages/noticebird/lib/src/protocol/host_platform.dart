@@ -1,7 +1,6 @@
 import 'dart:io' show Platform;
 
 import 'package:noticebird_protocol/noticebird_protocol.dart';
-import 'package:flutter/foundation.dart';
 
 import 'noticebird_config.dart';
 
@@ -18,7 +17,7 @@ PlatformMetadata hostPlatformMetadata({
   final platform = _hostCrashPlatform();
   final osVersion = privacyProfile == CrashPrivacyProfile.regulatedStrict
       ? notCollectedOsVersion
-      : kIsWeb
+      : _isWeb
       ? 'web'
       : Platform.operatingSystemVersion.trim();
   final deviceClass = switch (platform) {
@@ -40,14 +39,15 @@ PlatformMetadata hostPlatformMetadata({
 /// report carries.
 const notCollectedOsVersion = 'not-collected';
 
+/// Whether this runs on the web, as Flutter's `kIsWeb` tells it.
+const bool _isWeb = bool.fromEnvironment('dart.library.js_interop');
+
 CrashPlatform _hostCrashPlatform() {
-  if (kIsWeb) return CrashPlatform.web;
-  return switch (defaultTargetPlatform) {
-    TargetPlatform.android => CrashPlatform.android,
-    TargetPlatform.iOS => CrashPlatform.ios,
-    TargetPlatform.macOS => CrashPlatform.macos,
-    TargetPlatform.windows => CrashPlatform.windows,
-    TargetPlatform.linux => CrashPlatform.linux,
-    TargetPlatform.fuchsia => CrashPlatform.unknown,
-  };
+  if (_isWeb) return CrashPlatform.web;
+  if (Platform.isAndroid) return CrashPlatform.android;
+  if (Platform.isIOS) return CrashPlatform.ios;
+  if (Platform.isMacOS) return CrashPlatform.macos;
+  if (Platform.isWindows) return CrashPlatform.windows;
+  if (Platform.isLinux) return CrashPlatform.linux;
+  return CrashPlatform.unknown;
 }

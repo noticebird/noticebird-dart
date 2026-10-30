@@ -1,7 +1,7 @@
 import 'dart:convert';
 
 import 'package:noticebird/noticebird.dart';
-import 'package:flutter_test/flutter_test.dart';
+import 'package:test/test.dart';
 
 import 'support/privacy_matches.dart';
 
