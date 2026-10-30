@@ -318,8 +318,8 @@ void main() {
     );
   });
 
-  test('without an API URL, or without a key that can work, the client '
-      'uploads nothing and sends no feedback', () async {
+  test('without an API URL, with one it cannot send to, or without a usable '
+      'key, the client uploads nothing and sends no feedback', () async {
     for (final (index, noApi) in <Future<NoticebirdFlutter> Function()>[
       () => NoticebirdFlutter.start(
         appName: 'example_app',

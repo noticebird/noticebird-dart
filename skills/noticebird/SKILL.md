@@ -594,7 +594,7 @@ Native capture: implement `NativeCrashCollector` with a fake that emits
 
 | Symptom | Cause |
 |---|---|
-| Every capture is `discarded`, and feedback is `FeedbackDisabled` | The start got no `apiUrl` or no usable key — a missing `--dart-define`, a secret `_sk_` key, or an `apiUrl` that names a route (`/v1/envelope`). A debug build printed why. |
+| Every capture is `discarded`, and feedback is `FeedbackDisabled` | The start got no `apiUrl`, one it cannot send to, or no usable key — a missing `--dart-define`, a secret `_sk_` key, or an `apiUrl` that names a route (`/v1/envelope`) or carries credentials. A debug build printed why. |
 | A capture comes back `ignored` | `shouldCapture` declined it — the error is reported at the host's own report point, which captures with `filtered: false`. |
 | The same failure arrives twice | No `shouldCapture` declines the type the host reports elsewhere, so a channel (observer, handler, explicit capture) reports it again. |
 | Every event is `dropped` | `app`/`platform` metadata violates the protocol, or a client's `sessionIdFactory` returns something outside `^[A-Za-z0-9_-]{16,64}$`. |
