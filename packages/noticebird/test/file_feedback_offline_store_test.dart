@@ -45,7 +45,10 @@ void main() {
     now = _capturedAt;
   });
 
-  NoticebirdClient client({FeedbackOfflineStore? store}) => NoticebirdClient(
+  NoticebirdClient client({
+    FeedbackOfflineStore? store,
+    void Function(FeedbackSettled settled)? onSettled,
+  }) => NoticebirdClient(
     config: NoticebirdConfig(
       privacyProfile: CrashPrivacyProfile.privacyDefault,
       app: _app,
@@ -54,6 +57,7 @@ void main() {
       feedback: FeedbackConfig(
         transport: transport,
         offlineStore: store ?? FileFeedbackOfflineStore(directory),
+        onSettled: onSettled,
       ),
     ),
     transport: const DiscardingCrashTransport(),
@@ -191,10 +195,8 @@ void main() {
     File(
       '${directory.path}/$reportId.bin',
     ).writeAsBytesSync(Uint8List.fromList([..._png]..[20] = 9));
-    final reporter = client();
     final settled = <FeedbackSettled>[];
-    final subscription = reporter.feedbackDeliveries.listen(settled.add);
-    addTearDown(subscription.cancel);
+    final reporter = client(onSettled: settled.add);
 
     now = now.add(const Duration(minutes: 1));
     await reporter.flush();

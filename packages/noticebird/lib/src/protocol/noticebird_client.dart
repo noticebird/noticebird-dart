@@ -208,6 +208,7 @@ final class NoticebirdClient {
       if (userId == null) {
         _userId = null;
         _user = null;
+        _feedbackSender?.identity = null;
         return;
       }
       // The id is sent as given: whether identity leaves the device is the
@@ -221,6 +222,7 @@ final class NoticebirdClient {
       );
       _userId = sanitized.isEmpty ? null : sanitized;
       _user = _config.pii.filter(CrashUser(id: _userId));
+      _feedbackSender?.identity = _userId;
     } catch (_) {
       // Reporting must never affect the host application.
     }
@@ -232,6 +234,9 @@ final class NoticebirdClient {
   /// disable identity or restrict fields, while `regulatedStrict` never sends
   /// identity regardless of this setting.
   void setUser(CrashUser? user) {
+    _feedbackSender?.identity = user == null || user.isEmpty
+        ? null
+        : jsonEncode([user.id, user.email, user.name]);
     try {
       _userId = null;
       _user = _config.pii.filter(user);
@@ -336,16 +341,13 @@ final class NoticebirdClient {
       if (hostMistakesThrow) throw ArgumentError(error.toString());
       return FeedbackRejected(FeedbackRejection.invalidInput, path: error.path);
     } catch (failure) {
-      assert(() {
-        debugPrint('noticebird: feedback not sent: $failure');
-        return true;
-      }());
+      _debugNote('feedback not sent: $failure');
       return const FeedbackRejected(FeedbackRejection.failed);
     }
   }
 
   late final FeedbackSender? _feedbackSender = switch (_config.feedback) {
-    final feedback? => FeedbackSender(feedback),
+    final feedback? => FeedbackSender(feedback, clock: _clock),
     null => null,
   };
 
@@ -357,22 +359,27 @@ final class NoticebirdClient {
       store,
       sender,
       clock: _clock,
-      onSettled: _feedbackSettled.add,
+      onSettled: _feedbackSettled,
     ),
     _ => null,
   };
 
-  final _feedbackSettled = StreamController<FeedbackSettled>.broadcast();
-
-  /// The end of each feedback report kept in
-  /// [FeedbackConfig.offlineStore]: [FeedbackDelivered] when a [flush]
-  /// delivered it, [FeedbackRejected] when the platform refused it, it
-  /// expired ([FeedbackRejection.expired]) or it was evicted to keep the
-  /// store within its bounds ([FeedbackRejection.evicted]). A report
-  /// [captureFeedback] delivered or rejected at once is not told here: its
-  /// outcome says so. A broadcast stream: an end with no listener is not
-  /// kept.
-  Stream<FeedbackSettled> get feedbackDeliveries => _feedbackSettled.stream;
+  /// Tells [FeedbackConfig.onSettled] the end of a report kept in the
+  /// store; without a callback, a debug build prints a rejected one.
+  void _feedbackSettled(FeedbackSettled settled) {
+    final onSettled = _config.feedback?.onSettled;
+    if (onSettled == null) {
+      if (settled.outcome is FeedbackRejected) {
+        _debugNote('a kept feedback report ended unsent: $settled');
+      }
+      return;
+    }
+    try {
+      onSettled(settled);
+    } catch (_) {
+      // Reporting must never affect the host application.
+    }
+  }
 
   /// How many feedback reports [FeedbackConfig.offlineStore] keeps; 0
   /// without a store, or when it fails. Never throws.
@@ -561,10 +568,7 @@ final class NoticebirdClient {
         return result;
       }
     } catch (failure) {
-      assert(() {
-        debugPrint('noticebird: event dropped: $failure');
-        return true;
-      }());
+      _debugNote('event dropped: $failure');
       _forgetEventId(key, builtId);
       return const CaptureResult(CaptureOutcome.dropped);
     }
@@ -600,7 +604,7 @@ final class NoticebirdClient {
   /// [NoticebirdConfig.offlineStore] included, until the first that fails
   /// (one the platform refuses for good is removed, and the next sent), and
   /// then the feedback reports of [FeedbackConfig.offlineStore] that
-  /// are due, the oldest first, each settled on [feedbackDeliveries] or
+  /// are due, the oldest first, each settled ([FeedbackConfig.onSettled]) or
   /// kept for its next attempt, until the first that does not get through.
   /// [run] calls it once at start. A call while one runs skips what that
   /// one is sending still, the events or the feedback, so a slow feedback
@@ -840,10 +844,7 @@ final class NoticebirdClient {
             : await _enqueue(written);
       }
     } catch (failure) {
-      assert(() {
-        debugPrint('noticebird: native report dropped: $failure');
-        return true;
-      }());
+      _debugNote('native report dropped: $failure');
       return const CaptureResult(CaptureOutcome.dropped);
     }
   }
@@ -1168,6 +1169,15 @@ final class NoticebirdClient {
         '${hex.substring(12, 16)}-${hex.substring(16, 20)}-'
         '${hex.substring(20, 32)}';
   }
+}
+
+/// Prints [note] in a debug build, where someone looks; nothing in a
+/// release build.
+void _debugNote(String note) {
+  assert(() {
+    debugPrint('noticebird: $note');
+    return true;
+  }());
 }
 
 /// An event as [NoticebirdClient] wrote it: its id, and its canonical JSON,

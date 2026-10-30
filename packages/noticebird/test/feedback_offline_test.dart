@@ -1,6 +1,6 @@
 // The feedback offline store as the client uses it: a report that did not
 // get through is kept and answered queued, a flush sends the reports that
-// are due and tells their end on feedbackDeliveries, the schedule and the
+// are due and tells their end to FeedbackConfig.onSettled, the schedule and the
 // delivery's state survive a new client on the same store, and the store
 // stays within its bounds. The store here keeps each report as its JSON
 // form and its attachment apart, as a store on disk does.
@@ -38,11 +38,13 @@ void main() {
   late FakeFeedbackTransport transport;
   late _MemoryStore store;
   late DateTime now;
+  late List<FeedbackSettled> settled;
 
   setUp(() {
     transport = FakeFeedbackTransport();
     store = _MemoryStore();
     now = _capturedAt;
+    settled = [];
   });
 
   NoticebirdClient client({
@@ -61,6 +63,7 @@ void main() {
         reporterAssertion: reporterAssertion,
         requireVerified: requireVerified,
         offlineStore: offlineStore ?? store,
+        onSettled: settled.add,
       ),
     ),
     transport: crashTransport,
@@ -87,12 +90,8 @@ void main() {
         screenshot: screenshot,
       ).then((outcome) => (outcome as FeedbackQueued).reportId);
 
-  List<FeedbackSettled> settledOf(NoticebirdClient reporter) {
-    final settled = <FeedbackSettled>[];
-    final subscription = reporter.feedbackDeliveries.listen(settled.add);
-    addTearDown(subscription.cancel);
-    return settled;
-  }
+  /// The ends [reporter]'s config was told, in order.
+  List<FeedbackSettled> settledOf(NoticebirdClient reporter) => settled;
 
   Future<PendingFeedback> kept() async => (await store.pending()).single;
 
@@ -727,25 +726,43 @@ void main() {
     });
   });
 
-  test('the facade answers null or nothing without a client', () async {
+  test('the facade answers null without a client', () async {
     Noticebird.detach();
     expect(Noticebird.pendingFeedbackCount, isNull);
-    expect(await Noticebird.feedbackDeliveries.isEmpty, isTrue);
 
     transport.submitAnswers.add(const FeedbackTransient());
     final reporter = client();
     Noticebird.attach(reporter);
     addTearDown(Noticebird.detach);
-    final settled = <FeedbackSettled>[];
-    final subscription = Noticebird.feedbackDeliveries.listen(settled.add);
-    addTearDown(subscription.cancel);
     await queued(reporter);
 
     expect(await Noticebird.pendingFeedbackCount, 1);
+  });
+
+  test('an onSettled that throws costs the store nothing', () async {
+    transport.submitAnswers.add(const FeedbackTransient());
+    final reporter = NoticebirdClient(
+      config: NoticebirdConfig(
+        privacyProfile: CrashPrivacyProfile.privacyDefault,
+        app: _app,
+        platform: _platform,
+        sessionIdFactory: () => 'random_session_123456',
+        feedback: FeedbackConfig(
+          transport: transport,
+          offlineStore: store,
+          onSettled: (_) => throw StateError('host bug'),
+        ),
+      ),
+      transport: const DiscardingCrashTransport(),
+      clock: () => now,
+    );
+    await queued(reporter);
+
     now = (await kept()).nextAttemptAt;
     await reporter.flush();
-    await pumpEventQueue();
-    expect(settled.single.outcome, isA<FeedbackDelivered>());
+
+    expect(await store.pending(), isEmpty);
+    expect(transport.requests, ['submit', 'submit']);
   });
 }
 

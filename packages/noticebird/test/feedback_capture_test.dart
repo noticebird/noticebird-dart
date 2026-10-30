@@ -23,6 +23,17 @@ import 'support/fake_feedback_transport.dart';
 
 const _assertionA = 'eyJhbGciOiJFUzI1NiJ9.eyJzdWIiOiJhIn0.c2lnbmF0dXJlLWE';
 const _assertionB = 'eyJhbGciOiJFUzI1NiJ9.eyJzdWIiOiJiIn0.c2lnbmF0dXJlLWI';
+
+/// A compact JWS whose claims hold [sub] and an `exp` of [expiresAt]; the
+/// client reads the claims only, never the signature.
+String _assertionUntil(DateTime expiresAt, {String sub = 'a'}) {
+  String part(Object json) =>
+      base64Url.encode(utf8.encode(jsonEncode(json))).replaceAll('=', '');
+  return '${part({'alg': 'EdDSA', 'kid': 'k1'})}.'
+      '${part({'sub': sub, 'exp': expiresAt.millisecondsSinceEpoch ~/ 1000})}.'
+      'c2lnbmF0dXJl';
+}
+
 const _app = AppMetadata(
   name: 'test-app',
   version: '1.0.0',
@@ -786,6 +797,135 @@ void main() {
         expect(outcome, isA<FeedbackDelivered>());
         expect(sent(), isNot(contains('reporterAssertion')));
       });
+    });
+  });
+
+  group('the held reporter assertion', () {
+    const ada = CrashUser(id: 'user_1', email: 'ada@example.com');
+    late String fresh;
+    setUp(
+      () => fresh = _assertionUntil(_capturedAt.add(const Duration(hours: 1))),
+    );
+
+    test('a report of the same user within the token\'s life asks no '
+        'provider, and carries the same token', () async {
+      assertions = [fresh, _assertionB];
+      final reporter = client()..setUser(ada);
+
+      await capture(reporter);
+      now = _capturedAt.add(const Duration(minutes: 54));
+      await capture(reporter);
+
+      expect(assertionCalls, 1);
+      expect(transport.submitted.map((report) => report['reporterAssertion']), [
+        fresh,
+        fresh,
+      ]);
+    });
+
+    test('a token within 5 minutes of its exp is asked for anew', () async {
+      assertions = [fresh, _assertionB];
+      final reporter = client()..setUser(ada);
+
+      await capture(reporter);
+      now = _capturedAt.add(const Duration(minutes: 55));
+      await capture(reporter);
+
+      expect(assertionCalls, 2);
+      expect(transport.submitted.last['reporterAssertion'], _assertionB);
+    });
+
+    test('another user, and none, ask again', () async {
+      assertions = [fresh, _assertionB, _assertionA];
+      final reporter = client()..setUser(ada);
+
+      await capture(reporter);
+      reporter.setUser(const CrashUser(id: 'user_2'));
+      await capture(reporter);
+      reporter.setUser(null);
+      await capture(reporter);
+
+      expect(assertionCalls, 3);
+      expect(transport.submitted.map((report) => report['reporterAssertion']), [
+        fresh,
+        _assertionB,
+        _assertionA,
+      ]);
+    });
+
+    test('the same user with a new address asks again', () async {
+      assertions = [fresh, _assertionB];
+      final reporter = client()..setUser(ada);
+
+      await capture(reporter);
+      reporter.setUser(const CrashUser(id: 'user_1', email: 'ada@new.test'));
+      await capture(reporter);
+
+      expect(assertionCalls, 2);
+    });
+
+    test('setUserId holds a token for that id', () async {
+      assertions = [fresh, _assertionB];
+      final reporter = client()..setUserId('user_1');
+
+      await capture(reporter);
+      await capture(reporter);
+      reporter.setUserId(null);
+      await capture(reporter);
+
+      expect(assertionCalls, 2);
+    });
+
+    test('without a user every report asks', () async {
+      assertions = [fresh, fresh];
+      final reporter = client();
+
+      await capture(reporter);
+      await capture(reporter);
+
+      expect(assertionCalls, 2);
+    });
+
+    test('a token the platform refused is asked for anew', () async {
+      assertions = [fresh, _assertionB];
+      transport.submitAnswers.add(const FeedbackAssertionRefused());
+      final reporter = client()..setUser(ada);
+
+      await capture(reporter);
+      await capture(reporter);
+
+      expect(assertionCalls, 2);
+      expect(transport.submitted.last['reporterAssertion'], _assertionB);
+    });
+
+    test('a token without a readable exp is not held', () async {
+      assertions = [_assertionA, _assertionA];
+      final reporter = client()..setUser(ada);
+
+      await capture(reporter);
+      await capture(reporter);
+
+      expect(assertionCalls, 2);
+    });
+
+    test('reports captured at once share one provider call', () async {
+      final answer = Completer<String?>();
+      final reporter = client(
+        reporterAssertion: () {
+          assertionCalls++;
+          return answer.future;
+        },
+      )..setUser(ada);
+
+      final both = Future.wait([capture(reporter), capture(reporter)]);
+      answer.complete(fresh);
+      await both;
+
+      expect(assertionCalls, 1);
+      expect(transport.submitted.map((report) => report['reporterAssertion']), [
+        fresh,
+        fresh,
+      ]);
     });
   });
 

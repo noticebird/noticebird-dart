@@ -68,7 +68,7 @@ final class FeedbackDelivered extends FeedbackOutcome {
 
 /// The report did not get through yet and is kept in the offline store, to
 /// be sent on a later `NoticebirdClient.flush`; its end comes on
-/// `NoticebirdClient.feedbackDeliveries`.
+/// `FeedbackConfig.onSettled`.
 final class FeedbackQueued extends FeedbackOutcome {
   const FeedbackQueued(this.reportId);
 
@@ -129,7 +129,7 @@ final class FeedbackRejected extends FeedbackOutcome {
 
 /// The end of a report the client kept in its offline store: delivered
 /// from the store, or rejected for good, as
-/// `NoticebirdClient.feedbackDeliveries` tells it.
+/// `FeedbackConfig.onSettled` is told it.
 final class FeedbackSettled {
   const FeedbackSettled(this.reportId, this.outcome);
 

@@ -1,3 +1,4 @@
+import 'feedback_capture.dart';
 import 'feedback_offline_store.dart';
 import 'feedback_transport.dart';
 
@@ -12,6 +13,7 @@ final class FeedbackConfig {
     this.reporterAssertion,
     this.requireVerified = false,
     this.offlineStore,
+    this.onSettled,
   }) {
     if (requireVerified && reporterAssertion == null) {
       throw ArgumentError(
@@ -25,11 +27,18 @@ final class FeedbackConfig {
   final FeedbackTransport transport;
 
   /// Asks the host's backend for a reporter assertion, the signed token that
-  /// lets the platform show the reporter as verified. Called once per
-  /// report, when it is captured, and given 5 seconds: a provider that
-  /// throws, answers `null` or takes longer leaves the report without one.
-  /// A refusal by the platform is not retried: the report goes on without
-  /// its assertion, or under [requireVerified] is rejected.
+  /// lets the platform show the reporter as verified. Asked when a report
+  /// is captured, and given 5 seconds: a provider that throws, answers
+  /// `null` or takes longer leaves the report without one. A refusal by the
+  /// platform is not retried: the report goes on without its assertion, or
+  /// under [requireVerified] is rejected.
+  ///
+  /// The client holds an assertion for the user the host set
+  /// (`NoticebirdClient.setUser` or `setUserId`) until 5 minutes before
+  /// its `exp`, and sends it with each report of that user meanwhile; it
+  /// asks again for another user, after `setUser(null)`, and once the
+  /// platform refused the one it held. Without a user set, it asks for
+  /// every report.
   final Future<String?> Function()? reporterAssertion;
 
   /// Whether a report must be verified. `false` (the default) sends a
@@ -44,4 +53,13 @@ final class FeedbackConfig {
   /// is `FeedbackRejection.noStore`. Under `regulatedStrict` it must be
   /// [FeedbackOfflineStore.isEncrypted].
   final FeedbackOfflineStore? offlineStore;
+
+  /// Told the end of each report kept in [offlineStore]: delivered by a
+  /// later `NoticebirdClient.flush`, or rejected for good — refused by the
+  /// platform, expired ([FeedbackRejection.expired]) or evicted to keep the
+  /// store within its bounds ([FeedbackRejection.evicted]). A report
+  /// `captureFeedback` delivered or rejected at once is not told here: its
+  /// outcome says so. A callback that throws costs nothing; without one, a
+  /// debug build prints each report rejected from the store.
+  final void Function(FeedbackSettled settled)? onSettled;
 }

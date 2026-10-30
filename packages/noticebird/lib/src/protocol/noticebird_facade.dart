@@ -80,11 +80,6 @@ final class Noticebird {
     relatedEventId: relatedEventId,
   );
 
-  /// See [NoticebirdClient.feedbackDeliveries]; empty without a client,
-  /// and the stream of the client attached when it is read.
-  static Stream<FeedbackSettled> get feedbackDeliveries =>
-      _instance?.feedbackDeliveries ?? const Stream.empty();
-
   /// See [NoticebirdClient.pendingFeedbackCount].
   static Future<int>? get pendingFeedbackCount =>
       _instance?.pendingFeedbackCount;
