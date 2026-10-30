@@ -86,6 +86,17 @@ void main() {
         jsonDecode(request.body) as Map<String, Object?>,
   ];
 
+  /// Waits for [envelopes] to hold [count]: the flush a trigger starts
+  /// reads the store from disk, which takes longer than the event queue on
+  /// a busy machine. Bounded, so a flush that never comes fails the test.
+  Future<void> envelopesReach(int count) async {
+    for (var tries = 0; tries < 200; tries++) {
+      await pumpEventQueue();
+      if (envelopes().length >= count) return;
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+    }
+  }
+
   test('attaches a client named after the app and its installed '
       'build', () async {
     final noticebird = await start();
@@ -148,7 +159,7 @@ void main() {
 
     offline = false;
     connectivity.changes.add(const [ConnectivityResult.wifi]);
-    await pumpEventQueue();
+    await envelopesReach(1);
 
     expect(envelopes(), hasLength(1));
     expect(Noticebird.instance!.pendingCount, 0);
@@ -175,7 +186,7 @@ void main() {
       httpClient: httpClient,
       onFeedbackSettled: settled.add,
     );
-    await pumpEventQueue();
+    await envelopesReach(1);
 
     expect(envelopes(), hasLength(1));
     expect(requests.where((r) => r.url.path.endsWith('/v1/feedback')), isEmpty);
@@ -192,7 +203,7 @@ void main() {
     final binding = TestWidgetsFlutterBinding.instance;
     binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
     binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
-    await pumpEventQueue();
+    await envelopesReach(1);
 
     expect(envelopes(), hasLength(1));
   });
