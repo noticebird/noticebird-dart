@@ -27,12 +27,13 @@ final class FileCrashOfflineStore implements CrashOfflineStore {
 
   @override
   Future<void> write(List<String> canonicalEnvelopes) async {
+    final temporary = File('${_events.path}.tmp');
     if (canonicalEnvelopes.isEmpty) {
       await _delete(_events);
+      await _delete(temporary);
       return;
     }
     await directory.create(recursive: true);
-    final temporary = File('${_events.path}.tmp');
     await temporary.writeAsString(jsonEncode(canonicalEnvelopes), flush: true);
     await temporary.rename(_events.path);
   }

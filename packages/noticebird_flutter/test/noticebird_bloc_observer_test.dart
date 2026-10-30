@@ -217,6 +217,17 @@ void main() {
 
     expect(reporter.recentBreadcrumbs, hasLength(1));
   });
+
+  test('a describe that throws costs the bloc nothing', () {
+    final cubit = _CounterCubit();
+    addTearDown(cubit.close);
+
+    _ThrowingObserver(
+      reporter,
+    ).onChange(cubit, const Change(currentState: 0, nextState: 1));
+
+    expect(reporter.recentBreadcrumbs, isEmpty);
+  });
 }
 
 final class _Untraced extends Cubit<int> implements UntracedBloc {
@@ -229,4 +240,11 @@ final class _Box<T> extends Cubit<T?> {
 
 final class _ReportedElsewhere implements Exception {
   const _ReportedElsewhere();
+}
+
+final class _ThrowingObserver extends NoticebirdBlocObserver {
+  _ThrowingObserver(NoticebirdClient client) : super(client: client);
+
+  @override
+  String describeState(Object? state) => throw StateError('describe');
 }

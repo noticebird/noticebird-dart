@@ -9,13 +9,14 @@ import 'package:noticebird/noticebird.dart';
 /// `PlatformDispatcher.onError` (an error nothing caught, fatal). Without a
 /// previous `PlatformDispatcher` handler the error is printed to the console
 /// and handled, so it cannot take down the app. Returns what puts the
-/// previous handlers back.
+/// previous handlers back, each one only while its replacement is still in
+/// place.
 VoidCallback installErrorHandlers(NoticebirdClient client) {
   final previousFlutterHandler = FlutterError.onError;
   final dispatcher = PlatformDispatcher.instance;
   final previousPlatformHandler = dispatcher.onError;
 
-  FlutterError.onError = (details) {
+  void onFlutterError(FlutterErrorDetails details) {
     unawaited(
       client.captureException(
         details.exception,
@@ -24,9 +25,9 @@ VoidCallback installErrorHandlers(NoticebirdClient client) {
       ),
     );
     previousFlutterHandler?.call(details);
-  };
+  }
 
-  dispatcher.onError = (error, stack) {
+  bool onPlatformError(Object error, StackTrace stack) {
     unawaited(
       client.captureException(
         error,
@@ -40,11 +41,19 @@ VoidCallback installErrorHandlers(NoticebirdClient client) {
     }
     _present(error, stack, 'uncaught platform error');
     return true;
-  };
+  }
 
+  FlutterError.onError = onFlutterError;
+  dispatcher.onError = onPlatformError;
+  // Only a handler that is still this one goes back: one the host set
+  // since is the host's.
   return () {
-    FlutterError.onError = previousFlutterHandler;
-    dispatcher.onError = previousPlatformHandler;
+    if (FlutterError.onError == onFlutterError) {
+      FlutterError.onError = previousFlutterHandler;
+    }
+    if (dispatcher.onError == onPlatformError) {
+      dispatcher.onError = previousPlatformHandler;
+    }
   };
 }
 

@@ -5,6 +5,7 @@
 
 import 'dart:async';
 import 'dart:convert';
+import 'dart:ffi';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -69,6 +70,36 @@ void main() {
       expect(collector.claims, 0);
       expect(collector.started, isTrue);
     });
+
+    test('leaves what an earlier run kept in the store', () async {
+      final store = _SlowStore()..values = ['{"eventId":"kept"}'];
+      final reporter = _client(store: store);
+
+      await reporter.flush();
+
+      expect(store.values, ['{"eventId":"kept"}']);
+    });
+  });
+
+  test('a native delivery stops at close', () async {
+    final collector = _Collector();
+    final reporter = NoticebirdClient(
+      config: NoticebirdConfig(
+        privacyProfile: CrashPrivacyProfile.privacyDefault,
+        app: _app,
+        platform: _platform,
+        nativeCrashes: collector,
+      ),
+      transport: _Transport(),
+    );
+    unawaited(reporter.reportNativeCrashes());
+    await pumpEventQueue();
+    expect(collector.listened, isTrue);
+
+    reporter.close();
+    await pumpEventQueue();
+
+    expect(collector.cancelled, isTrue);
   });
 
   group('eventIdOf', () {
@@ -93,6 +124,14 @@ void main() {
 
       expect(await reporter.eventIdOf(StateError('other')), isNull);
       expect(await reporter.eventIdOf('a string'), isNull);
+
+      // An error no Expando takes still captures, and has no id.
+      final pointer = Pointer<Void>.fromAddress(1);
+      expect(
+        (await reporter.captureException(pointer, _stack)).outcome,
+        CaptureOutcome.sent,
+      );
+      expect(await reporter.eventIdOf(pointer), isNull);
 
       final discarding = _client();
       final error = StateError('boom');
@@ -157,6 +196,12 @@ void main() {
       await store.write(const []);
 
       expect(Directory('${directory.path}/new').listSync(), isEmpty);
+    });
+
+    test('an empty write also removes what an unfinished write left', () async {
+      File('${directory.path}/events.json.tmp').writeAsStringSync('[');
+      await FileCrashOfflineStore(directory).write(const []);
+      expect(directory.listSync(), isEmpty);
     });
 
     test('a file it cannot read is deleted, and read as empty', () async {
@@ -333,6 +378,8 @@ final class _FeedbackStore implements FeedbackOfflineStore {
 final class _Collector implements NativeCrashCollector {
   bool started = false;
   int claims = 0;
+  bool listened = false;
+  bool cancelled = false;
 
   @override
   Future<void> start(NativeRunInfo run) async => started = true;
@@ -343,7 +390,12 @@ final class _Collector implements NativeCrashCollector {
   @override
   Stream<NativeCrashBatch> claimed({int max = 10}) {
     claims++;
-    return const Stream.empty();
+    late final StreamController<NativeCrashBatch> batches;
+    batches = StreamController(
+      onListen: () => listened = true,
+      onCancel: () => cancelled = true,
+    );
+    return batches.stream;
   }
 
   @override

@@ -45,7 +45,10 @@ final class NoticebirdFlutter {
     required void Function() stop,
   }) : _stop = stop;
 
-  static NoticebirdFlutter? _running;
+  /// The start under way or done, and what it started: a second [start]
+  /// answers it, until [close].
+  static Future<NoticebirdFlutter>? _starting;
+  static NoticebirdFlutter? _started;
 
   /// How long [start] waits for each platform read — the installed
   /// version, the support directory — before it goes on without it.
@@ -62,8 +65,8 @@ final class NoticebirdFlutter {
 
   final void Function() _stop;
 
-  /// Starts Noticebird for this app, once: a second call while one runs
-  /// answers the running one.
+  /// Starts Noticebird for this app, once: a second call, while the first
+  /// is starting or after it, answers that one.
   ///
   /// It makes the client and attaches it to the `Noticebird` facade, and:
   ///
@@ -127,9 +130,60 @@ final class NoticebirdFlutter {
     bool installErrorHandlers = true,
     bool observeBlocs = true,
     bool background = false,
+  }) {
+    final starting = _starting;
+    if (starting != null) return starting;
+    final start = _start(
+      publishableKey: publishableKey,
+      appName: appName,
+      endpoint: endpoint,
+      httpClient: httpClient,
+      uploadCrashes: uploadCrashes,
+      privacyProfile: privacyProfile,
+      pii: pii,
+      shouldCapture: shouldCapture,
+      breadcrumbBuffer: breadcrumbBuffer,
+      nativeCrashes: nativeCrashes,
+      reporterAssertion: reporterAssertion,
+      requireVerified: requireVerified,
+      onFeedbackSettled: onFeedbackSettled,
+      crashStore: crashStore,
+      feedbackStore: feedbackStore,
+      installErrorHandlers: installErrorHandlers,
+      observeBlocs: observeBlocs,
+      background: background,
+    );
+    _starting = start;
+    // A start that threw (an argument no start can work with) is no start.
+    start.then<void>(
+      (_) {},
+      onError: (Object _) {
+        if (identical(_starting, start)) _starting = null;
+      },
+    );
+    return start;
+  }
+
+  static Future<NoticebirdFlutter> _start({
+    required String publishableKey,
+    required String appName,
+    required Uri? endpoint,
+    required http.Client? httpClient,
+    required bool uploadCrashes,
+    required CrashPrivacyProfile privacyProfile,
+    required CrashPiiConfig pii,
+    required bool Function(Object error)? shouldCapture,
+    required int breadcrumbBuffer,
+    required NativeCrashCollector? nativeCrashes,
+    required Future<String?> Function()? reporterAssertion,
+    required bool requireVerified,
+    required void Function(FeedbackSettled settled)? onFeedbackSettled,
+    required CrashOfflineStore? crashStore,
+    required FeedbackOfflineStore? feedbackStore,
+    required bool installErrorHandlers,
+    required bool observeBlocs,
+    required bool background,
   }) async {
-    final running = _running;
-    if (running != null) return running;
     final binding = WidgetsFlutterBinding.ensureInitialized();
 
     CrashHttpTransport? ingest;
@@ -160,36 +214,46 @@ final class NoticebirdFlutter {
     final defaultFeedbackStore = storeIn('feedback');
 
     final blocObserver = NoticebirdBlocObserver();
-    final config = NoticebirdConfig(
-      privacyProfile: privacyProfile,
-      app: _app(appName, packageInfo),
-      pii: pii,
-      shouldCapture: shouldCapture,
-      breadcrumbBuffer: breadcrumbBuffer,
-      nativeCrashes: nativeCrashes,
-      offlineStore:
-          crashStore ??
-          (defaultCrashStore == null
-              ? null
-              : FileCrashOfflineStore(defaultCrashStore)),
-      locale: () => binding.platformDispatcher.locale.toLanguageTag(),
-      feedback: feedbackTransport == null
-          ? null
-          : FeedbackConfig(
-              transport: feedbackTransport,
-              reporterAssertion: reporterAssertion,
-              requireVerified: requireVerified,
-              offlineStore:
-                  feedbackStore ??
-                  (defaultFeedbackStore == null
-                      ? null
-                      : FileFeedbackOfflineStore(defaultFeedbackStore)),
-              onSettled: onFeedbackSettled,
-              contextDiagnostics: () => {
-                'blocs': blocObserver.liveBlocCounts(),
-              },
-            ),
-    );
+    final NoticebirdConfig config;
+    try {
+      final feedback = FeedbackConfig(
+        // Without a key the config is built all the same, so an argument
+        // that cannot work fails in every build, not only in one with a
+        // key; the client then gets none.
+        transport: feedbackTransport ?? const _NoFeedbackTransport(),
+        reporterAssertion: reporterAssertion,
+        requireVerified: requireVerified,
+        offlineStore:
+            feedbackStore ??
+            (defaultFeedbackStore == null
+                ? null
+                : FileFeedbackOfflineStore(defaultFeedbackStore)),
+        onSettled: onFeedbackSettled,
+        contextDiagnostics: observeBlocs
+            ? () => {'blocs': blocObserver.liveBlocCounts()}
+            : null,
+      );
+      NoticebirdConfig configWith(FeedbackConfig? feedback) => NoticebirdConfig(
+        privacyProfile: privacyProfile,
+        app: _app(appName, packageInfo),
+        pii: pii,
+        shouldCapture: shouldCapture,
+        breadcrumbBuffer: breadcrumbBuffer,
+        nativeCrashes: nativeCrashes,
+        offlineStore:
+            crashStore ??
+            (defaultCrashStore == null
+                ? null
+                : FileCrashOfflineStore(defaultCrashStore)),
+        locale: () => binding.platformDispatcher.locale.toLanguageTag(),
+        feedback: feedback,
+      );
+      final checked = configWith(feedback);
+      config = feedbackTransport == null ? configWith(null) : checked;
+    } catch (_) {
+      ingest?.close();
+      rethrow;
+    }
     final client = NoticebirdClient(
       config: config,
       transport: uploadCrashes && ingest != null
@@ -242,28 +306,33 @@ final class NoticebirdFlutter {
       if (identical(Bloc.observer, observer)) Bloc.observer = previousObserver;
       client.close();
       if (identical(Noticebird.instance, client)) Noticebird.detach();
-      if (identical(_running, started)) _running = null;
+      if (identical(_started, started)) {
+        _started = null;
+        _starting = null;
+      }
       ingest?.close();
     }
 
-    return _running = started = NoticebirdFlutter._(
+    return _started = started = NoticebirdFlutter._(
       client: client,
       blocObserver: blocObserver,
       stop: stop,
     );
   }
 
-  /// Reports an error a zone's handler got, as fatal, to the started
-  /// client, and prints it as the framework prints an error: the handler of
-  /// a host's own guarded zone, `runZonedGuarded(body,
-  /// NoticebirdFlutter.reportZoneError)`. Before [start] it only prints.
-  static void reportZoneError(Object error, StackTrace stack) => handlers
-      .reportZoneError(_running?.client ?? Noticebird.instance, error, stack);
+  /// Reports an error a zone's handler got, as fatal, to the client
+  /// attached to `Noticebird` ([start] attaches its own), and prints it as
+  /// the framework prints an error: the handler of a host's own guarded
+  /// zone, `runZonedGuarded(body, NoticebirdFlutter.reportZoneError)`.
+  /// Without an attached client it only prints.
+  static void reportZoneError(Object error, StackTrace stack) =>
+      handlers.reportZoneError(Noticebird.instance, error, stack);
 
   /// Stops what [start] set up: the handlers and the bloc observer it
   /// installed go back to the ones it found, the foreground and connection
   /// triggers and the client's own schedule stop, and the client is
-  /// detached from the facade. A later [start] starts anew. Idempotent.
+  /// detached from the facade. A later [start] starts anew. Idempotent; a
+  /// handler or bloc observer the host set since [start] stays.
   void close() => _stop();
 
   static AppMetadata _app(String name, PackageInfo? info) {
@@ -300,6 +369,28 @@ final class NoticebirdFlutter {
       return null;
     }
   }
+}
+
+/// The transport of a feedback config that is checked but never used: a
+/// start without a key sends no feedback.
+final class _NoFeedbackTransport implements FeedbackTransport {
+  const _NoFeedbackTransport();
+
+  @override
+  Future<FeedbackDelivery> requestSlot(
+    String reportId,
+    FeedbackAttachmentRef attachment,
+  ) async => const FeedbackTransient();
+
+  @override
+  Future<FeedbackDelivery> upload(
+    FeedbackUploadSlot slot,
+    Uint8List bytes,
+  ) async => const FeedbackTransient();
+
+  @override
+  Future<FeedbackDelivery> submit(String reportJson) async =>
+      const FeedbackTransient();
 }
 
 void _debugNote(String note) {

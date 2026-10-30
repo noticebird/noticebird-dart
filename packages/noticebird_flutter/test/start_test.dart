@@ -8,6 +8,7 @@ import 'dart:io';
 
 import 'package:bloc/bloc.dart';
 import 'package:connectivity_plus_platform_interface/connectivity_plus_platform_interface.dart';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -101,6 +102,39 @@ void main() {
     expect(await start(), same(first));
   });
 
+  test('two starts at once start one client', () async {
+    final flutterHandler = FlutterError.onError;
+    final [first, second] = await Future.wait([start(), start()]);
+
+    expect(second, same(first));
+    first.close();
+    expect(FlutterError.onError, same(flutterHandler));
+  });
+
+  test('an argument no start can work with throws, with a key or '
+      'without', () async {
+    for (final key in [_key, '']) {
+      await expectLater(
+        NoticebirdFlutter.start(
+          publishableKey: key,
+          appName: 'example_app',
+          httpClient: httpClient,
+          requireVerified: true,
+        ),
+        throwsArgumentError,
+      );
+    }
+    // A failed start is no start: the next one starts.
+    expect(await start(), isA<NoticebirdFlutter>());
+  });
+
+  test('a connection stream that fails costs the start nothing', () async {
+    await start();
+    connectivity.changes.addError(StateError('plugin'));
+    await pumpEventQueue();
+    expect(Noticebird.instance, isNotNull);
+  });
+
   test('keeps an event that did not get through in the support directory, '
       'and sends it when the connection returns', () async {
     await start();
@@ -192,25 +226,51 @@ void main() {
   test('close puts back the handlers and the bloc observer it found, and '
       'detaches the client', () async {
     final flutterHandler = FlutterError.onError;
+    final platformHandler = PlatformDispatcher.instance.onError;
     final blocObserver = Bloc.observer;
     final noticebird = await start();
     expect(FlutterError.onError, isNot(same(flutterHandler)));
+    expect(PlatformDispatcher.instance.onError, isNot(same(platformHandler)));
     expect(Bloc.observer, isA<MultiBlocObserver>());
 
     noticebird.close();
     noticebird.close();
 
     expect(FlutterError.onError, same(flutterHandler));
+    expect(PlatformDispatcher.instance.onError, same(platformHandler));
     expect(Bloc.observer, same(blocObserver));
     expect(Noticebird.instance, isNull);
     expect(await start(), isNot(same(noticebird)));
   });
 
-  test('observeBlocs: false leaves Bloc.observer to the host', () async {
+  test('a handler the host set after the start stays at close', () async {
+    final noticebird = await start();
+    void mine(FlutterErrorDetails _) {}
+    final previous = FlutterError.onError;
+    FlutterError.onError = mine;
+    addTearDown(() => FlutterError.onError = previous);
+
+    noticebird.close();
+
+    expect(FlutterError.onError, same(mine));
+  });
+
+  test('observeBlocs: false leaves Bloc.observer to the host, and sends no '
+      'blocs group', () async {
     final blocObserver = Bloc.observer;
-    final noticebird = await start(observeBlocs: false);
+    await start(observeBlocs: false);
     expect(Bloc.observer, same(blocObserver));
-    expect(noticebird.blocObserver.liveBlocCounts(), {'count': 0});
+
+    await Noticebird.captureFeedback(kind: FeedbackKind.bug, message: 'x');
+
+    final report =
+        jsonDecode(
+              requests
+                  .singleWhere((r) => r.url.path.endsWith('/v1/feedback'))
+                  .body,
+            )
+            as Map<String, Object?>;
+    expect(report, isNot(contains('diagnostics')));
   });
 
   test('reportZoneError reports a fatal event to the started client', () async {

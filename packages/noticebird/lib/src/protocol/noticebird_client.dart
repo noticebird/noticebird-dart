@@ -541,7 +541,10 @@ final class NoticebirdClient {
   /// [setRouteTemplate] holds a route to: it starts with `/`, is at most
   /// [CrashEvent.maxRouteTemplateLength] characters, has no query or
   /// fragment, and no segment that looks like an id (16 or more hex
-  /// characters, or 2 or more digits).
+  /// characters, or 2 or more digits). A rule of shape, not of meaning: a
+  /// segment that is a word of letters passes, whatever it names; what the
+  /// platform's firewall rejects in one (an e-mail address) is redacted
+  /// before it leaves the device.
   static bool isRouteTemplate(String route) =>
       route.startsWith('/') &&
       route.length <= CrashEvent.maxRouteTemplateLength &&
@@ -593,7 +596,12 @@ final class NoticebirdClient {
       groupingKey: groupingKey,
       filtered: filtered,
     );
-    if (_canKey(error)) _captures[error] = capture;
+    try {
+      if (_canKey(error)) _captures[error] = capture;
+    } catch (_) {
+      // An error no Expando takes (a platform's own primitive): its id is
+      // not kept, the capture goes on.
+    }
     return capture;
   }
 
@@ -606,9 +614,13 @@ final class NoticebirdClient {
   /// or a record, which cannot be told apart from an equal value thrown
   /// elsewhere. Never throws.
   Future<String?> eventIdOf(Object error) async {
-    if (!_canKey(error)) return null;
-    final capture = _captures[error];
-    return capture == null ? null : (await capture).eventId;
+    try {
+      if (!_canKey(error)) return null;
+      final capture = _captures[error];
+      return capture == null ? null : (await capture).eventId;
+    } catch (_) {
+      return null;
+    }
   }
 
   /// The capture of each error, by the error: held weakly, so a capture
@@ -747,6 +759,7 @@ final class NoticebirdClient {
 
   Timer? _feedbackTimer;
   DateTime? _feedbackTimerDue;
+  StreamSubscription<NativeCrashBatch>? _nativeDelivery;
   bool _closed = false;
 
   /// After a drain, drains again when the next kept report is due.
@@ -780,15 +793,21 @@ final class NoticebirdClient {
   }
 
   /// Stops what the client does by itself: the timer that drains kept
-  /// feedback reports when they are due. Captures still work, and
+  /// feedback reports when they are due, and the delivery of native reports
+  /// that arrive later ([reportNativeCrashes]). Captures still work, and
   /// [flush] still sends what waits. Idempotent.
   void close() {
     _closed = true;
     _feedbackTimer?.cancel();
     _feedbackTimer = null;
+    unawaited(_nativeDelivery?.cancel());
+    _nativeDelivery = null;
   }
 
+  /// A no-op while the transport discards: what earlier runs kept stays,
+  /// for a later run that uploads, as the native reports do.
   Future<void> _flushEvents() async {
+    if (_transport is DiscardingCrashTransport) return;
     try {
       final stored = await _readStore();
       final knownEventIds = {for (final event in _pending) event.eventId};
@@ -861,7 +880,8 @@ final class NoticebirdClient {
     final firstBatch = Completer<List<CaptureResult>>();
     try {
       await _nativeStarted;
-      final subscription = collector
+      if (_closed) return const [];
+      final subscription = _nativeDelivery = collector
           .claimed(max: maxNativeCrashesPerBatch)
           .listen(null, cancelOnError: false);
       subscription

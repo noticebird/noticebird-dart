@@ -93,13 +93,13 @@ class NoticebirdBlocObserver extends BlocObserver {
   @override
   void onEvent(Bloc<dynamic, dynamic> bloc, Object? event) {
     super.onEvent(bloc, event);
-    _note(bloc, 'bloc.event', describeEvent(event));
+    _note(bloc, 'bloc.event', () => describeEvent(event));
   }
 
   @override
   void onChange(BlocBase<dynamic> bloc, Change<dynamic> change) {
     super.onChange(bloc, change);
-    _note(bloc, 'bloc.change', describeChange(change));
+    _note(bloc, 'bloc.change', () => describeChange(change));
   }
 
   @override
@@ -134,7 +134,13 @@ class NoticebirdBlocObserver extends BlocObserver {
   @protected
   String describeState(Object? state) => state.runtimeType.toString();
 
-  void _note(BlocBase<dynamic> bloc, String action, String operation) {
+  /// Leaves the breadcrumb of a step; [operation] is asked inside the
+  /// guard, since a subclass's describe may throw.
+  void _note(
+    BlocBase<dynamic> bloc,
+    String action,
+    String Function() operation,
+  ) {
     if (bloc is UntracedBloc) return;
     try {
       _reporter?.addBreadcrumb(
@@ -144,7 +150,7 @@ class NoticebirdBlocObserver extends BlocObserver {
           action: action,
           data: {
             AllowedTag.component: bloc.runtimeType.toString(),
-            AllowedTag.operation: operation,
+            AllowedTag.operation: operation(),
           },
         ),
       );
