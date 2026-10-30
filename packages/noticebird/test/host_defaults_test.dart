@@ -90,7 +90,6 @@ void main() {
           ),
           platform: hostPlatformMetadata(),
         ),
-        transport: const DiscardingCrashTransport(),
       );
 
       final result = await reporter.captureException(

@@ -9,7 +9,7 @@ final class FeedbackConfig {
   /// Throws an [ArgumentError] for [requireVerified] without a
   /// [reporterAssertion], under which no report could ever be sent.
   FeedbackConfig({
-    required this.transport,
+    this.transport,
     this.reporterAssertion,
     this.requireVerified = false,
     this.offlineStore,
@@ -24,8 +24,11 @@ final class FeedbackConfig {
     }
   }
 
-  /// Where reports go: `FeedbackHttpTransport` for the hosted API.
-  final FeedbackTransport transport;
+  /// Where reports go: `FeedbackHttpTransport` for the hosted API. `null`
+  /// for a build without an endpoint: `NoticebirdClient.captureFeedback`
+  /// answers `FeedbackDisabled`, and the rest of this config is checked all
+  /// the same.
+  final FeedbackTransport? transport;
 
   /// Asks the host's backend for a reporter assertion, the signed token that
   /// lets the platform show the reporter as verified. Asked when a report

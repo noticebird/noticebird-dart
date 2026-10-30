@@ -39,6 +39,7 @@ jobs:
       - run: dart format --output=none --set-exit-if-changed .
       - run: dart analyze
       - run: dart test
+      - run: dart pub publish --dry-run
 
   dart_sdk:
     name: Dart client tests
@@ -59,11 +60,13 @@ jobs:
       - run: flutter pub get
       - name: Verify the toolchain left checked-in files untouched
         run: |
-          dirty="$(git status --porcelain -- .)"
+          # The whole repository: the workspace's one pubspec.lock is at its
+          # root, not in this package.
+          dirty="$(git status --porcelain)"
           if [ -n "$dirty" ]; then
             echo "::error::'flutter pub get' modified checked-in files; commit the result or pin the toolchain."
             echo "$dirty"
-            git diff -- .
+            git diff
             exit 1
           fi
       - run: dart format --output=none --set-exit-if-changed .
@@ -72,7 +75,7 @@ jobs:
       - run: dart pub publish --dry-run
 
   flutter_integration:
-    name: Flutter integration tests
+    name: Flutter integration package tests
     if: github.event_name != 'push' || contains(github.event.head_commit.message, '[ci]')
     runs-on: ubuntu-latest
     defaults:
@@ -87,11 +90,13 @@ jobs:
       - run: flutter pub get
       - name: Verify the toolchain left checked-in files untouched
         run: |
-          dirty="$(git status --porcelain -- .)"
+          # The whole repository: the workspace's one pubspec.lock is at its
+          # root, not in this package.
+          dirty="$(git status --porcelain)"
           if [ -n "$dirty" ]; then
             echo "::error::'flutter pub get' modified checked-in files; commit the result or pin the toolchain."
             echo "$dirty"
-            git diff -- .
+            git diff
             exit 1
           fi
       - run: dart format --output=none --set-exit-if-changed .
@@ -120,6 +125,7 @@ jobs:
       - run: flutter test
       - run: flutter test
         working-directory: packages/noticebird_native/example
+      - run: flutter pub publish --dry-run
 
   ios_normalizer:
     name: iOS normalizer tests

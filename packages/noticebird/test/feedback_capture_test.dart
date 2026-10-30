@@ -80,7 +80,7 @@ void main() {
     bool debugBuild = false,
     String Function()? sessionIdFactory,
     AppMetadata app = _app,
-    CrashTransport crashTransport = const DiscardingCrashTransport(),
+    CrashTransport? crashTransport,
     String Function()? eventIdFactory,
     Map<String, Map<String, Object?>> Function()? contextDiagnostics,
   }) {
@@ -119,9 +119,11 @@ void main() {
   }) => reporter.captureFeedback(
     kind: FeedbackKind.bug,
     message: message,
+    moment: diagnostics == null
+        ? null
+        : reporter.feedbackMoment(diagnostics: diagnostics),
     screenshot: screenshot,
     contactEmail: contactEmail,
-    diagnostics: diagnostics,
     userContext: userContext,
     relatedEventId: relatedEventId,
   );
@@ -155,16 +157,18 @@ void main() {
         kind: FeedbackKind.bug,
         message: 'The list does not load',
         trigger: FeedbackTrigger.errorScreen,
+        moment: reporter.feedbackMoment(
+          diagnostics: {
+            'sync': {
+              'pending': 3,
+              'online': false,
+              'lastSyncAt': DateTime.utc(2026, 10, 30, 11),
+              'build': 'abc-1',
+            },
+          },
+        ),
         screenshot: _png,
         contactEmail: 'ada@example.com',
-        diagnostics: {
-          'sync': {
-            'pending': 3,
-            'online': false,
-            'lastSyncAt': DateTime.utc(2026, 10, 30, 11),
-            'build': 'abc-1',
-          },
-        },
         userContext: {
           'plan': 'pro',
           'roles': ['admin', 'editor'],
@@ -1002,7 +1006,12 @@ void main() {
           'blocs': {'count': live},
         },
       )..setRouteTemplate('/lists/:listId');
-      final moment = reporter.feedbackMoment();
+      final moment = reporter.feedbackMoment(
+        diagnostics: {
+          'blocs': {'count': 9},
+          'sync': {'pending': 1},
+        },
+      );
       live = 2;
       reporter.setRouteTemplate('/feedback');
       now = _capturedAt.add(const Duration(minutes: 2));
@@ -1011,10 +1020,6 @@ void main() {
         kind: FeedbackKind.bug,
         message: 'The list does not load',
         moment: moment,
-        diagnostics: {
-          'blocs': {'count': 9},
-          'sync': {'pending': 1},
-        },
       );
 
       expect(sent()['routeTemplate'], '/lists/:listId');
@@ -1056,18 +1061,43 @@ void main() {
       expect(sent()['routeTemplate'], '/lists/:listId');
     });
 
-    test('a raw route for the moment throws in a debug build and is left '
+    test('a raw route in the moment throws in a debug build and is left '
         'out in a release build', () async {
-      expect(
-        () =>
-            client(debugBuild: true).feedbackMoment(routeTemplate: '/lists/42'),
+      final debug = client(debugBuild: true);
+      await expectLater(
+        debug.captureFeedback(
+          kind: FeedbackKind.bug,
+          message: 'x',
+          moment: debug.feedbackMoment(routeTemplate: '/lists/42'),
+        ),
         throwsArgumentError,
       );
-      final reporter = client()..setRouteTemplate('/home');
-      expect(
-        reporter.feedbackMoment(routeTemplate: '/lists/42').routeTemplate,
-        isNull,
+      expect(transport.requests, isEmpty);
+
+      final release = client();
+      await release.captureFeedback(
+        kind: FeedbackKind.bug,
+        message: 'x',
+        moment: FeedbackMoment(
+          takenAt: _capturedAt,
+          routeTemplate: '/lists/42?q=secret',
+        ),
       );
+      expect(sent(), isNot(contains('routeTemplate')));
+    });
+
+    test('a route in a moment the host built is redacted as '
+        'setRouteTemplate\'s', () async {
+      final reporter = client();
+      await reporter.captureFeedback(
+        kind: FeedbackKind.bug,
+        message: 'x',
+        moment: FeedbackMoment(
+          takenAt: _capturedAt,
+          routeTemplate: '/invite/person@example.com',
+        ),
+      );
+      expect(sent()['routeTemplate'], '/invite/[REDACTED]');
     });
 
     test(
@@ -1155,6 +1185,36 @@ void main() {
     expect(await capture(client(feedback: false)), const FeedbackDisabled());
   });
 
+  test('a feedback config without a transport sends nothing, and is still '
+      'checked', () async {
+    final reporter = NoticebirdClient(
+      config: NoticebirdConfig(
+        privacyProfile: CrashPrivacyProfile.privacyDefault,
+        app: _app,
+        platform: _platform,
+        feedback: FeedbackConfig(),
+      ),
+    );
+    expect(await capture(reporter), const FeedbackDisabled());
+    expect(() => FeedbackConfig(requireVerified: true), throwsArgumentError);
+  });
+
+  test('a moment taken before the report is noted with when', () async {
+    final reporter = client();
+    final moment = reporter.feedbackMoment();
+    now = _capturedAt.add(const Duration(minutes: 1));
+
+    await reporter.captureFeedback(
+      kind: FeedbackKind.bug,
+      message: 'x',
+      moment: moment,
+    );
+
+    expect(sent()['diagnostics'], {
+      'noticebird': {'moment_taken_at': '2026-10-30T12:00:00.000Z'},
+    });
+  });
+
   test('a session id factory that throws fails the report, not the '
       'host', () async {
     final outcome = await capture(
@@ -1212,11 +1272,14 @@ void main() {
     });
   });
 
-  test('the facade answers null without a client', () async {
+  test('the facade answers FeedbackDisabled without a client', () async {
     Noticebird.detach();
     expect(
-      Noticebird.captureFeedback(kind: FeedbackKind.idea, message: 'Dark mode'),
-      isNull,
+      await Noticebird.captureFeedback(
+        kind: FeedbackKind.idea,
+        message: 'Dark mode',
+      ),
+      const FeedbackDisabled(),
     );
     Noticebird.attach(client());
     addTearDown(Noticebird.detach);

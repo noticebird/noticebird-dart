@@ -10,6 +10,7 @@ import 'package:bloc/bloc.dart';
 import 'package:connectivity_plus_platform_interface/connectivity_plus_platform_interface.dart';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart' show AppLifecycleState;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -135,15 +136,11 @@ void main() {
     expect(Noticebird.instance, isNotNull);
   });
 
-  test('keeps an event that did not get through in the support directory, '
-      'and sends it when the connection returns', () async {
+  test('keeps an event that did not get through, and sends it when the '
+      'connection returns', () async {
     await start();
     offline = true;
     await Noticebird.captureException(StateError('boom'), _stack);
-    expect(
-      File('${support.path}/noticebird/crashes/events.json').existsSync(),
-      isTrue,
-    );
 
     offline = false;
     connectivity.changes.add(const [ConnectivityResult.wifi]);
@@ -151,6 +148,112 @@ void main() {
 
     expect(envelopes(), hasLength(1));
     expect(Noticebird.instance!.pendingCount, 0);
+  });
+
+  test('keeps an event and a feedback report in the support directory for '
+      'the next start, which sends them', () async {
+    final first = await start();
+    offline = true;
+    await Noticebird.captureException(StateError('boom'), _stack);
+    expect(
+      await Noticebird.captureFeedback(kind: FeedbackKind.bug, message: 'x'),
+      isA<FeedbackQueued>(),
+    );
+    first.close();
+
+    offline = false;
+    final settled = <FeedbackSettled>[];
+    started = await NoticebirdFlutter.start(
+      publishableKey: _key,
+      appName: 'example_app',
+      httpClient: httpClient,
+      onFeedbackSettled: settled.add,
+    );
+    await pumpEventQueue();
+
+    expect(envelopes(), hasLength(1));
+    expect(requests.where((r) => r.url.path.endsWith('/v1/feedback')), isEmpty);
+    // The report is due after its backoff, not at once.
+    expect(await Noticebird.pendingFeedbackCount, 1);
+  });
+
+  test('sends what waits when the app comes back to the foreground', () async {
+    await start();
+    offline = true;
+    await Noticebird.captureException(StateError('boom'), _stack);
+    offline = false;
+
+    final binding = TestWidgetsFlutterBinding.instance;
+    binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await pumpEventQueue();
+
+    expect(envelopes(), hasLength(1));
+  });
+
+  test('regulatedStrict keeps no default store, and refuses an unencrypted '
+      'one', () async {
+    started = await NoticebirdFlutter.start(
+      publishableKey: _key,
+      appName: 'example_app',
+      httpClient: httpClient,
+      privacyProfile: CrashPrivacyProfile.regulatedStrict,
+    );
+    offline = true;
+    await Noticebird.captureException(StateError('boom'), _stack);
+    expect(Directory('${support.path}/noticebird').existsSync(), isFalse);
+    started!.close();
+    started = null;
+
+    await expectLater(
+      NoticebirdFlutter.start(
+        publishableKey: _key,
+        appName: 'example_app',
+        httpClient: httpClient,
+        privacyProfile: CrashPrivacyProfile.regulatedStrict,
+        crashStore: FileCrashOfflineStore(support),
+      ),
+      throwsArgumentError,
+    );
+  });
+
+  test('a UI start delivers native reports of earlier runs, a background '
+      'start does not', () async {
+    final collector = _Collector();
+    final noticebird = await NoticebirdFlutter.start(
+      publishableKey: _key,
+      appName: 'example_app',
+      httpClient: httpClient,
+      nativeCrashes: collector,
+      background: true,
+    );
+    await pumpEventQueue();
+    expect(collector.claims, 0);
+    noticebird.close();
+
+    started = await NoticebirdFlutter.start(
+      publishableKey: _key,
+      appName: 'example_app',
+      httpClient: httpClient,
+      nativeCrashes: collector,
+    );
+    await pumpEventQueue();
+    expect(collector.claims, 1);
+  });
+
+  test('the bloc observer it found still gets every step', () async {
+    final previous = Bloc.observer;
+    final found = _RecordingObserver();
+    Bloc.observer = found;
+    addTearDown(() => Bloc.observer = previous);
+    final noticebird = await start();
+    final cubit = _Counter();
+    addTearDown(cubit.close);
+
+    cubit.emit(1);
+
+    expect(found.changes, 1);
+    expect(noticebird.client.recentBreadcrumbs.last.action, 'bloc.change');
   });
 
   test('a connection that goes away flushes nothing', () async {
@@ -231,7 +334,7 @@ void main() {
     final noticebird = await start();
     expect(FlutterError.onError, isNot(same(flutterHandler)));
     expect(PlatformDispatcher.instance.onError, isNot(same(platformHandler)));
-    expect(Bloc.observer, isA<MultiBlocObserver>());
+    expect(Bloc.observer, isNot(same(blocObserver)));
 
     noticebird.close();
     noticebird.close();
@@ -328,4 +431,33 @@ final class _Counter extends Cubit<int> {
 final class _DetailedObserver extends NoticebirdBlocObserver {
   @override
   String describeState(Object? state) => 'detailed';
+}
+
+final class _RecordingObserver extends BlocObserver {
+  var changes = 0;
+
+  @override
+  void onChange(BlocBase<dynamic> bloc, Change<dynamic> change) {
+    super.onChange(bloc, change);
+    changes++;
+  }
+}
+
+final class _Collector implements NativeCrashCollector {
+  int claims = 0;
+
+  @override
+  Future<void> start(NativeRunInfo run) async {}
+
+  @override
+  void update(NativeRunState state) {}
+
+  @override
+  Stream<NativeCrashBatch> claimed({int max = 10}) {
+    claims++;
+    return const Stream.empty();
+  }
+
+  @override
+  Future<void> settle(String recordId, {required bool delivered}) async {}
 }

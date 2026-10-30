@@ -177,10 +177,14 @@ final class FeedbackSendPostponed extends FeedbackSendResult {
 ///   rejected as [FeedbackRejection.failed] at once, since asking again
 ///   would only meet the same answer, and a queue would retry it forever.
 final class FeedbackSender {
-  FeedbackSender(this._config, {required DateTime Function() clock})
-    : _clock = clock;
+  FeedbackSender(
+    this._config,
+    this._transport, {
+    required DateTime Function() clock,
+  }) : _clock = clock;
 
   final FeedbackConfig _config;
+  final FeedbackTransport _transport;
   final DateTime Function() _clock;
 
   /// How long [reporterAssertion] waits for the provider.
@@ -341,12 +345,9 @@ final class FeedbackSender {
     for (;;) {
       final answer = await _answer(
         () => switch (step) {
-          _Step.slot => _config.transport.requestSlot(
-            report.reportId,
-            attachment!,
-          ),
-          _Step.upload => _config.transport.upload(slot!, bytes!),
-          _Step.submit => _config.transport.submit(reportJson),
+          _Step.slot => _transport.requestSlot(report.reportId, attachment!),
+          _Step.upload => _transport.upload(slot!, bytes!),
+          _Step.submit => _transport.submit(reportJson),
         },
       );
       switch (answer) {

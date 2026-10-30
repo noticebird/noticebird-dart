@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:bloc/bloc.dart';
 import 'package:flutter/foundation.dart';
+import 'package:noticebird/feedback.dart';
 import 'package:noticebird/noticebird.dart';
 
 import 'bloc_error_report.dart';
@@ -41,7 +42,7 @@ class NoticebirdBlocObserver extends BlocObserver {
   /// The most bloc types [liveBlocCounts] counts beside its total: a
   /// diagnostics group holds at most [FeedbackReport.maxDiagnosticValues]
   /// values. The newest types are the ones counted.
-  static const maxBlocTypes = 31;
+  static const maxBlocTypes = FeedbackReport.maxDiagnosticValues - 1;
 
   /// The live blocs, oldest first. Held weakly: a bloc nobody closed is not
   /// kept alive by the observer that lists it.

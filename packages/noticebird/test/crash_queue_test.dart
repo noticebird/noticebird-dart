@@ -30,7 +30,7 @@ const _platform = PlatformMetadata(
 final _stack = StackTrace.fromString('#0 A.b (package:app/a.dart:1:1)');
 
 NoticebirdClient _client({
-  CrashTransport transport = const DiscardingCrashTransport(),
+  CrashTransport? transport,
   CrashOfflineStore? store,
   FeedbackConfig? feedback,
   DateTime Function()? clock,
@@ -59,7 +59,6 @@ void main() {
           platform: _platform,
           nativeCrashes: collector,
         ),
-        transport: const DiscardingCrashTransport(),
       );
 
       expect(

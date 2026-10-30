@@ -33,7 +33,6 @@ void main() {
           deviceClass: 'test',
         ),
       ),
-      transport: const DiscardingCrashTransport(),
     );
   });
 
@@ -111,5 +110,43 @@ void main() {
     observer.didPush(_Route('/next'), null);
 
     expect(trail().single.$2, '/next');
+  });
+
+  group('with tracksRouteTemplate', () {
+    late NoticebirdNavigatorObserver observer;
+    setUp(
+      () => observer = NoticebirdNavigatorObserver(
+        client: client,
+        tracksRouteTemplate: true,
+      ),
+    );
+
+    test('the client\'s route follows the topmost page, past a sheet', () {
+      final home = _Route('/home');
+      final list = _Route('/lists/:listId');
+      final sheet = _Route(null);
+
+      observer.didPush(home, null);
+      observer.didPush(list, home);
+      expect(client.feedbackMoment().routeTemplate, '/lists/:listId');
+
+      observer.didPush(sheet, list);
+      expect(client.feedbackMoment().routeTemplate, '/lists/:listId');
+
+      observer
+        ..didPop(sheet, list)
+        ..didPop(list, home);
+      expect(client.feedbackMoment().routeTemplate, '/home');
+
+      observer.didReplace(newRoute: _Route('/l/abc?q=1'), oldRoute: home);
+      expect(client.feedbackMoment().routeTemplate, isNull);
+    });
+
+    test('is off by default', () {
+      NoticebirdNavigatorObserver(
+        client: client,
+      ).didPush(_Route('/home'), null);
+      expect(client.feedbackMoment().routeTemplate, isNull);
+    });
   });
 }

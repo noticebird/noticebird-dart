@@ -42,6 +42,7 @@ final class NoticebirdFlutter {
   NoticebirdFlutter._({
     required this.client,
     required this.blocObserver,
+    required this.platformReadFailures,
     required void Function() stop,
   }) : _stop = stop;
 
@@ -62,6 +63,13 @@ final class NoticebirdFlutter {
   /// this one beside it: `MultiBlocObserver(observers: [blocObserver,
   /// mine])`.
   final NoticebirdBlocObserver blocObserver;
+
+  /// The platform reads [start] went on without, because they threw or did
+  /// not answer within [platformReadTimeout]: the installed version
+  /// (`packageInfo`, the app is then `unknown`) and the support directory
+  /// (`supportDirectory`, then no default store). Empty when every read
+  /// answered. For a host that reports what its start did without.
+  final List<PlatformReadFailure> platformReadFailures;
 
   final void Function() _stop;
 
@@ -206,10 +214,11 @@ final class NoticebirdFlutter {
 
     final strict = privacyProfile == CrashPrivacyProfile.regulatedStrict;
     final keepsStores = !kIsWeb && !background && !strict;
+    final missed = <PlatformReadFailure>[];
     final (packageInfo, supportDirectory) = await (
-      _read(PackageInfo.fromPlatform),
+      _read('packageInfo', PackageInfo.fromPlatform, missed),
       keepsStores
-          ? _read(getApplicationSupportDirectory)
+          ? _read('supportDirectory', getApplicationSupportDirectory, missed)
           : Future<Directory?>.value(),
     ).wait;
     Directory? storeIn(String name) => supportDirectory == null
@@ -221,24 +230,7 @@ final class NoticebirdFlutter {
     final observer = blocObserver ?? NoticebirdBlocObserver();
     final NoticebirdConfig config;
     try {
-      final feedback = FeedbackConfig(
-        // Without a key the config is built all the same, so an argument
-        // that cannot work fails in every build, not only in one with a
-        // key; the client then gets none.
-        transport: feedbackTransport ?? const _NoFeedbackTransport(),
-        reporterAssertion: reporterAssertion,
-        requireVerified: requireVerified,
-        offlineStore:
-            feedbackStore ??
-            (defaultFeedbackStore == null
-                ? null
-                : FileFeedbackOfflineStore(defaultFeedbackStore)),
-        onSettled: onFeedbackSettled,
-        contextDiagnostics: observeBlocs
-            ? () => {'blocs': observer.liveBlocCounts()}
-            : null,
-      );
-      NoticebirdConfig configWith(FeedbackConfig? feedback) => NoticebirdConfig(
+      config = NoticebirdConfig(
         privacyProfile: privacyProfile,
         app: _app(appName, packageInfo),
         pii: pii,
@@ -251,19 +243,30 @@ final class NoticebirdFlutter {
                 ? null
                 : FileCrashOfflineStore(defaultCrashStore)),
         locale: () => binding.platformDispatcher.locale.toLanguageTag(),
-        feedback: feedback,
+        // Without a key the feedback config has no transport: it sends
+        // nothing, and its arguments are checked all the same.
+        feedback: FeedbackConfig(
+          transport: feedbackTransport,
+          reporterAssertion: reporterAssertion,
+          requireVerified: requireVerified,
+          offlineStore:
+              feedbackStore ??
+              (defaultFeedbackStore == null
+                  ? null
+                  : FileFeedbackOfflineStore(defaultFeedbackStore)),
+          onSettled: onFeedbackSettled,
+          contextDiagnostics: observeBlocs || blocObserver != null
+              ? () => {'blocs': observer.liveBlocCounts()}
+              : null,
+        ),
       );
-      final checked = configWith(feedback);
-      config = feedbackTransport == null ? configWith(null) : checked;
     } catch (_) {
       ingest?.close();
       rethrow;
     }
     final client = NoticebirdClient(
       config: config,
-      transport: uploadCrashes && ingest != null
-          ? ingest
-          : const DiscardingCrashTransport(),
+      transport: uploadCrashes ? ingest : null,
     );
     Noticebird.attach(client);
 
@@ -317,12 +320,12 @@ final class NoticebirdFlutter {
         _started = null;
         _starting = null;
       }
-      ingest?.close();
     }
 
     return _started = started = NoticebirdFlutter._(
       client: client,
       blocObserver: observer,
+      platformReadFailures: List.unmodifiable(missed),
       stop: stop,
     );
   }
@@ -338,8 +341,10 @@ final class NoticebirdFlutter {
   /// Stops what [start] set up: the handlers and the bloc observer it
   /// installed go back to the ones it found, the foreground and connection
   /// triggers and the client's own schedule stop, and the client is
-  /// detached from the facade. A later [start] starts anew. Idempotent; a
-  /// handler or bloc observer the host set since [start] stays.
+  /// detached from the facade. A later [start] starts anew, with a client
+  /// of its own on the same stores: do not use this [client] after it.
+  /// Idempotent; a handler or bloc observer the host set since [start]
+  /// stays.
   void close() => _stop();
 
   static AppMetadata _app(String name, PackageInfo? info) {
@@ -368,36 +373,33 @@ final class NoticebirdFlutter {
     }
   }
 
-  static Future<T?> _read<T>(Future<T> Function() read) async {
+  static Future<T?> _read<T>(
+    String name,
+    Future<T> Function() read,
+    List<PlatformReadFailure> missed,
+  ) async {
     try {
       return await read().timeout(platformReadTimeout);
-    } catch (error) {
-      _debugNote('a platform read did without: $error');
+    } catch (error, stack) {
+      _debugNote('the start went on without $name: $error');
+      missed.add(PlatformReadFailure(name, error, stack));
       return null;
     }
   }
 }
 
-/// The transport of a feedback config that is checked but never used: a
-/// start without a key sends no feedback.
-final class _NoFeedbackTransport implements FeedbackTransport {
-  const _NoFeedbackTransport();
+/// A platform read [NoticebirdFlutter.start] went on without: its [read]
+/// (`packageInfo` or `supportDirectory`), and what it threw — a
+/// `TimeoutException` when it did not answer in time.
+final class PlatformReadFailure {
+  const PlatformReadFailure(this.read, this.error, this.stackTrace);
+
+  final String read;
+  final Object error;
+  final StackTrace stackTrace;
 
   @override
-  Future<FeedbackDelivery> requestSlot(
-    String reportId,
-    FeedbackAttachmentRef attachment,
-  ) async => const FeedbackTransient();
-
-  @override
-  Future<FeedbackDelivery> upload(
-    FeedbackUploadSlot slot,
-    Uint8List bytes,
-  ) async => const FeedbackTransient();
-
-  @override
-  Future<FeedbackDelivery> submit(String reportJson) async =>
-      const FeedbackTransient();
+  String toString() => 'PlatformReadFailure($read, $error)';
 }
 
 void _debugNote(String note) {

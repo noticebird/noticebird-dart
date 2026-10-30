@@ -18,7 +18,7 @@ String checkPublishableKey(String publishableKey) {
     throw ArgumentError.value(
       publishableKey,
       'publishableKey',
-      'Flutter clients require a publishable ingest key',
+      'A client takes a publishable ingest key, <prefix>_pk_<token>',
     );
   }
   return publishableKey;

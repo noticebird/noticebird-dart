@@ -1,12 +1,13 @@
 import 'package:meta/meta.dart';
 
-/// Whether this is a debug build, by the constants Flutter's `kDebugMode` is
-/// made of: neither a release (`dart.vm.product`) nor a profile
-/// (`dart.vm.profile`) build. A Dart program run with `dart run` or
-/// `dart test` counts as one.
-const bool isDebugBuild =
-    !bool.fromEnvironment('dart.vm.product') &&
-    !bool.fromEnvironment('dart.vm.profile');
+/// Whether this is a debug build: one that runs its asserts, as a Flutter
+/// debug build and `dart test` do, and a release or profile build, a
+/// compiled executable and a production web build do not.
+final bool isDebugBuild = () {
+  var asserts = false;
+  assert(asserts = true);
+  return asserts;
+}();
 
 /// Whether an integration mistake of the host throws, to be seen while
 /// someone looks: a raw route in `NoticebirdClient.setRouteTemplate`, input

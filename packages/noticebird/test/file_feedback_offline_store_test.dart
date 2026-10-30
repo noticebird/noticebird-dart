@@ -60,7 +60,6 @@ void main() {
         onSettled: onSettled,
       ),
     ),
-    transport: const DiscardingCrashTransport(),
     clock: () => now,
   );
 

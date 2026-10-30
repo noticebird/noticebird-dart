@@ -64,32 +64,38 @@ final class Noticebird {
       _instance?.eventIdOf(error);
 
   /// See [NoticebirdClient.feedbackMoment]; `null` without a client.
-  static FeedbackMoment? feedbackMoment({String? routeTemplate}) =>
-      _instance?.feedbackMoment(routeTemplate: routeTemplate);
+  static FeedbackMoment? feedbackMoment({
+    String? routeTemplate,
+    Map<String, Map<String, Object?>> diagnostics = const {},
+  }) => _instance?.feedbackMoment(
+    routeTemplate: routeTemplate,
+    diagnostics: diagnostics,
+  );
 
   /// See [NoticebirdClient.captureFeedback]; its types come from
-  /// `package:noticebird/feedback.dart`.
-  static Future<FeedbackOutcome>? captureFeedback({
+  /// `package:noticebird/feedback.dart`. [FeedbackDisabled] without a
+  /// client.
+  static Future<FeedbackOutcome> captureFeedback({
     required FeedbackKind kind,
     required String message,
     FeedbackMoment? moment,
     FeedbackTrigger? trigger,
     Uint8List? screenshot,
     String? contactEmail,
-    Map<String, Map<String, Object?>>? diagnostics,
     Map<String, Object?>? userContext,
     String? relatedEventId,
-  }) => _instance?.captureFeedback(
-    kind: kind,
-    message: message,
-    moment: moment,
-    trigger: trigger,
-    screenshot: screenshot,
-    contactEmail: contactEmail,
-    diagnostics: diagnostics,
-    userContext: userContext,
-    relatedEventId: relatedEventId,
-  );
+  }) =>
+      _instance?.captureFeedback(
+        kind: kind,
+        message: message,
+        moment: moment,
+        trigger: trigger,
+        screenshot: screenshot,
+        contactEmail: contactEmail,
+        userContext: userContext,
+        relatedEventId: relatedEventId,
+      ) ??
+      Future.value(const FeedbackDisabled());
 
   /// See [NoticebirdClient.pendingFeedbackCount].
   static Future<int>? get pendingFeedbackCount =>

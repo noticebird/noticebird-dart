@@ -38,6 +38,10 @@ void main() {
 
       expect(started, isNotNull);
       expect(Noticebird.instance, same(started!.client));
+      expect(started!.platformReadFailures.map((failure) => failure.read), [
+        'packageInfo',
+        'supportDirectory',
+      ]);
       started!.close();
     });
   });

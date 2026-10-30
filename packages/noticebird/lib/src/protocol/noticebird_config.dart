@@ -237,17 +237,3 @@ abstract interface class CrashTransport {
   /// `error` included, is not final.
   Future<void> send(String eventJson);
 }
-
-/// Accepts every event and sends it nowhere.
-///
-/// For a build that uploads nothing but still wants the client: it owns the
-/// breadcrumb trail, the user and the route, which a feedback report or an
-/// error details view reads whether or not crashes leave the device. It succeeds
-/// rather than throwing, because a failing transport makes the client queue
-/// each event for a flush that never comes.
-final class DiscardingCrashTransport implements CrashTransport {
-  const DiscardingCrashTransport();
-
-  @override
-  Future<void> send(String eventJson) async {}
-}

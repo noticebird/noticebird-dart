@@ -43,8 +43,8 @@ enum CaptureOutcome {
   /// The host's [NoticebirdConfig.shouldCapture] declined the error.
   ignored,
 
-  /// The client's transport is a [DiscardingCrashTransport]: crash uploads
-  /// are off, and no event was made.
+  /// The client has no transport: crash uploads are off, and no event was
+  /// made.
   discarded,
 }
 
@@ -85,9 +85,13 @@ final class CaptureResult {
 }
 
 final class NoticebirdClient {
+  /// A client that delivers crash events through [transport]; without one,
+  /// crash uploads are off: a capture is [CaptureOutcome.discarded], and
+  /// the client still keeps the breadcrumb trail, the user and the route,
+  /// which a feedback report reads whether or not crashes leave the device.
   NoticebirdClient({
     required NoticebirdConfig config,
-    required CrashTransport transport,
+    CrashTransport? transport,
     DateTime Function()? clock,
     String Function()? eventIdFactory,
   }) : _config = config,
@@ -106,7 +110,7 @@ final class NoticebirdClient {
   static const _nativeSettleTimeout = Duration(seconds: 5);
 
   final NoticebirdConfig _config;
-  final CrashTransport _transport;
+  final CrashTransport? _transport;
   final DateTime Function() _clock;
   final String Function() _eventIdFactory;
   final List<TypedBreadcrumb> _breadcrumbs = [];
@@ -248,27 +252,25 @@ final class NoticebirdClient {
 
   /// What a feedback report is about, now: [routeTemplate] (a template
   /// such as `/lists/:listId`; by default the one of [setRouteTemplate]),
-  /// what [FeedbackConfig.contextDiagnostics] answers, and when. Take it
-  /// when the feedback sheet opens and pass it to [captureFeedback], so the
-  /// report describes the screen the user was on, not the sheet.
+  /// what [FeedbackConfig.contextDiagnostics] answers, the host's own
+  /// [diagnostics], and when. Take it when the feedback sheet opens and
+  /// pass it to [captureFeedback], so the report describes the screen and
+  /// the state the user was in, not the sheet.
   ///
-  /// A raw route throws an [ArgumentError] in a debug build, as
-  /// [setRouteTemplate] does, and is left out in a release build. Otherwise
-  /// it never throws.
-  FeedbackMoment feedbackMoment({String? routeTemplate}) {
-    final DateTime takenAt;
+  /// [diagnostics] are content-free values, in named groups of named
+  /// values: a bool, a finite number, an enum (its name), a [DateTime], a
+  /// UUID or a token ([FeedbackDiagnostics.tokenPattern]). What the report
+  /// does not take is left out when it is sent ([captureFeedback]). Never
+  /// throws.
+  FeedbackMoment feedbackMoment({
+    String? routeTemplate,
+    Map<String, Map<String, Object?>> diagnostics = const {},
+  }) {
+    DateTime takenAt;
     try {
       takenAt = _clock().toUtc();
     } catch (_) {
-      return FeedbackMoment(takenAt: DateTime.now().toUtc());
-    }
-    String? route = _routeTemplate;
-    if (routeTemplate != null) {
-      route = isRouteTemplate(routeTemplate)
-          ? sanitizeRouteTemplate(routeTemplate)
-          : hostMistakesThrow
-          ? throw _rawRoute(routeTemplate)
-          : null;
+      takenAt = DateTime.now().toUtc();
     }
     Map<String, Map<String, Object?>> context = const {};
     try {
@@ -280,8 +282,9 @@ final class NoticebirdClient {
     }
     return FeedbackMoment(
       takenAt: takenAt,
-      routeTemplate: route,
-      diagnostics: context,
+      routeTemplate: routeTemplate ?? _routeTemplate,
+      contextDiagnostics: context,
+      diagnostics: diagnostics,
     );
   }
 
@@ -291,8 +294,8 @@ final class NoticebirdClient {
   /// [NoticebirdConfig.feedback] it answers [FeedbackDisabled].
   ///
   /// [moment] is what the report is about ([feedbackMoment], taken when the
-  /// sheet opened): its route template and its context diagnostics. Without
-  /// one, it is taken now. The client fills in the rest as for an event:
+  /// sheet opened): its route template and its diagnostics. Without one, it
+  /// is taken now, with the context diagnostics only. The client fills in the rest as for an event:
   /// the app, the platform and its locale, the session, the user of
   /// [setUser] and the trail, the newest [FeedbackReport.maxTrailItems]
   /// breadcrumbs of the buffer, sanitized, the oldest left out first until
@@ -309,13 +312,13 @@ final class NoticebirdClient {
   ///   left out, and the report says so (`noticebird.screenshot_dropped`).
   /// - [contactEmail] is the reporter's consent to be contacted
   ///   ([FeedbackContact.isValid] checks it first).
-  /// - [diagnostics] are content-free values, in named groups of named
-  ///   values: a bool, a finite number, an enum (its name), a [DateTime], a
-  ///   UUID or a token ([FeedbackDiagnostics.tokenPattern]). What the
-  ///   report does not take — a key that is no key, free text, a group or
-  ///   value past the limits — is left out, never the report: the report
-  ///   counts it (`noticebird.dropped_values`), and a debug build prints it.
-  ///   The group name `noticebird` is the client's.
+  /// - The moment's diagnostics — the context groups first, then the
+  ///   host's — lose what the report does not take: a key that is no key,
+  ///   free text, a group or value past the limits. It is left out, never
+  ///   the report: the report counts it (`noticebird.dropped_values`), and a
+  ///   debug build prints it. The group name `noticebird` is the client's.
+  /// - The moment's route template is held to [isRouteTemplate] and
+  ///   redacted as [setRouteTemplate]'s is.
   /// - [userContext] is what the host tells about its user on purpose
   ///   ([FeedbackUserContext.check] checks its shape); it is sent as given,
   ///   and the platform drops what it may not keep.
@@ -323,7 +326,8 @@ final class NoticebirdClient {
   ///   ([eventIdOf]).
   ///
   /// A value the host passed that the report refuses — an empty message, a
-  /// contact address, a user context, a related event id — throws an
+  /// contact address, a user context, a related event id, a raw route in
+  /// the moment — throws an
   /// [ArgumentError] in a debug build and is
   /// [FeedbackRejection.invalidInput] in a release build; nothing is sent.
   /// What the client fills in itself never is: a locale or route template
@@ -337,34 +341,43 @@ final class NoticebirdClient {
     FeedbackTrigger? trigger,
     Uint8List? screenshot,
     String? contactEmail,
-    Map<String, Map<String, Object?>>? diagnostics,
     Map<String, Object?>? userContext,
     String? relatedEventId,
   }) async {
     final sender = _feedbackSender;
     if (sender == null) return const FeedbackDisabled();
     final about = moment ?? feedbackMoment();
+    final route = about.routeTemplate;
+    if (route != null && !isRouteTemplate(route) && hostMistakesThrow) {
+      throw _rawRoute(route);
+    }
     try {
       final strict =
           _config.privacyProfile == CrashPrivacyProfile.regulatedStrict;
+      final createdAt = _clock().toUtc();
       final draft = FeedbackDraft(
         reportId: _reportId(),
-        createdAt: _clock().toUtc(),
+        createdAt: createdAt,
         kind: kind,
         message: message,
         trigger: trigger,
         screenshot: screenshot,
         contactEmail: contactEmail,
-        contextDiagnostics: about.diagnostics,
-        diagnostics: diagnostics,
-        momentTakenAt: moment?.takenAt,
+        contextDiagnostics: about.contextDiagnostics,
+        diagnostics: about.diagnostics,
+        // When the sheet opened, for a moment taken before the capture.
+        momentTakenAt: moment != null && moment.takenAt.isBefore(createdAt)
+            ? moment.takenAt
+            : null,
         userContext: strict ? null : userContext,
         relatedEventId: relatedEventId?.toLowerCase(),
         app: _config.app,
         platform: _config.platform,
         locale: strict ? null : _locale(),
         sessionId: _config.sessionIdFactory(),
-        routeTemplate: about.routeTemplate,
+        routeTemplate: route != null && isRouteTemplate(route)
+            ? sanitizeRouteTemplate(route)
+            : null,
         user: strict ? null : _user,
         trail: [
           for (final breadcrumb in _breadcrumbs.skip(
@@ -405,8 +418,12 @@ final class NoticebirdClient {
   }
 
   late final FeedbackSender? _feedbackSender = switch (_config.feedback) {
-    final feedback? => FeedbackSender(feedback, clock: _clock),
-    null => null,
+    FeedbackConfig(:final transport?) && final feedback => FeedbackSender(
+      feedback,
+      transport,
+      clock: _clock,
+    ),
+    _ => null,
   };
 
   late final FeedbackQueue? _feedbackQueue = switch ((
@@ -644,9 +661,8 @@ final class NoticebirdClient {
     if (filtered && !_accepts(error)) {
       return const CaptureResult(CaptureOutcome.ignored);
     }
-    if (_transport is DiscardingCrashTransport) {
-      return const CaptureResult(CaptureOutcome.discarded);
-    }
+    final transport = _transport;
+    if (transport == null) return const CaptureResult(CaptureOutcome.discarded);
     String? key;
     String? builtId;
     try {
@@ -686,7 +702,7 @@ final class NoticebirdClient {
         }
       }
       try {
-        await _transport.send(written.json);
+        await transport.send(written.json);
         // A live sync repeats the trail on purpose; a real event marks what
         // it carried as sent, so the next one starts after it.
         if (event.exception.type != 'LiveBreadcrumbSync' &&
@@ -804,10 +820,11 @@ final class NoticebirdClient {
     _nativeDelivery = null;
   }
 
-  /// A no-op while the transport discards: what earlier runs kept stays,
-  /// for a later run that uploads, as the native reports do.
+  /// A no-op without a transport: what earlier runs kept stays, for a later
+  /// run that uploads, as the native reports do.
   Future<void> _flushEvents() async {
-    if (_transport is DiscardingCrashTransport) return;
+    final transport = _transport;
+    if (transport == null) return;
     try {
       final stored = await _readStore();
       final knownEventIds = {for (final event in _pending) event.eventId};
@@ -837,7 +854,7 @@ final class NoticebirdClient {
         // by then: a capture during the send may have evicted it.
         final head = _pending.first;
         try {
-          await _transport.send(head.json);
+          await transport.send(head.json);
         } catch (failure) {
           if (!_refusedForGood(failure)) break;
         }
@@ -855,9 +872,9 @@ final class NoticebirdClient {
   /// Call it from the engine that shows the UI (`NoticebirdFlutter.start`
   /// of `noticebird_flutter` does), never from a headless background
   /// engine, which may have seconds to live. A no-op without
-  /// [NoticebirdConfig.nativeCrashes], after the first call, and while the
-  /// transport is a [DiscardingCrashTransport]: the reports stay with the
-  /// collector, for a later run that uploads.
+  /// [NoticebirdConfig.nativeCrashes], after the first call, and without a
+  /// transport: the reports stay with the collector, for a later run that
+  /// uploads.
   ///
   /// Returns the result of each report of the first batch once it is
   /// settled, its [CaptureResult.eventId] as for [captureException]: `sent`,
@@ -871,9 +888,7 @@ final class NoticebirdClient {
   /// waiting for a collector that does not answer.
   Future<List<CaptureResult>> reportNativeCrashes() async {
     final collector = _config.nativeCrashes;
-    if (collector == null ||
-        _nativeDeliveryRequested ||
-        _transport is DiscardingCrashTransport) {
+    if (collector == null || _nativeDeliveryRequested || _transport == null) {
       return const [];
     }
     _nativeDeliveryRequested = true;
@@ -979,6 +994,8 @@ final class NoticebirdClient {
     List<NativeRecordedRun> runs,
   ) async {
     if (!_accepts(record)) return const CaptureResult(CaptureOutcome.ignored);
+    final transport = _transport;
+    if (transport == null) return const CaptureResult(CaptureOutcome.discarded);
     try {
       final event = buildNativeCrashEvent(
         record,
@@ -990,7 +1007,7 @@ final class NoticebirdClient {
       // dropped below.
       final written = _write(event);
       try {
-        await _transport.send(written.json);
+        await transport.send(written.json);
         return CaptureResult(CaptureOutcome.sent, eventId: event.eventId);
       } catch (failure) {
         return _refusedForGood(failure)
@@ -1384,7 +1401,6 @@ final class _Rerun {
 /// release build.
 void _debugNote(String note) {
   assert(() {
-    // ignore: avoid_print
     print('noticebird: $note');
     return true;
   }());

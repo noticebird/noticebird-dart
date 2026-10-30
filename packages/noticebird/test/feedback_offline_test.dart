@@ -51,7 +51,7 @@ void main() {
     FeedbackOfflineStore? offlineStore,
     Future<String?> Function()? reporterAssertion,
     bool requireVerified = false,
-    CrashTransport crashTransport = const DiscardingCrashTransport(),
+    CrashTransport? crashTransport,
   }) => NoticebirdClient(
     config: NoticebirdConfig(
       privacyProfile: CrashPrivacyProfile.privacyDefault,
@@ -153,7 +153,6 @@ void main() {
           platform: _platform,
           feedback: FeedbackConfig(transport: transport),
         ),
-        transport: const DiscardingCrashTransport(),
       );
       transport.submitAnswers.add(const FeedbackTransient());
 
@@ -744,7 +743,6 @@ void main() {
           onSettled: (_) => throw StateError('host bug'),
         ),
       ),
-      transport: const DiscardingCrashTransport(),
       clock: () => now,
     );
     await queued(reporter);

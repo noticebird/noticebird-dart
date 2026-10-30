@@ -15,6 +15,7 @@ final class FeedbackMoment {
   const FeedbackMoment({
     required this.takenAt,
     this.routeTemplate,
+    this.contextDiagnostics = const {},
     this.diagnostics = const {},
   });
 
@@ -26,7 +27,11 @@ final class FeedbackMoment {
   final String? routeTemplate;
 
   /// The groups `FeedbackConfig.contextDiagnostics` answered then, as they
-  /// were: sent before the host's own `diagnostics`.
+  /// were: sent before [diagnostics], whose groups of the same name are
+  /// left out.
+  final Map<String, Map<String, Object?>> contextDiagnostics;
+
+  /// The host's own diagnostics groups, as it took them then.
   final Map<String, Map<String, Object?>> diagnostics;
 }
 
@@ -166,9 +171,8 @@ final class FeedbackSettled {
 /// Why a report was rejected.
 enum FeedbackRejection {
   /// A value the host passed breaks the report's rules, at the
-  /// [FeedbackRejected.path]: a contact address, diagnostics or a user
-  /// context the report refuses, a message left empty, a screenshot whose
-  /// bytes are too many or not its type. Nothing was sent. A debug build
+  /// [FeedbackRejected.path]: a contact address, a user context or a related
+  /// event id the report refuses, or a message left empty. Nothing was sent. A debug build
   /// throws an [ArgumentError] instead, to show the mistake. A value the
   /// client fills in itself is never this: it is left out, or the report
   /// [failed].
