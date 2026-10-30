@@ -50,8 +50,8 @@ and it changes how you use the API:
   its `outcome`, do not wrap the call in a `try`. `captureFeedback` answers a
   `FeedbackOutcome`.
 - The start never fails on the platform: a plugin that throws or does not answer is done
-  without. A missing API URL, or a missing or malformed key, starts a client that
-  uploads nothing and sends no feedback (a debug build prints why). An argument no start can work with — an `appName` the protocol
+  without. Without an API URL, with one it cannot send to, or without a usable key, it
+  starts a client that uploads nothing and sends no feedback (a debug build prints why). An argument no start can work with — an `appName` the protocol
   refuses, a cap out of range, an unencrypted store under `regulatedStrict` — throws an
   `ArgumentError` at the start, so an invalid setup fails at bootstrap rather than
   silently dropping every event later.
@@ -401,14 +401,14 @@ breadcrumbs (redacted as in an event; a report does not count them as sent). The
 route is checked where the report is built, by `isRouteTemplate`, and redacted as
 `setRouteTemplate`'s is: a raw route given to `feedbackMoment(routeTemplate:)` throws in a
 debug build and is left out in release. `FeedbackDisabled` comes from a start without an
-API URL or a usable key, a client without a `FeedbackConfig` or one without a
+API URL, with one it cannot send to, or without a usable key, a client without a `FeedbackConfig` or one without a
 `transport`, and the facade while no client is attached.
 
 | `FeedbackOutcome` | Meaning |
 |---|---|
 | `FeedbackDelivered(ticket, verified)` | The platform has it. Show `ticket.display` (such as `FB-12`) as it is; `ticket` is `null` when the answer named none, such as for a resent report the platform stored already but can no longer compare. |
 | `FeedbackQueued(reportId)` | Not through yet; kept in the store and sent when due. |
-| `FeedbackDisabled` | No client attached, no feedback config, or one without a transport (no API URL or no usable key). |
+| `FeedbackDisabled` | No client attached, no feedback config, or one without a transport (no API URL, one it cannot send to, or no usable key). |
 | `FeedbackRejected(reason, path, code)` | Never delivered. `reason` is a `FeedbackRejection`: `invalidInput`, `unverified`, `strictProject`, `clock`, `notAccepted`, `noStore`, `evicted`, `expired`, `refused`, `failed`. |
 
 **Sanitised, never refused.** The `screenshot` and the moment's `diagnostics` never cost

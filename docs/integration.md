@@ -339,8 +339,8 @@ and credentials remain forbidden in every profile; there is intentionally no
 else — to Noticebird, where it is triaged apart from crashes. Its types are in
 `package:noticebird_flutter/feedback.dart`, apart from the main library, so
 they cannot clash with an app's own feedback classes. The start sends
-feedback to the API at `apiUrl`; a start without an API URL or a usable key
-answers `FeedbackDisabled`.
+feedback to the API at `apiUrl`; a start without an API URL, with one it
+cannot send to, or without a usable key answers `FeedbackDisabled`.
 
 The feedback sheet is the app's own. Take the moment when it opens — the
 route template, the context diagnostics (the `blocs` group), the host's own
@@ -414,7 +414,7 @@ The outcome is sealed:
 |---|---|
 | `FeedbackDelivered` | The platform has the report; `ticket.display` (such as `FB-12`) is for the reporter, `verified` says whether the reporter assertion was accepted. `ticket` is `null` when the answer named none, such as for a resent report the platform stored already but can no longer compare, its screenshot deleted by retention. |
 | `FeedbackQueued` | It did not get through yet and waits in the offline store, under `reportId`. |
-| `FeedbackDisabled` | No client is attached, or the client has no feedback config or no feedback transport (a start without an API URL or a usable key). |
+| `FeedbackDisabled` | No client is attached, or the client has no feedback config or no feedback transport (a start without an API URL, with one it cannot send to, or without a usable key). |
 | `FeedbackRejected` | Not delivered, and never will be: `reason` (a `FeedbackRejection`) says why, `path` names the value at fault. |
 
 `captureFeedback` never throws in a release build. A value the app passed that the report

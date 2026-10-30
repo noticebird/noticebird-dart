@@ -75,15 +75,22 @@ void main() {
       expect(await start(), isNot(same(first)));
     });
 
-    test('lets the next start go after a start that threw', () async {
-      await expectLater(
-        NoticebirdFlutter.start(appName: 'example_app', requireVerified: true),
-        throwsArgumentError,
-      );
+    test('closes a start made after a start that threw, before the reset '
+        'resumes', () async {
+      final handler = FlutterError.onError;
+      Future<NoticebirdFlutter>? second;
+      // Its listener runs after the start's own, before the reset's.
+      NoticebirdFlutter.start(
+        appName: 'example_app',
+        requireVerified: true,
+      ).then<void>((_) {}, onError: (Object _) => second = start());
 
       await NoticebirdFlutter.resetForTesting();
+      await second;
 
-      expect(await start(), isA<NoticebirdFlutter>());
+      expect(second, isNotNull);
+      expect(Noticebird.instance, isNull);
+      expect(FlutterError.onError, same(handler));
     });
 
     test('closes a start still under way', () async {
