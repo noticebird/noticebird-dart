@@ -46,7 +46,8 @@ class NoticebirdNavigatorObserver extends NavigatorObserver {
   final String? Function(Route<dynamic> route)? describe;
 
   /// Whether the client's route template follows the topmost page of this
-  /// navigator whose name is a template.
+  /// navigator (a `PageRoute`, past dialogs and sheets): its template, or
+  /// none.
   final bool tracksRouteTemplate;
 
   /// The routes of the navigator, oldest first, as this observer saw them.
