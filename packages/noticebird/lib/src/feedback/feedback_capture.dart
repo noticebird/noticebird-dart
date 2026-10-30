@@ -1,22 +1,33 @@
-import 'dart:typed_data';
-
 import 'package:noticebird_protocol/feedback.dart';
 import 'package:noticebird_protocol/noticebird_protocol.dart';
 
 import 'feedback_transport.dart';
 
-/// The screenshot a report carries: its bytes, and the type they are.
+/// What a feedback report is about, taken when the host's feedback sheet
+/// opens, before the sheet's own route and state exist:
+/// `NoticebirdClient.feedbackMoment`, passed to `captureFeedback` as its
+/// `moment`. Without one, `captureFeedback` takes it when it is called.
 ///
-/// The bytes must start with that type's file signature
-/// ([FeedbackContentType.matches]) and be at most
-/// [FeedbackAttachmentRef.maxByteLength] long; `captureFeedback` checks both
-/// before any request, and takes a copy, so a later change to [bytes] does
-/// not reach the report.
-final class FeedbackScreenshot {
-  const FeedbackScreenshot({required this.bytes, required this.contentType});
+/// The trail is not part of it: a report carries the breadcrumbs up to its
+/// capture, and a sheet keeps its own typing out of them (the bloc observer
+/// of `noticebird_flutter` leaves an `UntracedBloc` out).
+final class FeedbackMoment {
+  const FeedbackMoment({
+    required this.takenAt,
+    this.routeTemplate,
+    this.diagnostics = const {},
+  });
 
-  final Uint8List bytes;
-  final FeedbackContentType contentType;
+  /// When it was taken; a report sends it as its diagnostics' note
+  /// (`noticebird.moment_taken_at`).
+  final DateTime takenAt;
+
+  /// The screen the report is about, as a template (`/lists/:listId`).
+  final String? routeTemplate;
+
+  /// The groups `FeedbackConfig.contextDiagnostics` answered then, as they
+  /// were: sent before the host's own `diagnostics`.
+  final Map<String, Map<String, Object?>> diagnostics;
 }
 
 /// The reporter's contact address, `captureFeedback`'s `contactEmail`.

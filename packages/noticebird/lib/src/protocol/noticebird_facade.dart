@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:noticebird_protocol/feedback.dart';
 import 'package:noticebird_protocol/noticebird_protocol.dart';
@@ -58,13 +59,18 @@ final class Noticebird {
     filtered: filtered,
   );
 
+  /// See [NoticebirdClient.feedbackMoment]; `null` without a client.
+  static FeedbackMoment? feedbackMoment({String? routeTemplate}) =>
+      _instance?.feedbackMoment(routeTemplate: routeTemplate);
+
   /// See [NoticebirdClient.captureFeedback]; its types come from
   /// `package:noticebird/feedback.dart`.
   static Future<FeedbackOutcome>? captureFeedback({
     required FeedbackKind kind,
     required String message,
+    FeedbackMoment? moment,
     FeedbackTrigger? trigger,
-    FeedbackScreenshot? screenshot,
+    Uint8List? screenshot,
     String? contactEmail,
     Map<String, Map<String, Object?>>? diagnostics,
     Map<String, Object?>? userContext,
@@ -72,6 +78,7 @@ final class Noticebird {
   }) => _instance?.captureFeedback(
     kind: kind,
     message: message,
+    moment: moment,
     trigger: trigger,
     screenshot: screenshot,
     contactEmail: contactEmail,

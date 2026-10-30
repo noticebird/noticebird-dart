@@ -76,12 +76,7 @@ void main() {
   }) => reporter.captureFeedback(
     kind: FeedbackKind.bug,
     message: 'The list does not load',
-    screenshot: screenshot == null
-        ? null
-        : FeedbackScreenshot(
-            bytes: screenshot,
-            contentType: FeedbackContentType.png,
-          ),
+    screenshot: screenshot,
   );
 
   Future<String> queued(NoticebirdClient reporter, {Uint8List? screenshot}) =>

@@ -246,44 +246,96 @@ final class NoticebirdClient {
     }
   }
 
+  /// What a feedback report is about, now: [routeTemplate] (a template
+  /// such as `/lists/:listId`; by default the one of [setRouteTemplate]),
+  /// what [FeedbackConfig.contextDiagnostics] answers, and when. Take it
+  /// when the feedback sheet opens and pass it to [captureFeedback], so the
+  /// report describes the screen the user was on, not the sheet.
+  ///
+  /// A raw route throws an [ArgumentError] in a debug build, as
+  /// [setRouteTemplate] does, and is left out in a release build. Otherwise
+  /// it never throws.
+  FeedbackMoment feedbackMoment({String? routeTemplate}) {
+    final DateTime takenAt;
+    try {
+      takenAt = _clock().toUtc();
+    } catch (_) {
+      return FeedbackMoment(takenAt: DateTime.now().toUtc());
+    }
+    String? route = _routeTemplate;
+    if (routeTemplate != null) {
+      route = _isRouteTemplate(routeTemplate)
+          ? sanitizeRouteTemplate(routeTemplate)
+          : hostMistakesThrow
+          ? throw _rawRoute(routeTemplate)
+          : null;
+    }
+    Map<String, Map<String, Object?>> context = const {};
+    try {
+      context = Map.unmodifiable(
+        _config.feedback?.contextDiagnostics?.call() ?? const {},
+      );
+    } catch (_) {
+      // A group that fails adds nothing; the report still goes.
+    }
+    return FeedbackMoment(
+      takenAt: takenAt,
+      routeTemplate: route,
+      diagnostics: context,
+    );
+  }
+
   /// Sends a user's feedback report — a bug, an idea, anything else — with
   /// [message] in the user's words, and says what became of it. Its types
   /// come from `package:noticebird/feedback.dart`; without
   /// [NoticebirdConfig.feedback] it answers [FeedbackDisabled].
   ///
-  /// The client fills in the rest as for an event: the app, the platform and
-  /// its locale, the session, the route template, the user of [setUser] and
-  /// the trail, the newest [FeedbackReport.maxTrailItems] breadcrumbs of the
-  /// buffer, sanitized, the oldest left out first until the report fits
-  /// [FeedbackReport.maxEncodedBytes]. Under
+  /// [moment] is what the report is about ([feedbackMoment], taken when the
+  /// sheet opened): its route template and its context diagnostics. Without
+  /// one, it is taken now. The client fills in the rest as for an event:
+  /// the app, the platform and its locale, the session, the user of
+  /// [setUser] and the trail, the newest [FeedbackReport.maxTrailItems]
+  /// breadcrumbs of the buffer, sanitized, the oldest left out first until
+  /// the report fits [FeedbackReport.maxEncodedBytes]. Under
   /// [CrashPrivacyProfile.regulatedStrict] it sends no user, no
   /// [userContext] and no locale. A report is not an event: its trail does
   /// not count as sent.
   ///
   /// - [message] loses its U+0000 characters, is redacted as an event's
   ///   is, and cut to [FeedbackReport.maxMessageLength] characters.
-  /// - [screenshot]'s bytes must be of its type; they are uploaded before
-  ///   the report is submitted.
+  /// - [screenshot] is a picture's bytes, PNG, JPEG or WebP by their
+  ///   signature, uploaded before the report is submitted. Bytes of another
+  ///   type, or more than [FeedbackAttachmentRef.maxByteLength] of them, are
+  ///   left out, and the report says so (`noticebird.screenshot_dropped`).
   /// - [contactEmail] is the reporter's consent to be contacted
   ///   ([FeedbackContact.isValid] checks it first).
-  /// - [diagnostics] are content-free values ([FeedbackDiagnostics.build]),
-  ///   never shortened.
+  /// - [diagnostics] are content-free values, in named groups of named
+  ///   values: a bool, a finite number, an enum (its name), a [DateTime], a
+  ///   UUID or a token ([FeedbackDiagnostics.tokenPattern]). What the
+  ///   report does not take — a key that is no key, free text, a group or
+  ///   value past the limits — is left out, never the report: the report
+  ///   counts it (`noticebird.dropped_values`), and a debug build prints it.
+  ///   The group name `noticebird` is the client's.
   /// - [userContext] is what the host tells about its user on purpose
   ///   ([FeedbackUserContext.check] checks its shape); it is sent as given,
   ///   and the platform drops what it may not keep.
-  /// - [relatedEventId] is the id of a crash event this report is about.
+  /// - [relatedEventId] is the id of a crash event this report is about
+  ///   ([eventIdOf]).
   ///
-  /// A value the host passed that the report refuses throws an
-  /// [ArgumentError] in a debug build and is [FeedbackRejection.invalidInput]
-  /// in a release build; nothing is sent. What the client fills in itself
-  /// never is: a locale or route template the report refuses is left out,
-  /// and a session id or app or platform metadata it refuses is
-  /// [FeedbackRejection.failed]. Otherwise it never throws.
+  /// A value the host passed that the report refuses — an empty message, a
+  /// contact address, a user context, a related event id — throws an
+  /// [ArgumentError] in a debug build and is
+  /// [FeedbackRejection.invalidInput] in a release build; nothing is sent.
+  /// What the client fills in itself never is: a locale or route template
+  /// the report refuses is left out, and a session id or app or platform
+  /// metadata it refuses is [FeedbackRejection.failed]. Otherwise it never
+  /// throws.
   Future<FeedbackOutcome> captureFeedback({
     required FeedbackKind kind,
     required String message,
+    FeedbackMoment? moment,
     FeedbackTrigger? trigger,
-    FeedbackScreenshot? screenshot,
+    Uint8List? screenshot,
     String? contactEmail,
     Map<String, Map<String, Object?>>? diagnostics,
     Map<String, Object?>? userContext,
@@ -291,6 +343,7 @@ final class NoticebirdClient {
   }) async {
     final sender = _feedbackSender;
     if (sender == null) return const FeedbackDisabled();
+    final about = moment ?? feedbackMoment();
     try {
       final strict =
           _config.privacyProfile == CrashPrivacyProfile.regulatedStrict;
@@ -302,14 +355,16 @@ final class NoticebirdClient {
         trigger: trigger,
         screenshot: screenshot,
         contactEmail: contactEmail,
+        contextDiagnostics: about.diagnostics,
         diagnostics: diagnostics,
+        momentTakenAt: moment?.takenAt,
         userContext: strict ? null : userContext,
         relatedEventId: relatedEventId?.toLowerCase(),
         app: _config.app,
         platform: _config.platform,
         locale: strict ? null : _locale(),
         sessionId: _config.sessionIdFactory(),
-        routeTemplate: _routeTemplate,
+        routeTemplate: about.routeTemplate,
         user: strict ? null : _user,
         trail: [
           for (final breadcrumb in _breadcrumbs.skip(
@@ -317,6 +372,11 @@ final class NoticebirdClient {
           ))
             _sanitized[breadcrumb] ??= sanitizeBreadcrumb(breadcrumb),
         ],
+        dropped: (count) {
+          if (count > 0) {
+            _debugNote('$count feedback diagnostics values left out');
+          }
+        },
       );
       final report = draft.report(
         reporterAssertion: await sender.reporterAssertion(),
@@ -456,20 +516,8 @@ final class NoticebirdClient {
   /// (an e-mail address, an IPv4 address) is redacted, so it never reaches an
   /// event or the native run state.
   void setRouteTemplate(String? routeTemplate) {
-    final isTemplate =
-        routeTemplate == null ||
-        (routeTemplate.startsWith('/') &&
-            routeTemplate.length <= CrashEvent.maxRouteTemplateLength &&
-            !RegExp(r'/[0-9a-fA-F-]{16,}').hasMatch(routeTemplate) &&
-            !RegExp(r'/\d{2,}').hasMatch(routeTemplate));
-    if (!isTemplate) {
-      if (hostMistakesThrow) {
-        throw ArgumentError.value(
-          routeTemplate,
-          'routeTemplate',
-          'Use a template such as /lists/:listId, never a raw route',
-        );
-      }
+    if (routeTemplate != null && !_isRouteTemplate(routeTemplate)) {
+      if (hostMistakesThrow) throw _rawRoute(routeTemplate);
       _routeTemplate = null;
       _updateNativeRun();
       return;
@@ -481,6 +529,20 @@ final class NoticebirdClient {
   }
 
   String? _routeTemplate;
+
+  /// Whether [route] is a template such as `/lists/:listId`, not a raw
+  /// route with an id in it.
+  static bool _isRouteTemplate(String route) =>
+      route.startsWith('/') &&
+      route.length <= CrashEvent.maxRouteTemplateLength &&
+      !RegExp(r'/[0-9a-fA-F-]{16,}').hasMatch(route) &&
+      !RegExp(r'/\d{2,}').hasMatch(route);
+
+  static ArgumentError _rawRoute(String route) => ArgumentError.value(
+    route,
+    'routeTemplate',
+    'Use a template such as /lists/:listId, never a raw route',
+  );
 
   /// Captures [error] and delivers it, queues it, or says why not.
   ///

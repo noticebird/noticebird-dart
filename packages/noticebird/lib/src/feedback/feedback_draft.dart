@@ -5,7 +5,7 @@ import 'package:noticebird_protocol/feedback.dart';
 import 'package:noticebird_protocol/noticebird_protocol.dart';
 
 import '../protocol/text_sanitizer.dart';
-import 'feedback_capture.dart';
+import 'feedback_diagnostics_sanitizer.dart';
 
 /// A value the host passed that the report refuses, at [path].
 final class FeedbackInputException implements Exception {
@@ -34,11 +34,19 @@ final class FeedbackDraft {
   /// Throws a [FeedbackInputException] for a value of the host's the report
   /// refuses: the message redacted and cut to
   /// [FeedbackReport.maxMessageLength] and left empty, [contactEmail],
-  /// [diagnostics] ([FeedbackDiagnostics.build]), [userContext]
-  /// ([FeedbackUserContext.check]), [relatedEventId], or a [screenshot]
-  /// whose bytes are too many or not its type. Throws a [StateError] for a
-  /// value of the client's own the report refuses and cannot do without:
-  /// [sessionId], [app] or [platform].
+  /// [userContext] ([FeedbackUserContext.check]) or [relatedEventId]. Throws
+  /// a [StateError] for a value of the client's own the report refuses and
+  /// cannot do without: [sessionId], [app] or [platform].
+  ///
+  /// What the host passes as context is sanitised instead
+  /// ([sanitizeDiagnostics]): [contextDiagnostics] and then [diagnostics]
+  /// lose what the report refuses, and a [screenshot] of no type a report
+  /// takes ([FeedbackContentType]) or of more than
+  /// [FeedbackAttachmentRef.maxByteLength] bytes is left out; the report's
+  /// group [clientNoteGroup] says what went (`dropped_values`,
+  /// `screenshot_dropped`), and when the moment was taken
+  /// ([momentTakenAt], `moment_taken_at`). [dropped] is told how many
+  /// diagnostics values went.
   ///
   /// The message loses its U+0000 characters, which no report string may
   /// hold, before it is redacted and cut.
@@ -54,9 +62,11 @@ final class FeedbackDraft {
     required FeedbackKind kind,
     required String message,
     required FeedbackTrigger? trigger,
-    required FeedbackScreenshot? screenshot,
+    required Uint8List? screenshot,
     required String? contactEmail,
+    required Map<String, Map<String, Object?>> contextDiagnostics,
     required Map<String, Map<String, Object?>>? diagnostics,
+    required DateTime? momentTakenAt,
     required Map<String, Object?>? userContext,
     required String? relatedEventId,
     required AppMetadata app,
@@ -66,14 +76,15 @@ final class FeedbackDraft {
     required String? routeTemplate,
     required CrashUser? user,
     required List<TypedBreadcrumb> trail,
+    void Function(int dropped)? dropped,
   }) {
     final context = switch (userContext) {
       final values? => _checked(() => FeedbackUserContext.check(values)),
       null => null,
     };
-    final (attachment, reference) = switch (screenshot) {
-      final screenshot? => _attachment(screenshot),
-      null => (null, null),
+    final (attachment, reference, screenshotDropped) = switch (screenshot) {
+      final bytes? => _attachment(bytes),
+      null => (null, null, null),
     };
     final userFields = <String, String>{
       'id': ?user?.id,
@@ -93,9 +104,15 @@ final class FeedbackDraft {
       message.replaceAll('\u0000', ''),
       maxLength: FeedbackReport.maxMessageLength,
     );
-    final typedDiagnostics = diagnostics == null
-        ? const <String, Map<String, DiagnosticValue>>{}
-        : _checked(() => FeedbackDiagnostics.build(diagnostics));
+    final typedDiagnostics = sanitizeDiagnostics(
+      context: contextDiagnostics,
+      host: diagnostics ?? const {},
+      notes: {
+        'screenshot_dropped': ?screenshotDropped,
+        'moment_taken_at': ?momentTakenAt?.toUtc(),
+      },
+      dropped: dropped,
+    );
 
     FeedbackReport build(List<TypedBreadcrumb> trail, String? assertion) =>
         FeedbackReport(
@@ -225,10 +242,8 @@ final class FeedbackDraft {
       const [
         r'$.message',
         r'$.contact',
-        r'$.diagnostics',
         r'$.userContext',
         r'$.relatedEventId',
-        r'$.attachments',
       ].any(path.startsWith);
 
   static T _checked<T>(T Function() check) {
@@ -248,32 +263,30 @@ final class FeedbackDraft {
     }
   }
 
-  /// The screenshot's bytes, copied, and their reference: its size and
-  /// type are checked before the bytes are copied and hashed.
-  static (Uint8List, FeedbackAttachmentRef) _attachment(
-    FeedbackScreenshot screenshot,
+  /// The screenshot's bytes, copied, and their reference, of the type the
+  /// bytes' signature says; or why they are left out: of no type a report
+  /// takes, or too many. Their size is checked before they are copied and
+  /// hashed.
+  static (Uint8List?, FeedbackAttachmentRef?, String?) _attachment(
+    Uint8List screenshot,
   ) {
-    if (screenshot.bytes.lengthInBytes > FeedbackAttachmentRef.maxByteLength) {
-      throw const FeedbackInputException(
-        r'$.attachments[0].byteLength',
-        'More than ${FeedbackAttachmentRef.maxByteLength} bytes',
-      );
+    if (screenshot.lengthInBytes > FeedbackAttachmentRef.maxByteLength) {
+      return (null, null, 'too_large');
     }
-    if (!screenshot.contentType.matches(screenshot.bytes)) {
-      throw FeedbackInputException(
-        r'$.attachments[0].contentType',
-        'The bytes are no ${screenshot.contentType.mimeType}',
-      );
-    }
-    final bytes = Uint8List.fromList(screenshot.bytes);
+    final type = FeedbackContentType.values
+        .where((type) => type.matches(screenshot))
+        .firstOrNull;
+    if (type == null) return (null, null, 'unsupported_type');
+    final bytes = Uint8List.fromList(screenshot);
     return (
       bytes,
       FeedbackAttachmentRef(
         index: 0,
-        contentType: screenshot.contentType,
+        contentType: type,
         byteLength: bytes.length,
         sha256: sha256.convert(bytes).toString(),
       ),
+      null,
     );
   }
 }

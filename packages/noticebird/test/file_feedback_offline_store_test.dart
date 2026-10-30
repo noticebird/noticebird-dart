@@ -69,12 +69,7 @@ void main() {
     final outcome = await client().captureFeedback(
       kind: FeedbackKind.bug,
       message: 'The list does not load',
-      screenshot: screenshot == null
-          ? null
-          : FeedbackScreenshot(
-              bytes: screenshot,
-              contentType: FeedbackContentType.png,
-            ),
+      screenshot: screenshot,
     );
     return (outcome as FeedbackQueued).reportId;
   }

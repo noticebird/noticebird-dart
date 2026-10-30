@@ -84,6 +84,7 @@ void main() {
     AppMetadata app = _app,
     CrashTransport crashTransport = const DiscardingCrashTransport(),
     String Function()? eventIdFactory,
+    Map<String, Map<String, Object?>> Function()? contextDiagnostics,
   }) {
     debugHostMistakesThrow = debugBuild;
     return NoticebirdClient(
@@ -98,6 +99,7 @@ void main() {
                 transport: transport,
                 reporterAssertion: reporterAssertion ?? provideAssertion,
                 requireVerified: requireVerified,
+                contextDiagnostics: contextDiagnostics,
               )
             : null,
       ),
@@ -110,7 +112,7 @@ void main() {
   Future<FeedbackOutcome> capture(
     NoticebirdClient reporter, {
     String message = 'The list does not load',
-    FeedbackScreenshot? screenshot,
+    Uint8List? screenshot,
     String? contactEmail,
     Map<String, Map<String, Object?>>? diagnostics,
     Map<String, Object?>? userContext,
@@ -154,10 +156,7 @@ void main() {
         kind: FeedbackKind.bug,
         message: 'The list does not load',
         trigger: FeedbackTrigger.errorScreen,
-        screenshot: FeedbackScreenshot(
-          bytes: _png,
-          contentType: FeedbackContentType.png,
-        ),
+        screenshot: _png,
         contactEmail: 'ada@example.com',
         diagnostics: {
           'sync': {
@@ -451,44 +450,53 @@ void main() {
   });
 
   group('the delivery', () {
-    test('a screenshot whose bytes are not its type is rejected before any '
-        'request', () async {
+    test('a screenshot of no type a report takes is left out, and the report '
+        'sent says so', () async {
       final outcome = await capture(
         client(),
-        screenshot: FeedbackScreenshot(
-          bytes: Uint8List.fromList(ascii.encode('GIF89a and more')),
-          contentType: FeedbackContentType.png,
-        ),
+        screenshot: Uint8List.fromList(ascii.encode('GIF89a and more')),
       );
-      expect(
-        outcome,
-        const FeedbackRejected(
-          FeedbackRejection.invalidInput,
-          path: r'$.attachments[0].contentType',
-        ),
-      );
-      expect(transport.requests, isEmpty);
+      expect(outcome, isA<FeedbackDelivered>());
+      expect(transport.requests, ['submit']);
+      expect(sent(), isNot(contains('attachments')));
+      expect(sent()['diagnostics'], {
+        'noticebird': {'screenshot_dropped': 'unsupported_type'},
+      });
     });
 
-    test('a screenshot over 5 MiB is refused by its size before its bytes are '
-        'read', () async {
+    test('a screenshot over 5 MiB is left out by its size before its bytes '
+        'are read', () async {
       final outcome = await capture(
         client(),
-        screenshot: FeedbackScreenshot(
-          bytes: Uint8List(FeedbackAttachmentRef.maxByteLength + 1)
-            ..setAll(0, ascii.encode('GIF89a')),
-          contentType: FeedbackContentType.png,
-        ),
+        screenshot: Uint8List(FeedbackAttachmentRef.maxByteLength + 1)
+          ..setAll(0, _png.take(8)),
       );
-      expect(
-        outcome,
-        const FeedbackRejected(
-          FeedbackRejection.invalidInput,
-          path: r'$.attachments[0].byteLength',
-        ),
-      );
-      expect(transport.requests, isEmpty);
+      expect(outcome, isA<FeedbackDelivered>());
+      expect(transport.requests, ['submit']);
+      expect(sent()['diagnostics'], {
+        'noticebird': {'screenshot_dropped': 'too_large'},
+      });
     });
+
+    for (final type in FeedbackContentType.values) {
+      test('a ${type.name} screenshot is sent as its bytes say', () async {
+        final bytes = switch (type) {
+          FeedbackContentType.png => _png,
+          FeedbackContentType.jpeg => Uint8List.fromList([
+            0xff, 0xd8, 0xff, 0xe0, ...List.filled(20, 1), //
+          ]),
+          FeedbackContentType.webp => Uint8List.fromList([
+            ...ascii.encode('RIFF'), 0, 0, 0, 0, ...ascii.encode('WEBP'), //
+            ...List.filled(20, 1),
+          ]),
+        };
+        await capture(client(), screenshot: bytes);
+        expect(
+          (sent()['attachments']! as List).single,
+          containsPair('contentType', type.mimeType),
+        );
+      });
+    }
 
     for (final (name, queue, answer) in [
       (
@@ -515,12 +523,7 @@ void main() {
         );
         final outcome = await capture(
           client(),
-          screenshot: withScreenshot
-              ? FeedbackScreenshot(
-                  bytes: _png,
-                  contentType: FeedbackContentType.png,
-                )
-              : null,
+          screenshot: withScreenshot ? _png : null,
         );
         expect(outcome, const FeedbackRejected(FeedbackRejection.failed));
         expect(transport.requests, [
@@ -532,26 +535,14 @@ void main() {
 
     test('stored bytes are not uploaded again', () async {
       transport.slotAnswers.add(const FeedbackAttachmentStored());
-      final outcome = await capture(
-        client(),
-        screenshot: FeedbackScreenshot(
-          bytes: _png,
-          contentType: FeedbackContentType.png,
-        ),
-      );
+      final outcome = await capture(client(), screenshot: _png);
       expect(outcome, isA<FeedbackDelivered>());
       expect(transport.requests, ['slot', 'submit']);
     });
 
     test('a missing attachment returns to the slot', () async {
       transport.submitAnswers.add(const FeedbackBackToSlot());
-      final outcome = await capture(
-        client(),
-        screenshot: FeedbackScreenshot(
-          bytes: _png,
-          contentType: FeedbackContentType.png,
-        ),
-      );
+      final outcome = await capture(client(), screenshot: _png);
       expect(outcome, isA<FeedbackDelivered>());
       expect(transport.requests, [
         ...['slot', 'upload', 'submit'],
@@ -564,13 +555,7 @@ void main() {
       transport.submitAnswers.addAll(
         List.filled(3, const FeedbackBackToSlot()),
       );
-      final outcome = await capture(
-        client(),
-        screenshot: FeedbackScreenshot(
-          bytes: _png,
-          contentType: FeedbackContentType.png,
-        ),
-      );
+      final outcome = await capture(client(), screenshot: _png);
       expect(outcome, const FeedbackRejected(FeedbackRejection.noStore));
       expect(transport.requests, [
         for (var round = 0; round < 3; round++) ...['slot', 'upload', 'submit'],
@@ -682,13 +667,7 @@ void main() {
         const FeedbackFinalRefusal(code: 'attachments_disabled'),
       );
       expect(
-        await capture(
-          client(),
-          screenshot: FeedbackScreenshot(
-            bytes: _png,
-            contentType: FeedbackContentType.png,
-          ),
-        ),
+        await capture(client(), screenshot: _png),
         const FeedbackRejected(
           FeedbackRejection.notAccepted,
           code: 'attachments_disabled',
@@ -929,16 +908,185 @@ void main() {
     });
   });
 
+  group('the diagnostics a host passes', () {
+    Future<Object?> diagnosticsOf(
+      Map<String, Map<String, Object?>> diagnostics,
+    ) async {
+      final outcome = await capture(client(), diagnostics: diagnostics);
+      expect(outcome, isA<FeedbackDelivered>());
+      return sent()['diagnostics'];
+    }
+
+    test('lose what the report refuses, counted, and the report is '
+        'sent', () async {
+      expect(
+        await diagnosticsOf({
+          'sync': {
+            'pending': 3,
+            'note': 'free text here',
+            'Bad key': 1,
+            'nested': {'a': 1},
+            'ratio': double.nan,
+          },
+          'Sync': {'pending': 1, 'held': 2},
+        }),
+        {
+          'sync': {'pending': 3},
+          'noticebird': {'dropped_values': 6},
+        },
+      );
+    });
+
+    test('take an enum by its name and a moment in UTC', () async {
+      expect(
+        await diagnosticsOf({
+          'sync': {
+            'kind': FeedbackKind.idea,
+            'at': DateTime.utc(2026, 10, 30, 11).toLocal(),
+          },
+        }),
+        {
+          'sync': {'kind': 'idea', 'at': '2026-10-30T11:00:00.000Z'},
+        },
+      );
+    });
+
+    test('a group named noticebird is the client\'s', () async {
+      expect(
+        await diagnosticsOf({
+          'noticebird': {'dropped_values': 0},
+        }),
+        {
+          'noticebird': {'dropped_values': 1},
+        },
+      );
+    });
+
+    test('keep 15 groups and 32 values a group, room left for the '
+        'note', () async {
+      final diagnostics = await diagnosticsOf({
+        for (var group = 0; group < 17; group++)
+          'g$group': {for (var value = 0; value < 33; value++) 'v$value': 1},
+      });
+      final groups = diagnostics! as Map<String, Object?>;
+      expect(groups.keys, [
+        for (var group = 0; group < 15; group++) 'g$group',
+        'noticebird',
+      ]);
+      expect((groups['g0']! as Map).length, 32);
+      expect(groups['noticebird'], {'dropped_values': 15 + 2 * 33});
+    });
+
+    test('leave out the last groups until they fit 16 KiB', () async {
+      final token = 'x' * 64;
+      final diagnostics = await diagnosticsOf({
+        for (var group = 0; group < 10; group++)
+          'g$group': {
+            for (var value = 0; value < 32; value++) 'v$value': token,
+          },
+      });
+      final groups = diagnostics! as Map<String, Object?>;
+      expect(
+        utf8.encode(jsonEncode(groups)).length,
+        lessThanOrEqualTo(FeedbackReport.maxDiagnosticsBytes),
+      );
+      expect(groups.keys.first, 'g0');
+      expect(groups.keys.last, 'noticebird');
+      final kept = groups.length - 1;
+      expect(groups['noticebird'], {'dropped_values': (10 - kept) * 32});
+    });
+  });
+
+  group('the moment', () {
+    test('a report sends the route and context groups of its moment, and '
+        'when it was taken', () async {
+      var live = 1;
+      final reporter = client(
+        contextDiagnostics: () => {
+          'blocs': {'count': live},
+        },
+      )..setRouteTemplate('/lists/:listId');
+      final moment = reporter.feedbackMoment();
+      live = 2;
+      reporter.setRouteTemplate('/feedback');
+      now = _capturedAt.add(const Duration(minutes: 2));
+
+      await reporter.captureFeedback(
+        kind: FeedbackKind.bug,
+        message: 'The list does not load',
+        moment: moment,
+        diagnostics: {
+          'blocs': {'count': 9},
+          'sync': {'pending': 1},
+        },
+      );
+
+      expect(sent()['routeTemplate'], '/lists/:listId');
+      expect(sent()['diagnostics'], {
+        'blocs': {'count': 1},
+        'sync': {'pending': 1},
+        'noticebird': {
+          'moment_taken_at': '2026-10-30T12:00:00.000Z',
+          'dropped_values': 1,
+        },
+      });
+    });
+
+    test('without a moment it is taken at the capture, with no note of '
+        'it', () async {
+      final reporter = client(
+        contextDiagnostics: () => {
+          'blocs': {'count': 3},
+        },
+      )..setRouteTemplate('/lists/:listId');
+
+      await capture(reporter);
+
+      expect(sent()['routeTemplate'], '/lists/:listId');
+      expect(sent()['diagnostics'], {
+        'blocs': {'count': 3},
+      });
+    });
+
+    test('a route template named for the moment is the report\'s', () async {
+      final reporter = client()..setRouteTemplate('/home');
+
+      await reporter.captureFeedback(
+        kind: FeedbackKind.idea,
+        message: 'More colours',
+        moment: reporter.feedbackMoment(routeTemplate: '/lists/:listId'),
+      );
+
+      expect(sent()['routeTemplate'], '/lists/:listId');
+    });
+
+    test('a raw route for the moment throws in a debug build and is left '
+        'out in a release build', () async {
+      expect(
+        () =>
+            client(debugBuild: true).feedbackMoment(routeTemplate: '/lists/42'),
+        throwsArgumentError,
+      );
+      final reporter = client()..setRouteTemplate('/home');
+      expect(
+        reporter.feedbackMoment(routeTemplate: '/lists/42').routeTemplate,
+        isNull,
+      );
+    });
+
+    test(
+      'context groups that throw add nothing, and the report goes',
+      () async {
+        final outcome = await capture(
+          client(contextDiagnostics: () => throw StateError('observer gone')),
+        );
+        expect(outcome, isA<FeedbackDelivered>());
+        expect(sent(), isNot(contains('diagnostics')));
+      },
+    );
+  });
+
   group('input the report refuses', () {
-    final png = FeedbackScreenshot(
-      bytes: _png,
-      contentType: FeedbackContentType.png,
-    );
-    final oversized = FeedbackScreenshot(
-      bytes: Uint8List(FeedbackAttachmentRef.maxByteLength + 1)
-        ..setAll(0, _png.take(8)),
-      contentType: FeedbackContentType.png,
-    );
     final cases =
         <(String, Future<FeedbackOutcome> Function(NoticebirdClient), String)>[
           ('an empty message', (c) => capture(c, message: ''), r'$.message'),
@@ -946,26 +1094,6 @@ void main() {
             'a contact address',
             (c) => capture(c, contactEmail: 'not an address'),
             r'$.contact.email',
-          ),
-          (
-            'free text in diagnostics',
-            (c) => capture(
-              c,
-              diagnostics: {
-                'sync': {'note': 'free text here'},
-              },
-            ),
-            r'$.diagnostics.sync.note',
-          ),
-          (
-            'a diagnostics group key',
-            (c) => capture(
-              c,
-              diagnostics: {
-                'Sync': {'pending': 1},
-              },
-            ),
-            r'$.diagnostics.Sync',
           ),
           (
             'a user context nested too deep',
@@ -988,11 +1116,6 @@ void main() {
             'a related event id that is no UUID',
             (c) => capture(c, relatedEventId: 'event-1'),
             r'$.relatedEventId',
-          ),
-          (
-            'a screenshot over 5 MiB',
-            (c) => capture(c, screenshot: oversized),
-            r'$.attachments[0].byteLength',
           ),
         ];
 
@@ -1017,7 +1140,7 @@ void main() {
     test('valid input is not refused in a debug build', () async {
       final outcome = await capture(
         client(debugBuild: true),
-        screenshot: png,
+        screenshot: _png,
         contactEmail: 'ada@example.com',
       );
       expect(outcome, isA<FeedbackDelivered>());
