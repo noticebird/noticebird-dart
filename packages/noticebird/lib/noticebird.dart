@@ -6,4 +6,5 @@ export 'src/protocol/noticebird_facade.dart';
 export 'src/protocol/noticebird_config.dart';
 export 'src/protocol/host_platform.dart';
 export 'src/protocol/native_crash_collector.dart';
+export 'src/protocol/reported_context.dart';
 export 'package:noticebird_protocol/noticebird_protocol.dart';

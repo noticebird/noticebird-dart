@@ -63,6 +63,7 @@ void main() {
     expect(Noticebird.isLiveDebugSessionActive, isFalse);
     expect(Noticebird.eventIdOf(StateError('boom')), isNull);
     expect(Noticebird.feedbackMoment(), isNull);
+    expect(Noticebird.reportedContext, isNull);
   });
 
   test('answers the event id of an error the attached client '
@@ -77,6 +78,7 @@ void main() {
   test('delegates every call to the attached client', () async {
     Noticebird.attach(reporter);
     expect(Noticebird.instance, same(reporter));
+    expect(Noticebird.reportedContext?.app, same(config().app));
 
     final result = await Noticebird.captureException(
       Exception('boom'),

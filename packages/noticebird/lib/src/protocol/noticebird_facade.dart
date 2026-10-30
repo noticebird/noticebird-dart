@@ -6,6 +6,7 @@ import 'package:noticebird_protocol/noticebird_protocol.dart';
 
 import '../feedback/feedback_capture.dart';
 import 'noticebird_client.dart';
+import 'reported_context.dart';
 
 /// Static, ergonomic facade over whichever [NoticebirdClient] is currently
 /// [attach]ed.
@@ -99,6 +100,9 @@ final class Noticebird {
         relatedEventId: relatedEventId,
       ) ??
       Future.value(const FeedbackDisabled());
+
+  /// See [NoticebirdClient.reportedContext]; `null` without a client.
+  static ReportedContext? get reportedContext => _instance?.reportedContext;
 
   /// See [NoticebirdClient.pendingFeedbackCount].
   static Future<int>? get pendingFeedbackCount =>

@@ -83,6 +83,7 @@ void main() {
     CrashTransport? crashTransport,
     String Function()? eventIdFactory,
     Map<String, Map<String, Object?>> Function()? contextDiagnostics,
+    String? Function()? locale,
   }) {
     debugHostMistakesThrow = debugBuild;
     return NoticebirdClient(
@@ -92,7 +93,7 @@ void main() {
         platform: _platform,
         sessionIdFactory: sessionIdFactory ?? () => _sessionId,
         breadcrumbBuffer: NoticebirdConfig.maxBreadcrumbBuffer,
-        locale: () => 'nl-NL',
+        locale: locale ?? () => 'nl-NL',
         feedback: feedback
             ? FeedbackConfig(
                 transport: transport,
@@ -266,6 +267,46 @@ void main() {
       expect(sent(), isNot(contains('user')));
       expect(sent(), isNot(contains('userContext')));
       expect(sent()['platform'], _platform.toJson());
+    });
+
+    group('reportedContext', () {
+      test(
+        'is the app, the platform and the locale a report carries',
+        () async {
+          final reporter = client();
+          final context = reporter.reportedContext;
+          await capture(reporter);
+
+          expect(context.app, same(_app));
+          expect(context.platform, same(_platform));
+          expect(context.locale, 'nl-NL');
+          expect(sent()['app'], context.app.toJson());
+          expect(sent()['platform'], {
+            ...context.platform.toJson(),
+            'locale': context.locale,
+          });
+        },
+      );
+
+      test('has no locale where a report carries none', () async {
+        for (final (name, reporter) in [
+          (
+            'regulatedStrict',
+            client(profile: CrashPrivacyProfile.regulatedStrict),
+          ),
+          ('refused', client(locale: () => 'not a locale!')),
+          ('throwing', client(locale: () => throw StateError('locale'))),
+          ('none', client(locale: () => null)),
+        ]) {
+          expect(reporter.reportedContext.locale, isNull, reason: name);
+          await capture(reporter);
+          expect(
+            transport.submitted.last['platform'],
+            _platform.toJson(),
+            reason: name,
+          );
+        }
+      });
     });
 
     test('the trail is sanitized and the oldest go until it fits', () async {

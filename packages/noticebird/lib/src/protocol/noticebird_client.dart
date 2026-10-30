@@ -19,6 +19,7 @@ import 'host_mistakes.dart';
 import 'noticebird_config.dart';
 import 'native_crash_collector.dart';
 import 'native_crash_event.dart';
+import 'reported_context.dart';
 import 'text_sanitizer.dart';
 
 /// What happened to an event passed to [NoticebirdClient.captureException].
@@ -364,6 +365,7 @@ final class NoticebirdClient {
     try {
       final strict =
           _config.privacyProfile == CrashPrivacyProfile.regulatedStrict;
+      final context = reportedContext;
       final createdAt = _clock().toUtc();
       final draft = FeedbackDraft(
         reportId: _reportId(),
@@ -381,9 +383,9 @@ final class NoticebirdClient {
             : null,
         userContext: strict ? null : userContext,
         relatedEventId: relatedEventId?.toLowerCase(),
-        app: _config.app,
-        platform: _config.platform,
-        locale: strict ? null : _locale(),
+        app: context.app,
+        platform: context.platform,
+        locale: context.locale,
         sessionId: _config.sessionIdFactory(),
         routeTemplate: route != null && isRouteTemplate(route)
             ? sanitizeRouteTemplate(route)
@@ -480,11 +482,26 @@ final class NoticebirdClient {
   Future<int> get pendingFeedbackCount async =>
       await _feedbackQueue?.count() ?? 0;
 
-  /// The app's locale as a language tag ([NoticebirdConfig.locale]); the
-  /// report leaves out one it refuses.
+  /// The app and the device as this client's reports carry them: the app
+  /// and the platform of every event and feedback report, and the locale a
+  /// feedback report sent now carries ([NoticebirdConfig.locale]; none under
+  /// [CrashPrivacyProfile.regulatedStrict], none the protocol refuses). For
+  /// a host that shows what goes out with a report. Never throws.
+  ReportedContext get reportedContext => ReportedContext(
+    app: _config.app,
+    platform: _config.platform,
+    locale: _config.privacyProfile == CrashPrivacyProfile.regulatedStrict
+        ? null
+        : _locale(),
+  );
+
+  /// The app's locale as a language tag ([NoticebirdConfig.locale]); `null`
+  /// for none, for one the report refuses, and when asking throws.
   String? _locale() {
     try {
-      return _config.locale?.call();
+      final locale = _config.locale?.call();
+      if (locale != null) FeedbackReport.checkLocale(locale);
+      return locale;
     } catch (_) {
       return null;
     }
