@@ -169,6 +169,47 @@ void main() {
     expect(transport.events, hasLength(1));
   });
 
+  test('a subclass leaves its own marker out of the trail by traces; its '
+      'errors are still captured and it is still counted', () async {
+    final observer = _OwnMarkerObserver(reporter);
+    final own = _OwnUntraced();
+    final untraced = _Untraced();
+    final counter = _CounterCubit();
+    addTearDown(own.close);
+    addTearDown(untraced.close);
+    addTearDown(counter.close);
+
+    for (final bloc in <BlocBase<dynamic>>[own, untraced, counter]) {
+      observer
+        ..onCreate(bloc)
+        ..onChange(bloc, const Change(currentState: 0, nextState: 1));
+    }
+    observer.onError(own, StateError('boom'), StackTrace.current);
+    await Future<void>.delayed(Duration.zero);
+
+    expect(
+      [
+        for (final crumb in reporter.recentBreadcrumbs)
+          crumb.data[AllowedTag.component],
+      ],
+      ['_CounterCubit'],
+      reason: 'the SDK marker stays out through super.traces',
+    );
+    expect(transport.events, hasLength(1));
+    expect(observer.liveBlocCounts()['count'], 3);
+  });
+
+  test('a traces that throws costs the bloc nothing', () {
+    final cubit = _CounterCubit();
+    addTearDown(cubit.close);
+
+    _ThrowingTracesObserver(
+      reporter,
+    ).onChange(cubit, const Change(currentState: 0, nextState: 1));
+
+    expect(reporter.recentBreadcrumbs, isEmpty);
+  });
+
   test('counts the live blocs per type, without type arguments or a '
       'leading underscore', () {
     final counter = _CounterCubit();
@@ -232,6 +273,28 @@ void main() {
 
 final class _Untraced extends Cubit<int> implements UntracedBloc {
   _Untraced() : super(0);
+}
+
+/// A bloc marked by the host's own marker, not the SDK's.
+abstract interface class _HostUntraced {}
+
+final class _OwnUntraced extends Cubit<int> implements _HostUntraced {
+  _OwnUntraced() : super(0);
+}
+
+final class _OwnMarkerObserver extends NoticebirdBlocObserver {
+  _OwnMarkerObserver(NoticebirdClient client) : super(client: client);
+
+  @override
+  bool traces(BlocBase<dynamic> bloc) =>
+      super.traces(bloc) && bloc is! _HostUntraced;
+}
+
+final class _ThrowingTracesObserver extends NoticebirdBlocObserver {
+  _ThrowingTracesObserver(NoticebirdClient client) : super(client: client);
+
+  @override
+  bool traces(BlocBase<dynamic> bloc) => throw StateError('traces');
 }
 
 final class _Box<T> extends Cubit<T?> {

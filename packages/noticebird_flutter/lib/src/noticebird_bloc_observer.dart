@@ -22,8 +22,9 @@ import 'bloc_error_report.dart';
 /// only, since a breadcrumb leaves the device. An observer that says more
 /// overrides those two.
 ///
-/// A bloc that is an [UntracedBloc] leaves no breadcrumb; its errors are
-/// still captured, and it is still counted.
+/// A bloc [traces] declines leaves no breadcrumb — by default one that is an
+/// [UntracedBloc]; its errors are still captured, and it is still counted. A
+/// host with a marker of its own overrides [traces].
 ///
 /// An error is captured through the client's filter
 /// ([NoticebirdConfig.shouldCapture]), like every other channel, so an error
@@ -121,6 +122,21 @@ class NoticebirdBlocObserver extends BlocObserver {
     });
   }
 
+  /// Whether the events and changes of [bloc] leave a breadcrumb: by default
+  /// every bloc but an [UntracedBloc]. A host whose own marker says which
+  /// blocs stay out of the trail overrides it:
+  ///
+  /// ```dart
+  /// @override
+  /// bool traces(BlocBase<dynamic> bloc) =>
+  ///     super.traces(bloc) && bloc is! MyUntracedBloc;
+  /// ```
+  ///
+  /// It decides the breadcrumbs only: the errors of a bloc it declines are
+  /// still captured, and the bloc is still counted ([liveBlocCounts]).
+  @protected
+  bool traces(BlocBase<dynamic> bloc) => bloc is! UntracedBloc;
+
   /// The operation of an event's breadcrumb: the event's runtime type.
   @protected
   String describeEvent(Object? event) => event.runtimeType.toString();
@@ -135,15 +151,16 @@ class NoticebirdBlocObserver extends BlocObserver {
   @protected
   String describeState(Object? state) => state.runtimeType.toString();
 
-  /// Leaves the breadcrumb of a step; [operation] is asked inside the
-  /// guard, since a subclass's describe may throw.
+  /// Leaves the breadcrumb of a step of a bloc [traces] takes; [traces]
+  /// and [operation] are asked inside the guard, since a subclass's may
+  /// throw.
   void _note(
     BlocBase<dynamic> bloc,
     String action,
     String Function() operation,
   ) {
-    if (bloc is UntracedBloc) return;
     try {
+      if (!traces(bloc)) return;
       _reporter?.addBreadcrumb(
         TypedBreadcrumb(
           occurredAt: _clock().toUtc(),
