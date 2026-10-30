@@ -152,6 +152,7 @@ class _HomePageState extends State<HomePage> {
         CaptureOutcome.queued => 'Report queued for retry',
         CaptureOutcome.dropped => 'Report dropped',
         CaptureOutcome.ignored => 'Report ignored by the capture filter',
+        CaptureOutcome.discarded => 'Crash uploads are off',
       },
     );
   }

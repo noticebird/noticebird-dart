@@ -1403,11 +1403,7 @@ final class _MemoryStore implements CrashOfflineStore {
   List<String> values = [];
 
   @override
-  Future<List<String>> readAndClear() async {
-    final result = values;
-    values = [];
-    return result;
-  }
+  Future<List<String>> read() async => values;
 
   @override
   Future<void> write(List<String> canonicalEnvelopes) async {

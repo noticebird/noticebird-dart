@@ -10,6 +10,7 @@ import 'package:flutter/foundation.dart';
 import '../feedback/feedback_capture.dart';
 import '../feedback/feedback_config.dart';
 import '../feedback/feedback_draft.dart';
+import '../feedback/feedback_offline_store.dart';
 import '../feedback/feedback_queue.dart';
 import '../feedback/feedback_sender.dart';
 import 'crash_exception_type.dart';
@@ -42,6 +43,10 @@ enum CaptureOutcome {
 
   /// The host's [NoticebirdConfig.shouldCapture] declined the error.
   ignored,
+
+  /// The client's transport is a [DiscardingCrashTransport]: crash uploads
+  /// are off, and no event was made.
+  discarded,
 }
 
 /// What [NoticebirdClient.captureException] made of an error: its [outcome],
@@ -60,8 +65,9 @@ final class CaptureResult {
   /// - [CaptureOutcome.deduplicated]: the id of the earlier event within
   ///   the deduplication window this one was suppressed against; null when
   ///   that event was dropped.
-  /// - [CaptureOutcome.dropped] and [CaptureOutcome.ignored]: null; no event
-  ///   went anywhere, even when one was built.
+  /// - [CaptureOutcome.dropped], [CaptureOutcome.ignored] and
+  ///   [CaptureOutcome.discarded]: null; no event went anywhere, even when
+  ///   one was built.
   final String? eventId;
 
   @override
@@ -119,7 +125,6 @@ final class NoticebirdClient {
   /// was dropped.
   final Map<String, ({DateTime seenAt, String? eventId})> _lastByKey = {};
   bool _handlersInstalled = false;
-  bool _flushingEvents = false;
   FlutterExceptionHandler? _previousFlutterHandler;
   ErrorCallback? _previousPlatformHandler;
   String? _userId;
@@ -393,9 +398,7 @@ final class NoticebirdClient {
           verified: answer.verified,
         ),
         FeedbackSendRejected(:final outcome) => outcome,
-        FeedbackSendPostponed() =>
-          await _feedbackQueue?.keep(result) ??
-              const FeedbackRejected(FeedbackRejection.noStore),
+        FeedbackSendPostponed() => await _keep(result),
       };
     } on FeedbackInputException catch (error) {
       if (hostMistakesThrow) throw ArgumentError(error.toString());
@@ -423,6 +426,15 @@ final class NoticebirdClient {
     ),
     _ => null,
   };
+
+  /// Keeps [postponed] in the store, and drains it when it is due.
+  Future<FeedbackOutcome> _keep(FeedbackSendPostponed postponed) async {
+    final queue = _feedbackQueue;
+    if (queue == null) return const FeedbackRejected(FeedbackRejection.noStore);
+    final (outcome, due) = await queue.keep(postponed);
+    if (due != null) _drainAt(due);
+    return outcome;
+  }
 
   /// Tells [FeedbackConfig.onSettled] the end of a report kept in the
   /// store; without a callback, a debug build prints a rejected one.
@@ -559,8 +571,8 @@ final class NoticebirdClient {
   /// and stack.
   ///
   /// The [CaptureResult] carries the event's id
-  /// ([CaptureResult.eventId]), for a feedback report about this error.
-  /// Never throws.
+  /// ([CaptureResult.eventId]), for a feedback report about this error;
+  /// [eventIdOf] answers it later from the error alone. Never throws.
   Future<CaptureResult> captureException(
     Object error,
     StackTrace stackTrace, {
@@ -570,9 +582,58 @@ final class NoticebirdClient {
     Map<String, Object?> extra = const {},
     List<String>? groupingKey,
     bool filtered = true,
+  }) {
+    final capture = _capture(
+      error,
+      stackTrace,
+      severity: severity,
+      handled: handled,
+      tags: tags,
+      extra: extra,
+      groupingKey: groupingKey,
+      filtered: filtered,
+    );
+    if (_canKey(error)) _captures[error] = capture;
+    return capture;
+  }
+
+  /// The id of the event the last capture of [error] made
+  /// ([CaptureResult.eventId]), once that capture has settled: what a
+  /// feedback report about the error names as its `relatedEventId`, also
+  /// when a global handler captured it without waiting. `null` when [error]
+  /// was not captured by this client, when its capture made no event that
+  /// went anywhere, and for an error that is a string, a number, a boolean
+  /// or a record, which cannot be told apart from an equal value thrown
+  /// elsewhere. Never throws.
+  Future<String?> eventIdOf(Object error) async {
+    if (!_canKey(error)) return null;
+    final capture = _captures[error];
+    return capture == null ? null : (await capture).eventId;
+  }
+
+  /// The capture of each error, by the error: held weakly, so a capture
+  /// keeps nothing alive.
+  final Expando<Future<CaptureResult>> _captures = Expando('captures');
+
+  /// Whether [error] can key an [Expando].
+  static bool _canKey(Object error) =>
+      error is! String && error is! num && error is! bool && error is! Record;
+
+  Future<CaptureResult> _capture(
+    Object error,
+    StackTrace stackTrace, {
+    required CrashSeverity severity,
+    required bool handled,
+    required Map<AllowedTag, TagScalar> tags,
+    required Map<String, Object?> extra,
+    required List<String>? groupingKey,
+    required bool filtered,
   }) async {
     if (filtered && !_accepts(error)) {
       return const CaptureResult(CaptureOutcome.ignored);
+    }
+    if (_transport is DiscardingCrashTransport) {
+      return const CaptureResult(CaptureOutcome.discarded);
     }
     String? key;
     String? builtId;
@@ -665,27 +726,71 @@ final class NoticebirdClient {
   /// Sends what waits: the queued events, those of
   /// [NoticebirdConfig.offlineStore] included, until the first that fails
   /// (one the platform refuses for good is removed, and the next sent), and
-  /// then the feedback reports of [FeedbackConfig.offlineStore] that
-  /// are due, the oldest first, each settled ([FeedbackConfig.onSettled]) or
-  /// kept for its next attempt, until the first that does not get through.
-  /// [run] calls it once at start. A call while one runs skips what that
-  /// one is sending still, the events or the feedback, so a slow feedback
-  /// report never holds up the events. Never throws.
+  /// the feedback reports of [FeedbackConfig.offlineStore] that are due,
+  /// the oldest first, each settled ([FeedbackConfig.onSettled]) or kept
+  /// for its next attempt, until the first that does not get through. The
+  /// events and the feedback go side by side, so a slow feedback report
+  /// never holds up the events. A call while one runs makes that one run
+  /// once more when it ends, and returns when it has. Never throws.
+  ///
+  /// The client also drains the feedback by itself: when a kept report is
+  /// next due, until [close].
   Future<void> flush() async {
-    if (!_flushingEvents) {
-      _flushingEvents = true;
-      try {
-        await _flushEvents();
-      } finally {
-        _flushingEvents = false;
-      }
-    }
+    await Future.wait([_eventFlush(), _feedbackDrain()]);
+  }
+
+  late final _eventFlush = _Rerun(_flushEvents);
+  late final _feedbackDrain = _Rerun(() async {
     await _feedbackQueue?.drain();
+    await _scheduleFeedbackDrain();
+  });
+
+  Timer? _feedbackTimer;
+  DateTime? _feedbackTimerDue;
+  bool _closed = false;
+
+  /// After a drain, drains again when the next kept report is due.
+  Future<void> _scheduleFeedbackDrain() async {
+    final due = await _feedbackQueue?.nextAttemptAt();
+    _feedbackTimer?.cancel();
+    _feedbackTimer = null;
+    _feedbackTimerDue = null;
+    if (due != null) _drainAt(due);
+  }
+
+  /// Drains the feedback at [due], unless a drain is due sooner already:
+  /// exactly then for a moment still to come (a delay the platform named,
+  /// a backoff), and after [FeedbackOfflineStore.firstRetryDelay] for one
+  /// a drain left due, such as a report its store failed to update.
+  void _drainAt(DateTime due) {
+    if (_closed) return;
+    final scheduled = _feedbackTimerDue;
+    if (scheduled != null && !due.isBefore(scheduled)) return;
+    _feedbackTimer?.cancel();
+    final wait = due.difference(_clock().toUtc());
+    _feedbackTimerDue = due;
+    _feedbackTimer = Timer(
+      wait > Duration.zero ? wait : FeedbackOfflineStore.firstRetryDelay,
+      () {
+        _feedbackTimer = null;
+        _feedbackTimerDue = null;
+        unawaited(_feedbackDrain());
+      },
+    );
+  }
+
+  /// Stops what the client does by itself: the timer that drains kept
+  /// feedback reports when they are due. Captures still work, and
+  /// [flush] still sends what waits. Idempotent.
+  void close() {
+    _closed = true;
+    _feedbackTimer?.cancel();
+    _feedbackTimer = null;
   }
 
   Future<void> _flushEvents() async {
     try {
-      final stored = await _config.offlineStore?.readAndClear() ?? const [];
+      final stored = await _readStore();
       final knownEventIds = {for (final event in _pending) event.eventId};
       for (final source in stored) {
         try {
@@ -770,7 +875,9 @@ final class NoticebirdClient {
   /// Call it from the engine that shows the UI — `run` does. A host that owns
   /// its bootstrap calls it from its UI start only, never from a headless
   /// background engine, which may have seconds to live. A no-op without
-  /// [NoticebirdConfig.nativeCrashes], and after the first call.
+  /// [NoticebirdConfig.nativeCrashes], after the first call, and while the
+  /// transport is a [DiscardingCrashTransport]: the reports stay with the
+  /// collector, for a later run that uploads.
   ///
   /// Returns the result of each report of the first batch once it is
   /// settled, its [CaptureResult.eventId] as for [captureException]: `sent`,
@@ -784,7 +891,11 @@ final class NoticebirdClient {
   /// waiting for a collector that does not answer.
   Future<List<CaptureResult>> reportNativeCrashes() async {
     final collector = _config.nativeCrashes;
-    if (collector == null || _nativeDeliveryRequested) return const [];
+    if (collector == null ||
+        _nativeDeliveryRequested ||
+        _transport is DiscardingCrashTransport) {
+      return const [];
+    }
     _nativeDeliveryRequested = true;
     final firstBatch = Completer<List<CaptureResult>>();
     try {
@@ -1038,10 +1149,31 @@ final class NoticebirdClient {
     }
   }
 
-  Future<void> _persistPending() async {
+  /// Writes the queue to [NoticebirdConfig.offlineStore] as it is when the
+  /// write runs: one store call at a time, in the order asked, so an older
+  /// queue never lands on disk after a newer one.
+  Future<void> _persistPending() {
     final store = _config.offlineStore;
-    if (store == null) return;
-    await store.write([for (final event in _pending) event.json]);
+    if (store == null) return Future.value();
+    return _inStore(
+      () => store.write([for (final event in _pending) event.json]),
+    );
+  }
+
+  /// What [NoticebirdConfig.offlineStore] holds, read in turn with the
+  /// writes.
+  Future<List<String>> _readStore() {
+    final store = _config.offlineStore;
+    if (store == null) return Future.value(const []);
+    return _inStore(store.read);
+  }
+
+  Future<void> _storeTail = Future.value();
+
+  Future<T> _inStore<T>(Future<T> Function() call) {
+    final result = _storeTail.then((_) => call());
+    _storeTail = result.then<void>((_) {}, onError: (_) {});
+    return result;
   }
 
   static final Object _dropExtraValue = Object();
@@ -1230,6 +1362,40 @@ final class NoticebirdClient {
     return '${hex.substring(0, 8)}-${hex.substring(8, 12)}-'
         '${hex.substring(12, 16)}-${hex.substring(16, 20)}-'
         '${hex.substring(20, 32)}';
+  }
+}
+
+/// Runs an action one call at a time: a call while it runs makes it run
+/// once more when it ends, and returns when that run has.
+final class _Rerun {
+  _Rerun(this._action);
+
+  final Future<void> Function() _action;
+  Future<void>? _running;
+  bool _again = false;
+
+  Future<void> call() {
+    final running = _running;
+    if (running != null) {
+      _again = true;
+      return running;
+    }
+    return _running = _loop();
+  }
+
+  Future<void> _loop() async {
+    try {
+      do {
+        _again = false;
+        try {
+          await _action();
+        } catch (_) {
+          // Reporting must never affect the host application.
+        }
+      } while (_again);
+    } finally {
+      _running = null;
+    }
   }
 }
 

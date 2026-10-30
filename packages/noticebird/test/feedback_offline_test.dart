@@ -548,12 +548,14 @@ void main() {
       );
       expect(reporter.pendingCount, 1);
       crashes.offline = false;
-      await reporter.flush();
+      final again = reporter.flush();
+      await pumpEventQueue();
 
       expect(crashes.sent, 1);
       expect(reporter.pendingCount, 0);
       gate.complete();
       await draining;
+      await again;
     });
 
     // A report id is the client's own UUID v4 from a secure random source:

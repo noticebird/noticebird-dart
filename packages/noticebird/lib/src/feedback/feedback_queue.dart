@@ -36,17 +36,20 @@ final class FeedbackQueue {
   Future<void> _tail = Future.value();
 
   /// Keeps the report of [postponed] for a later [drain], and answers
-  /// [FeedbackQueued]; [FeedbackRejection.noStore] when the store fails.
-  Future<FeedbackOutcome> keep(FeedbackSendPostponed postponed) async {
+  /// [FeedbackQueued] with when it is due; [FeedbackRejection.noStore] when
+  /// the store fails.
+  Future<(FeedbackOutcome, DateTime?)> keep(
+    FeedbackSendPostponed postponed,
+  ) async {
     try {
       final report = pendingFeedback(
         postponed.state,
         nextAttemptAt: _nextAttemptAt(postponed),
       );
       await _locked(() => _put(report));
-      return FeedbackQueued(report.reportId);
+      return (FeedbackQueued(report.reportId), report.nextAttemptAt);
     } catch (_) {
-      return const FeedbackRejected(FeedbackRejection.noStore);
+      return (const FeedbackRejected(FeedbackRejection.noStore), null);
     }
   }
 
@@ -56,6 +59,22 @@ final class FeedbackQueue {
       return (await _locked(_store.pending)).length;
     } catch (_) {
       return 0;
+    }
+  }
+
+  /// When the next kept report is due: the earliest attempt of those the
+  /// store keeps; `null` when it keeps none, or fails.
+  Future<DateTime?> nextAttemptAt() async {
+    try {
+      DateTime? next;
+      for (final report in await _locked(_store.pending)) {
+        if (next == null || report.nextAttemptAt.isBefore(next)) {
+          next = report.nextAttemptAt;
+        }
+      }
+      return next;
+    } catch (_) {
+      return null;
     }
   }
 

@@ -36,12 +36,24 @@ final class CrashPiiConfig {
   }
 }
 
+/// Where the client keeps the crash events it could not send yet, so a
+/// later run sends them: `FileCrashOfflineStore` on a device with a file
+/// system. Under `regulatedStrict` it must be [isEncrypted].
+///
+/// The client calls one method at a time. After each [read] it writes the
+/// queue back at once, so a store that keeps what it read until the next
+/// [write] loses nothing when the process ends in between; an event read
+/// twice is merged by its id.
 abstract interface class CrashOfflineStore {
   bool get isEncrypted;
 
+  /// Replaces what the store holds with [canonicalEnvelopes], each an event
+  /// as the transport sends it; an empty list leaves it empty.
   Future<void> write(List<String> canonicalEnvelopes);
 
-  Future<List<String>> readAndClear();
+  /// What the last [write] left, in its order; empty when nothing was
+  /// written.
+  Future<List<String>> read();
 }
 
 final class NoticebirdConfig {

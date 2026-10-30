@@ -1,5 +1,6 @@
 export 'src/protocol/bloc_error_report.dart';
 export 'src/protocol/crash_http_transport.dart' hide crashHttpConnection;
+export 'src/protocol/file_crash_offline_store.dart';
 export 'src/protocol/noticebird_client.dart';
 export 'src/protocol/noticebird_facade.dart';
 export 'src/protocol/noticebird_config.dart';

@@ -77,7 +77,7 @@ void main() {
   );
 
   test(
-    'a discarding transport accepts every event and keeps the trail',
+    'a discarding transport makes no event, keeps nothing and names no id',
     () async {
       final reporter = NoticebirdClient(
         config: NoticebirdConfig(
@@ -98,9 +98,9 @@ void main() {
         StackTrace.current,
       );
 
-      // Sent, not queued: a failing transport would grow a retry queue that
-      // never drains.
-      expect(result.outcome, CaptureOutcome.sent);
+      // Discarded, not queued: a failing transport would grow a retry queue
+      // that never drains; and no id, since no event went anywhere.
+      expect(result, const CaptureResult(CaptureOutcome.discarded));
       expect(reporter.pendingCount, 0);
     },
   );
