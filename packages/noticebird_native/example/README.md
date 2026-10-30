@@ -2,8 +2,10 @@
 
 The example app of `noticebird_native`: two deliberate native crashes and
 a list of what the next launch delivered. It opts into everything
-(`hangs`, `diskWrites`, `includeDebugBuilds`) so every smoke is visible, and
-runs `client.run(...)`, which delivers the reports of earlier runs.
+(`hangs`, `diskWrites`, `includeDebugBuilds`) so every smoke is visible. It
+sends through a transport of its own, so it builds its client itself rather
+than with `NoticebirdFlutter.start`, and calls `reportNativeCrashes()` before
+`runApp`, which delivers the reports of earlier runs.
 
 ## Run
 

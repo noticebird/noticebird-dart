@@ -59,6 +59,10 @@ final class Noticebird {
     filtered: filtered,
   );
 
+  /// See [NoticebirdClient.eventIdOf]; `null` without a client.
+  static Future<String?>? eventIdOf(Object error) =>
+      _instance?.eventIdOf(error);
+
   /// See [NoticebirdClient.feedbackMoment]; `null` without a client.
   static FeedbackMoment? feedbackMoment({String? routeTemplate}) =>
       _instance?.feedbackMoment(routeTemplate: routeTemplate);

@@ -1,89 +1,187 @@
-# Integrating `noticebird`
+# Integrating Noticebird
 
-This guide covers a full consumer integration. For the shortest possible
-wiring, see the package README; for a runnable app, see
-`packages/noticebird/example`.
+This guide covers a full consumer integration of a Flutter app. For the
+shortest possible wiring, see the `noticebird_flutter` README; for a runnable
+app, see `packages/noticebird_flutter/example`.
 
 ## 1. Depend on the SDK
 
-Consumers depend only on the capture package; the protocol package is
-transitive.
+A Flutter app depends on `noticebird_flutter`; the client (`noticebird`) and
+the protocol package come with it, and it re-exports both.
 
 ```yaml
 dependencies:
-  noticebird: ^0.3.0
+  noticebird_flutter: ^0.4.0
 ```
 
 Native crash capture is a separate add-on package, `noticebird_native`
-(§11); a consumer that does not add it carries no native code.
+(§11); a consumer that does not add it carries no native code. A program
+outside Flutter uses the pure-Dart client `noticebird` on its own (§12).
 
-## 2. Create the client
+## 2. Start
 
-```dart
-final reporter = NoticebirdClient(
-  config: NoticebirdConfig(
-    privacyProfile: CrashPrivacyProfile.privacyDefault,
-    app: AppMetadata(
-      name: 'my_app',
-      version: '2.3.0',
-      build: '481',
-      release: 'my_app@2.3.0+481',
-    ),
-  ),
-  transport: CrashHttpTransport(
-    publishableKey: 'noticebird_pk_...',
-  ),
-);
-```
-
-- Noticebird's ingestion route, `https://api.noticebird.com/v1/envelope`, is used by default.
-- Pass `endpoint` explicitly only for local, staging, or self-hosted setups.
-- `publishableKey` must be a publishable key, `<prefix>_pk_<token>` (Noticebird
-  issues `noticebird_pk_…` keys); the transport rejects anything else,
-  including a secret `…_sk_…` key. The key goes out as
-  `Authorization: Bearer <key>`. The project, environment and privacy profile are derived
-  server-side from the key and are never trusted from the event payload.
-
-### Configuration knobs
-
-| Field | Default | Notes |
-|---|---|---|
-| `maxBreadcrumbs` | 50 | 0–50; the breadcrumbs one event carries: the newest that no sent event carried yet. |
-| `breadcrumbBuffer` | `maxBreadcrumbs` | `maxBreadcrumbs`–200; the breadcrumbs kept in memory for `recentBreadcrumbs`. |
-| `maxPendingEvents` | 50 | 0–200; bounds the in-memory/offline retry queue. |
-| `deduplicationWindow` | 1 minute | A repeat inside the window (the same grouping key, or the same type and top app frames, line numbers aside) is `deduplicated`. |
-| `offlineStore` | none | Optional durable queue (see §8). |
-| `pii` | all identity fields enabled | Optional identity field filter or complete opt-out. |
-| `sessionIdFactory` | `NoticebirdConfig.processSessionId` | One id per app run; pass your own only when a session means something else. |
-| `shouldCapture` | none (capture everything) | Capture filter asked on every channel; `false` ignores the capture. See §4. |
-| `nativeCrashes` | none (off) | `NativeCrashCapture()` from `noticebird_native`: native crash reports of earlier runs. See §11. |
-| `feedback` | none (off) | `FeedbackConfig` from `package:noticebird/feedback.dart`: user feedback reports. See §6. |
-
-For a build that uploads nothing but still keeps the breadcrumb trail, the
-user and the route (for a feedback report or an error details view), pass
-`transport: const DiscardingCrashTransport()`.
-
-## 3. Install global handlers
-
-Wrap app startup in `run()` so Flutter, platform-dispatcher, and uncaught
-zone errors are all captured, and previous handlers are chained and restored:
+Start Noticebird first, before auth, DI or any other service, so errors
+during the rest of startup are already covered:
 
 ```dart
-void main() {
-  Bloc.observer = ProtocolNoticebirdBlocObserver(reporter);
-  reporter.run(() => runApp(const MyApp()));
+import 'package:noticebird_flutter/noticebird_flutter.dart';
+
+Future<void> main() async {
+  await NoticebirdFlutter.start(
+    publishableKey: const String.fromEnvironment('NOTICEBIRD_KEY'),
+    appName: 'my_app',
+  );
+  runApp(const MyApp());
 }
 ```
 
-`run()` calls `installGlobalHandlers()` for you. Use
-`uninstallGlobalHandlers()` to restore the previous handlers (for example in
-tests). Installation is idempotent.
+The start:
+
+- makes the client and attaches it to the `Noticebird` facade, so the app
+  reports from anywhere (`Noticebird.captureException(…)`); every facade call
+  is a no-op while no client is attached;
+- names the app `appName`, with the version and build the platform reports,
+  and fills each feedback report's locale with the platform's;
+- installs the global error handlers and sets `Bloc.observer` (§3);
+- keeps what does not get through in the app's support directory
+  (`noticebird/crashes`, `noticebird/feedback`), and sends what waits at
+  start, each time the app comes back to the foreground, and when the
+  connection returns (§8);
+- delivers the native crash reports of earlier runs with `nativeCrashes`
+  (§11).
+
+It never fails on the platform and never hangs: a plugin read that throws or
+does not answer within `NoticebirdFlutter.platformReadTimeout` is done
+without (the version is then `unknown`, there is no default store or no
+connection trigger). It throws an `ArgumentError` only for an argument no
+start can work with: an `appName` the protocol refuses, a `breadcrumbBuffer`
+out of range, an unencrypted store under `regulatedStrict`. A second `start`,
+also one made while the first is starting, answers the first.
+
+### The key and the endpoint
+
+- `publishableKey` must be a publishable key, `<prefix>_pk_<token>`
+  (Noticebird issues `noticebird_pk_…` keys); anything else, a secret
+  `…_sk_…` key included, is refused. A key that is empty or malformed, as
+  from a missing `--dart-define`, starts a client that uploads nothing and
+  sends no feedback; a debug build prints why. The key goes out as
+  `Authorization: Bearer <key>`. The project, environment and privacy
+  profile are derived server-side from the key and are never trusted from the
+  event payload.
+- Noticebird's ingestion route, `https://api.noticebird.com/v1/envelope`, is
+  used by default. Pass `endpoint` only for local, staging, or self-hosted
+  setups; feedback goes to the same API.
+- `httpClient` sends over the host's own HTTP stack.
+- `uploadCrashes: false` makes a build that uploads no crash events but still
+  keeps the breadcrumb trail, the user and the route, and still sends
+  feedback: a capture is then `discarded`.
+
+### The start's options
+
+| Option | Default | Notes |
+|---|---|---|
+| `privacyProfile` | `privacyDefault` | §9. |
+| `pii` | all identity fields | §5. |
+| `shouldCapture` | none (capture everything) | The capture filter every channel asks; §4. |
+| `breadcrumbBuffer` | 100 | The breadcrumbs kept in memory (50–200): the trail of a feedback report. |
+| `nativeCrashes` | none (off) | `NativeCrashCapture()` from `noticebird_native`; §11. |
+| `reporterAssertion`, `requireVerified`, `onFeedbackSettled` | none, `false`, none | §6. |
+| `crashStore`, `feedbackStore` | in the support directory | The host's own stores; §8. |
+| `installErrorHandlers`, `observeBlocs`, `blocObserver` | `true`, `true`, a plain observer | §3. |
+| `background` | `false` | A headless engine's start; below. |
+
+`start` answers a `NoticebirdFlutter`: its `client`, its `blocObserver`, and
+`close()`, which puts back the handlers and the bloc observer it installed
+(each only while it is still the start's), stops its triggers and detaches the
+client. A later `start` starts anew.
+
+### A background engine
+
+A headless engine (a background task) starts with the same arguments and
+`background: true`. Its client reports and records its run for native
+crashes, but delivers nothing of earlier runs, flushes nothing by itself and
+keeps no store, since two engines must not share one: an event it cannot send
+is kept in memory only.
+
+## 3. Error handlers, zones, blocs and navigation
+
+The start installs `FlutterError.onError` (an error the framework caught,
+tagged with its library) and `PlatformDispatcher.onError` (an error nothing
+caught, fatal), each chained to the handler it replaces. Without a previous
+`PlatformDispatcher` handler, the error is printed and handled, so it cannot
+take down the app.
+
+The start installs no zone: `PlatformDispatcher.onError` catches what nothing
+else does. A host that runs its app in a guarded zone of its own starts
+inside it and reports from its handler with `reportZoneError`:
+
+```dart
+runZonedGuarded(() async {
+  await NoticebirdFlutter.start(publishableKey: key, appName: 'my_app');
+  runApp(const MyApp());
+}, NoticebirdFlutter.reportZoneError);
+```
+
+A host whose own handlers stay in place passes `installErrorHandlers: false`
+and reports from them with `Noticebird.captureException`.
+
+### Blocs
+
+The start sets `Bloc.observer` to bloc's `MultiBlocObserver` of its
+`NoticebirdBlocObserver` and the observer it found. A host that sets an
+observer after the start keeps the SDK's beside it:
+
+```dart
+final noticebird = await NoticebirdFlutter.start(…);
+Bloc.observer = MultiBlocObserver(
+  observers: [noticebird.blocObserver, MyObserver()],
+);
+```
+
+Each bloc event and state change becomes a breadcrumb named by the bloc's and
+the step's runtime type, never their content. A bloc that implements
+`UntracedBloc` leaves none — a feedback sheet's, so the user's typing does not
+push out the steps that led to the report (§6). A bloc's `addError` is
+captured as handled, tagged with the bloc; a bloc that knows more wraps the
+error:
+
+```dart
+addError(
+  BlocErrorReport(
+    error,
+    severity: CrashSeverity.warning,
+    tags: const {AllowedTag.operation: 'sync.pull'},
+  ),
+  stack,
+);
+```
+
+The observer also counts the live blocs per type, for each feedback report's
+`blocs` diagnostics group. A subclass of `NoticebirdBlocObserver` that names
+its steps in more detail (`describeEvent`, `describeChange`, `describeState`)
+is passed as `blocObserver:`, and the start sets and counts that one.
+`observeBlocs: false` leaves `Bloc.observer` to the host, and reports go
+without that group.
+
+### Navigation
+
+```dart
+MaterialApp(navigatorObservers: [NoticebirdNavigatorObserver()]);
+```
+
+Each navigator needs its own observer (a router's `observers`). A route is
+named by `describe`, when the host gives one — the place for a router's path
+pattern — else by its `settings.name` when that is a template
+(`NoticebirdClient.isRouteTemplate`: no query or fragment, no id-like
+segment), else by its kind (`MaterialPageRoute`). The rule is one of shape: a
+path whose segments are words (`/users/jdoe`) passes it, so an app that pushes
+such names gives a `describe`.
 
 ## 4. Report and annotate
 
 ```dart
 // Handled error — does not interrupt the user.
-await reporter.captureException(
+await Noticebird.captureException(
   error,
   stackTrace,
   severity: CrashSeverity.warning,
@@ -93,46 +191,50 @@ await reporter.captureException(
 );
 
 // Manual breadcrumb.
-reporter.addBreadcrumb(TypedBreadcrumb(
+Noticebird.addBreadcrumb(TypedBreadcrumb(
   occurredAt: DateTime.now().toUtc(),
-  category: BreadcrumbCategory.navigation,
-  action: 'route.push',
+  category: BreadcrumbCategory.ui,
+  action: 'checkout.confirm',
 ));
 
 // Route context must be a template, never a raw id.
-reporter.setRouteTemplate('/lists/:listId');
+Noticebird.setRouteTemplate('/lists/:listId');
 ```
 
 Use fixed `AllowedTag` keys for searchable dimensions such as feature,
 operation, and component. Pass `groupingKey` (up to 8 short technical parts,
 such as an error code and an operation) when the app knows better than the
 stack which failures are one issue: Noticebird then groups every event of
-the app with that key together, whatever its type or stack. Put bounded diagnostic JSON in `extra`; sensitive
-keys and values are removed client-side and rejected again server-side.
-`captureException` returns a
-`CaptureResult`: its `outcome` describes what happened — `sent`,
-`deduplicated`, `queued` (transport failed, retained for retry), `dropped`
-(could not be captured, or the platform refused it for good, see
-`CrashTransport.send`), or `ignored` (the capture filter declined it) — and
-its `eventId` is the id of the event that stands for the error (this one when
-sent or queued, the earlier one when deduplicated, `null` when nothing went).
+the app with that key together, whatever its type or stack. Put bounded
+diagnostic JSON in `extra`; sensitive keys and values are removed client-side
+and rejected again server-side.
+
+`captureException` returns a `CaptureResult`: its `outcome` describes what
+happened — `sent`, `deduplicated`, `queued` (transport failed, retained for
+retry), `dropped` (could not be captured, or the platform refused it for
+good, see `CrashTransport.send`), `ignored` (the capture filter declined it)
+or `discarded` (crash uploads are off) — and its `eventId` is the id of the
+event that stands for the error (this one when sent or queued, the earlier
+one when deduplicated, `null` when nothing went). `client.eventIdOf(error)`
+answers the same id later from the error alone, also for an error a global
+handler captured.
 
 ### One report per failure
 
 When the app already reports some errors at a report point of its own (an
 error library that reports each failure where it converts it, say), every
 other channel must leave them alone. Configure the capture filter once; the
-explicit captures, the bloc observer, the global handlers and the zone of
-`run()` all honour it, and the report point bypasses it:
+explicit captures, the bloc observer, the global handlers and
+`reportZoneError` all honour it, and the report point bypasses it:
 
 ```dart
-NoticebirdConfig(
+await NoticebirdFlutter.start(
   // …
   shouldCapture: (error) => error is! MyDomainError,
 );
 
 // The one report point of those errors:
-reporter.captureException(error, stack, handled: true, filtered: false);
+Noticebird.captureException(error, stack, handled: true, filtered: false);
 ```
 
 A filter that throws counts as `true`.
@@ -144,26 +246,18 @@ PII is only sent when your application explicitly calls `setUser` or
 `privacyDefault` and `custom`; omitting these calls sends no identity:
 
 ```dart
-final reporter = NoticebirdClient(
-  config: NoticebirdConfig(
-    privacyProfile: CrashPrivacyProfile.privacyDefault,
-    app: appMetadata,
-  ),
-  transport: transport,
-);
-
-reporter.setUser(CrashUser(id: currentUser.id, email: currentUser.email));
+Noticebird.setUser(CrashUser(id: currentUser.id, email: currentUser.email));
 
 // On logout, clear both the identifier and any breadcrumbs from the
 // previous session:
-reporter.setUser(null);
-reporter.clearBreadcrumbs();
+Noticebird.setUser(null);
+Noticebird.clearBreadcrumbs();
 ```
 
-Use `CrashPiiConfig(enabled: false)` for a complete client-side opt-out, or
-provide `allowedFields` to retain only selected identity fields.
-`regulatedStrict` always removes identity, because selecting that profile is
-the consumer's explicit no-PII policy choice.
+Pass `pii: CrashPiiConfig(enabled: false)` to the start for a complete
+client-side opt-out, or `allowedFields` to retain only selected identity
+fields. `regulatedStrict` always removes identity, because selecting that
+profile is the consumer's explicit no-PII policy choice.
 
 Allowed PII fields are `userId`, `email`, `name`, and `ipAddress`. Identity must
 never be placed in `extra`. User data does not affect how events are grouped,
@@ -174,57 +268,64 @@ and credentials remain forbidden in every profile; there is intentionally no
 ## 6. User feedback
 
 `captureFeedback` sends a user's feedback report — a bug, an idea, anything
-else — to Noticebird, where it is triaged apart from crashes. Its types,
-`FeedbackConfig` and `FeedbackHttpTransport` included, are in
-`package:noticebird/feedback.dart`, apart from the main library, so they
-cannot clash with an app's own feedback classes. Without
-`NoticebirdConfig.feedback` it answers `FeedbackDisabled` and sends nothing.
+else — to Noticebird, where it is triaged apart from crashes. Its types are in
+`package:noticebird_flutter/feedback.dart`, apart from the main library, so
+they cannot clash with an app's own feedback classes. The start sends
+feedback to the API of its key; a start without a usable key answers
+`FeedbackDisabled`.
+
+The feedback sheet is the app's own. Take the moment when it opens — the
+route template, the context diagnostics (the `blocs` group) and when — so the
+report is about the screen the user was on, not the sheet; send it with the
+report:
 
 ```dart
-import 'package:noticebird/feedback.dart';
+import 'package:noticebird_flutter/feedback.dart';
 
-final crashTransport = CrashHttpTransport(publishableKey: 'noticebird_pk_...');
-final reporter = NoticebirdClient(
-  config: NoticebirdConfig(
-    privacyProfile: CrashPrivacyProfile.privacyDefault,
-    app: appMetadata,
-    feedback: FeedbackConfig(
-      transport: FeedbackHttpTransport.of(crashTransport),
-      offlineStore: FileFeedbackOfflineStore(directory), // optional
-    ),
-  ),
-  transport: crashTransport,
-);
+// When the sheet opens:
+final moment = Noticebird.feedbackMoment();
 
-final outcome = await reporter.captureFeedback(
+// When the user sends:
+final outcome = await Noticebird.captureFeedback(
   kind: FeedbackKind.bug,                  // bug, idea or other
   message: 'Sync keeps failing on Wi-Fi',  // the user's words
+  moment: moment,                          // without one, taken now
   trigger: FeedbackTrigger.manual,         // optional: what opened the form
-  screenshot: FeedbackScreenshot(          // optional
-    bytes: pngBytes,
-    contentType: FeedbackContentType.png,
-  ),
+  screenshot: pngBytes,                    // optional: the picture's bytes
   contactEmail: email,                     // optional: only with consent
-  relatedEventId: result.eventId,          // optional: the crash it is about
+  diagnostics: {'sync': {'pending': 3}},   // optional: content-free values
+  relatedEventId: eventId,                 // optional: the crash it is about
 );
 ```
 
-`FeedbackHttpTransport.of(crashTransport)` sends with the crash transport's
-publishable key and HTTP client, to the API of its `endpoint` (the
-`/v1/envelope` URL; the feedback routes replace that path, so a proxy prefix
-survives): the key, the endpoint and the client are configured once. An app
-whose crash events go another way still makes a `CrashHttpTransport` for
-it.
+The sheet's bloc or cubit implements `UntracedBloc`, so the user's typing
+leaves no breadcrumbs. The trail itself is taken at the capture.
 
-The client fills in the app, platform, locale, session, route template, the
-user of `setUser` and the newest 100 breadcrumbs, redacted as in an event.
-The message is redacted on the device like an exception message and cut to
-4,000 characters. `diagnostics` (built with `FeedbackDiagnostics.build`) are
-content-free values: booleans, numbers, timestamps, UUIDs and short tokens.
-`userContext` is what the app tells about its user on purpose; the client
-checks its shape (`FeedbackUserContext.check`) and sends it as given, and the
-platform drops what it may not keep, such as credentials and health values.
-Under `regulatedStrict` no user, user context or locale is sent.
+The client fills in the app, platform, locale, session, the user of `setUser`
+and the newest breadcrumbs, redacted as in an event. The message is redacted
+on the device like an exception message. What the host passes is sanitised,
+never refused:
+
+- `screenshot` is PNG, JPEG or WebP by its bytes' signature; bytes of another
+  type, or too many, are left out.
+- `diagnostics` are content-free values in named groups: a boolean, a finite
+  number, an enum (sent as its name), a `DateTime` (sent in UTC), a UUID or a
+  short token. A key or value the report does not take, and a group or value
+  past the limits, is left out.
+
+The report then says what was left out in a diagnostics group of the
+client's own, `noticebird` (`dropped_values`, `screenshot_dropped`, and
+`moment_taken_at`, when the moment was taken); a host's group of that name is
+left out, and a debug build prints what went. `userContext` is what the app
+tells about its user on purpose; the client checks its shape
+(`FeedbackUserContext.check`) and sends it as given, and the platform drops
+what it may not keep. Under `regulatedStrict` no user, user context or locale
+is sent. The exact limits are in the skill's
+[privacy and limits reference](../skills/noticebird/reference/privacy-and-limits.md).
+
+`relatedEventId` names the crash a report is about: a `CaptureResult`'s
+`eventId`, or `Noticebird.eventIdOf(error)` for the error an error
+screen shows.
 
 The outcome is sealed:
 
@@ -232,52 +333,52 @@ The outcome is sealed:
 |---|---|
 | `FeedbackDelivered` | The platform has the report; `ticket.display` (such as `FB-12`) is for the reporter, `verified` says whether the reporter assertion was accepted. `ticket` is `null` when the answer named none, such as for a resent report the platform stored already but can no longer compare, its screenshot deleted by retention. |
 | `FeedbackQueued` | It did not get through yet and waits in the offline store, under `reportId`. |
-| `FeedbackDisabled` | No `NoticebirdConfig.feedback`. |
+| `FeedbackDisabled` | The client has no feedback config. |
 | `FeedbackRejected` | Not delivered, and never will be: `reason` (a `FeedbackRejection`) says why, `path` names the value at fault. |
 
-`captureFeedback` never throws. A value the app passed that the report
-refuses (a contact address, diagnostics, a user context, a screenshot whose
-bytes are too many or not its type, a message empty after redaction) throws
-an `ArgumentError` in a debug build, to show the mistake, and is
+`captureFeedback` never throws in a release build. A value the app passed that the report
+refuses (an empty message, a contact address, a user context, a related event
+id) throws an `ArgumentError` in a debug build, to show the mistake, and is
 `FeedbackRejected(FeedbackRejection.invalidInput)` in a release build. A form
 can check a contact address first with `FeedbackContact.isValid`.
 
 ### Verified reporters
 
 To show a reporter as verified, pass `reporterAssertion`: a function that asks
-your backend for a signed assertion of the signed-in user. It is called once
-per report, when the report is captured, and given 5 seconds; one that
-throws, answers `null` or takes longer leaves the report unverified. When the
-platform refuses the assertion it is not asked for again: the report is sent
-unverified, or, with `requireVerified: true`, rejected as
-`FeedbackRejection.unverified`.
+your backend for a signed assertion of the signed-in user, given 5 seconds;
+one that throws, answers `null` or takes longer leaves the report unverified.
+The client holds an assertion for the user set with `setUser` or `setUserId`
+until 5 minutes before its `exp`, and sends it with each report of that user
+meanwhile; reports captured at once share one call. It asks again for
+another user, after `setUser(null)`, and once the platform refused the one it
+held; without a user it asks for every report. When the platform refuses the
+assertion the report is sent unverified, or, with `requireVerified: true`,
+rejected as `FeedbackRejection.unverified`.
 
 ### The feedback queue
 
-With an `offlineStore`, a report that does not get through (no network, a
-server error, a rate limit) is kept and answered `FeedbackQueued`. `flush()`
-sends what is due, after the platform's `Retry-After` or a backoff from 30
-seconds to 6 hours that survives a restart; `run()` calls it at start, and
-the app calls it on resume and after connectivity returns, as for crash
-events. The client keeps at most 10 reports and 20 MiB, evicting the oldest
-first (`FeedbackRejection.evicted`), and removes a report after 7 days
-(`FeedbackRejection.expired`). Without a store, such a report is
-`FeedbackRejection.noStore`.
+A report that does not get through (no network, a server error, a rate limit)
+is kept in the feedback store and answered `FeedbackQueued`. The client sends
+it when it is due — after the platform's `Retry-After` or a backoff that
+survives a restart — by itself, and at every flush (§8). It bounds the store,
+evicting the oldest first (`FeedbackRejection.evicted`), and removes a report
+too old to be accepted (`FeedbackRejection.expired`). Without a store, such a
+report is `FeedbackRejection.noStore`.
+
+`onFeedbackSettled` is told each kept report's end — delivered, or rejected
+for good; without it a debug build prints a rejected one. A report delivered
+or rejected at once is not told there: its outcome says so.
 
 ```dart
-reporter.feedbackDeliveries.listen((settled) {
-  // A queued report's end: settled.reportId, and settled.outcome,
-  // FeedbackDelivered or FeedbackRejected.
-});
-final waiting = await reporter.pendingFeedbackCount;
+await NoticebirdFlutter.start(
+  // …
+  onFeedbackSettled: (settled) {
+    // settled.reportId as FeedbackQueued named it; settled.outcome is
+    // FeedbackDelivered or FeedbackRejected.
+  },
+);
+final waiting = await Noticebird.pendingFeedbackCount;
 ```
-
-`FileFeedbackOfflineStore(directory)` keeps each report as files in a
-directory, which should be the store's own (one under the app's support
-directory, say). It is not encrypted, so `regulatedStrict` refuses it: pass
-an encrypted `FeedbackOfflineStore` of your own there. On the web its calls
-throw, so it keeps nothing, and a report that does not get through is
-`FeedbackRejection.noStore`.
 
 ## 7. Live debug sessions
 
@@ -287,12 +388,12 @@ as a synthetic event, so a support engineer can watch breadcrumbs arrive
 without waiting for a real crash — no new transport or wire format involved.
 
 ```dart
-reporter.startLiveDebugSession(
+Noticebird.startLiveDebugSession(
   sessionId: sessionId,
   expiresAt: DateTime.now().toUtc().add(const Duration(minutes: 15)),
 );
 // ... later, or automatically once expiresAt passes:
-reporter.stopLiveDebugSession();
+Noticebird.stopLiveDebugSession();
 ```
 
 Eligibility, tokens, and TTL policy are entirely the host app's concern — the
@@ -301,18 +402,27 @@ client only tracks whether a session id is active until `expiresAt`. Wire
 platform uses to authorize a session (for example a server-controlled
 allowlist your app polls).
 
-## 8. Optional offline queue
+## 8. The offline queues
 
-When the transport fails, events are queued (bounded by `maxPendingEvents`) and,
-if an `offlineStore` is configured, persisted as canonical envelopes. `run()`
-calls `flush()` once at start, so what an earlier run queued goes out; call
-`flush()` on resume/connectivity too. A flush writes the queue back to the
-store before it sends, so a process that dies during the send keeps the stored
-events. A stored event is sent again as the text the client wrote; an entry
-without an event id is discarded.
+When the transport fails, events are queued (bounded by the client's
+`maxPendingEvents`) and persisted in the crash store; a feedback report that
+does not get through waits in the feedback store (§6). The start keeps both in
+the app's support directory, as `FileCrashOfflineStore` and
+`FileFeedbackOfflineStore`: unencrypted, so there are none under
+`regulatedStrict`, and none on the web, which has no file system, or in a
+`background` start. Without a crash store an event that did not get through is
+kept in memory only.
 
-Implement `CrashOfflineStore`; the SDK never derives or hardcodes an encryption
-key, so encryption is supplied by your platform keystore adapter:
+The start flushes at start, each time the app comes back to the foreground,
+and when the connection returns. A flush asked while one runs runs again
+after it. A stored event is sent again as the text the client wrote; an entry
+without an event id is discarded. While crash uploads are off the stored
+queue is kept, for a later build that uploads.
+
+Pass your own `crashStore` and `feedbackStore` where the default ones do not
+fit — an encrypted one under `regulatedStrict`. The SDK never derives or
+hardcodes an encryption key, so encryption is supplied by your platform
+keystore adapter:
 
 ```dart
 final class KeystoreOfflineStore implements CrashOfflineStore {
@@ -320,15 +430,16 @@ final class KeystoreOfflineStore implements CrashOfflineStore {
   bool get isEncrypted => true; // backed by Keychain/Keystore/WebCrypto
 
   @override
-  Future<void> write(List<String> canonicalEnvelopes) async { /* ... */ }
+  Future<void> write(List<String> canonicalEnvelopes) async { /* replace */ }
 
   @override
-  Future<List<String>> readAndClear() async { /* ... */ }
+  Future<List<String>> read() async { /* what the last write left */ }
 }
 ```
 
-`CrashPrivacyProfile.regulatedStrict` rejects an unencrypted offline store at
-construction time.
+The client calls one method of a store at a time, and writes the queue back
+right after each `read`: a `read` keeps what it read, so a process that ends
+in between loses nothing. `regulatedStrict` refuses an unencrypted store.
 
 ## 9. Privacy profiles
 
@@ -351,11 +462,12 @@ a client bug cannot persist restricted data.
 
 ## 10. Testing
 
-Inject a fake `CrashTransport` to assert capture behavior without a network —
-see `packages/noticebird/example/test/example_smoke_test.dart`. The client
-hands `send` the event as it wrote it, its canonical JSON, validated already
-(an event with an invalid session id or metadata is `dropped` before it gets
-there); decode it to assert on its fields:
+A test does not start Noticebird: it builds a client of its own on a fake
+transport, attaches it, and hands it to the observers it pumps — see
+`packages/noticebird_flutter/example/test/example_smoke_test.dart`. The
+client hands `send` the event as it wrote it, its canonical JSON, validated
+already (an event with an invalid session id or metadata is `dropped` before
+it gets there); decode it to assert on its fields:
 
 ```dart
 final class RecordingTransport implements CrashTransport {
@@ -365,13 +477,27 @@ final class RecordingTransport implements CrashTransport {
     events.add(jsonDecode(eventJson) as Map<String, dynamic>);
   }
 }
+
+final client = NoticebirdClient(
+  config: NoticebirdConfig(
+    privacyProfile: CrashPrivacyProfile.privacyDefault,
+    app: const AppMetadata(name: 'test', version: '1.0.0', build: '1',
+        release: 'test@1.0.0+1'),
+  ),
+  transport: RecordingTransport(),
+);
+Noticebird.attach(client);
+addTearDown(Noticebird.detach);
+Bloc.observer = NoticebirdBlocObserver(client: client);
+// MaterialApp(navigatorObservers: [NoticebirdNavigatorObserver(client: client)])
 ```
 
-For feedback, implement `FeedbackTransport` the same way: the client hands
-`submit` the report as `FeedbackReport.toJsonString` wrote it, validated
-already; decode it to assert on its fields, and answer a
-`FeedbackAccepted`. The example's smoke test does this for its feedback
-button.
+For feedback, implement `FeedbackTransport` the same way and pass it in a
+`FeedbackConfig`: the client hands `submit` the report as
+`FeedbackReport.toJsonString` wrote it, validated already; decode it to
+assert on its fields, and answer a `FeedbackAccepted`, or a
+`FeedbackTransient` to see a report queued. The example's smoke test does
+this for its feedback button.
 
 The reporter guarantees zero-crash behavior: capture, transport, queue, and
 flush failures are swallowed and never propagate into the host application.
@@ -385,32 +511,31 @@ low-memory kill — never reaches a Dart handler. The operating system keeps a
 report of it; `noticebird_native` reads that report on a later launch and
 the client delivers it as a schema-5 event with a `native` block.
 
-### Opt in: one line, plus one call if you own your bootstrap
+### Opt in: one argument
 
 ```yaml
 dependencies:
-  noticebird: ^0.3.0
-  noticebird_native: ^0.3.0
+  noticebird_flutter: ^0.4.0
+  noticebird_native: ^0.4.0
 ```
 
 ```dart
-NoticebirdConfig(
+await NoticebirdFlutter.start(
   // …
   nativeCrashes: NativeCrashCapture(), // hangs: false, diskWrites: false,
                                        // includeDebugBuilds: false
 );
 ```
 
-- A host that starts with `reporter.run(...)` needs nothing else: `run()`
-  wraps `runApp`, so it is the engine that shows the UI, and it calls
-  `reportNativeCrashes()`.
-- A host that builds its own zone adds one call to its **UI start only**:
-  `Noticebird.reportNativeCrashes()` (or the client's method). Never call it
-  from a headless background engine — it may have seconds to live.
-- Share one config between every engine. Each engine with a collector records
-  its run (session, app, platform, route, trail); only the engine that asks
+- The start delivers the reports of earlier runs: it runs in the engine that
+  shows the UI. A `background: true` start only records its run, since a
+  headless engine may have seconds to live.
+- Pass `nativeCrashes` to every engine's start. Each engine with a collector
+  records its run (session, app, platform, route, trail); only the UI start
   delivers. A crash inside a headless background run is attributed to that
   run.
+- While crash uploads are off, no report is claimed: a later build that
+  uploads still sends them.
 
 ### What is captured
 
@@ -452,7 +577,7 @@ is dropped even when a later release run delivers it.
 On the device the collector keeps an inbox (≤ 20 reports, ≤ 30 days, deleted
 once delivered) and a run ledger (≤ 5 runs, ≤ 16 KB per engine), both in
 app-private storage excluded from backups; under `regulatedStrict` no trail is
-persisted. When the host stops starting native capture (the config line is
+persisted. When the host stops starting native capture (the argument is
 removed), the native side purges both after three launches without it.
 
 ### What you must declare
@@ -477,7 +602,53 @@ plugin `.so` files) and the R8 `mapping.txt`.
 ### Testing
 
 The collector is an interface, `NativeCrashCollector`: inject a fake that
-returns `NativeCrashBatch`es and assert the events your transport receives.
-`packages/noticebird_native/example` is a native crash lab with deliberate
-crashes for device and emulator smokes.
+returns `NativeCrashBatch`es into a client of your own and assert the events
+your transport receives. `packages/noticebird_native/example` is a native
+crash lab with deliberate crashes for device and emulator smokes.
 
+## 12. The client without the start
+
+`noticebird` is the pure-Dart client the start makes. A program outside
+Flutter, or a host that owns every part of the wiring, builds it itself:
+
+```yaml
+dependencies:
+  noticebird: ^0.4.0
+```
+
+```dart
+final transport = CrashHttpTransport(publishableKey: 'noticebird_pk_...');
+final client = NoticebirdClient(
+  config: NoticebirdConfig(
+    privacyProfile: CrashPrivacyProfile.privacyDefault,
+    app: AppMetadata(
+      name: 'my_tool',
+      version: '2.3.0',
+      build: '481',
+      release: 'my_tool@2.3.0+481',
+    ),
+    offlineStore: FileCrashOfflineStore(directory), // optional
+    feedback: FeedbackConfig(                        // optional
+      transport: FeedbackHttpTransport.of(transport),
+    ),
+  ),
+  transport: transport,
+);
+Noticebird.attach(client);
+```
+
+Such a host installs its own error handlers, calls `flush()` when it wants
+what waits sent (a kept feedback report is still drained when it is due),
+calls `reportNativeCrashes()` from the engine that shows the UI, and
+`close()` when it is done. `transport: const DiscardingCrashTransport()`
+uploads no crash events. The config's other knobs:
+
+| Field | Default | Notes |
+|---|---|---|
+| `maxBreadcrumbs` | 50 | 0–50; the breadcrumbs one event carries: the newest that no sent event carried yet. |
+| `breadcrumbBuffer` | `maxBreadcrumbs` | `maxBreadcrumbs`–200; the breadcrumbs kept in memory for `recentBreadcrumbs`. |
+| `maxPendingEvents` | 50 | 0–200; bounds the in-memory/offline retry queue. |
+| `deduplicationWindow` | 1 minute | A repeat inside the window (the same grouping key, or the same type and top app frames, line numbers aside) is `deduplicated`. |
+| `sessionIdFactory` | `NoticebirdConfig.processSessionId` | One id per app run; pass your own only when a session means something else. |
+| `locale` | none | The app's locale for each feedback report. |
+| `feedback` | none (off) | `FeedbackConfig` from `package:noticebird/feedback.dart`: transport, `reporterAssertion`, `requireVerified`, `offlineStore`, `onSettled`, `contextDiagnostics`. |

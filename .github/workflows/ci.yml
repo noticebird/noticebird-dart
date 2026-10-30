@@ -40,13 +40,44 @@ jobs:
       - run: dart analyze
       - run: dart test
 
-  flutter_sdk:
-    name: Flutter SDK tests
+  dart_sdk:
+    name: Dart client tests
     if: github.event_name != 'push' || contains(github.event.head_commit.message, '[ci]')
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: packages/noticebird
+    steps:
+      - uses: actions/checkout@v4
+      # This package is pure Dart, but it is a member of a pub workspace whose
+      # other members depend on the Flutter SDK, so resolution needs Flutter.
+      # Everything after `pub get` still runs on plain Dart.
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - name: Verify the toolchain left checked-in files untouched
+        run: |
+          dirty="$(git status --porcelain -- .)"
+          if [ -n "$dirty" ]; then
+            echo "::error::'flutter pub get' modified checked-in files; commit the result or pin the toolchain."
+            echo "$dirty"
+            git diff -- .
+            exit 1
+          fi
+      - run: dart format --output=none --set-exit-if-changed .
+      - run: dart analyze
+      - run: dart test
+      - run: dart pub publish --dry-run
+
+  flutter_integration:
+    name: Flutter integration tests
+    if: github.event_name != 'push' || contains(github.event.head_commit.message, '[ci]')
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/noticebird_flutter
     steps:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
@@ -66,6 +97,8 @@ jobs:
       - run: dart format --output=none --set-exit-if-changed .
       - run: flutter analyze
       - run: flutter test
+      - run: flutter test
+        working-directory: packages/noticebird_flutter/example
       - run: flutter pub publish --dry-run
 
   native_dart:
@@ -139,4 +172,4 @@ jobs:
         # The packages depend only on published packages and on each other by
         # version: no path or git dependency on an app or a service.
         run: |
-          ! grep -nE '^[[:space:]]+(path|git):' packages/noticebird/pubspec.yaml packages/noticebird_native/pubspec.yaml packages/noticebird_protocol/pubspec.yaml
+          ! grep -nE '^[[:space:]]+(path|git):' packages/noticebird/pubspec.yaml packages/noticebird_flutter/pubspec.yaml packages/noticebird_native/pubspec.yaml packages/noticebird_protocol/pubspec.yaml

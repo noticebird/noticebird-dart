@@ -243,6 +243,30 @@ void main() {
     expect(await start(), isNot(same(noticebird)));
   });
 
+  test(
+    'a blocObserver of the host\'s own is the one set and counted',
+    () async {
+      final mine = _DetailedObserver();
+      final noticebird = await NoticebirdFlutter.start(
+        publishableKey: _key,
+        appName: 'example_app',
+        httpClient: httpClient,
+        blocObserver: mine,
+      );
+      started = noticebird;
+      final cubit = _Counter();
+      addTearDown(cubit.close);
+      cubit.emit(1);
+
+      expect(noticebird.blocObserver, same(mine));
+      expect(mine.liveBlocCounts(), {'count': 1, 'counter': 1});
+      expect(
+        noticebird.client.recentBreadcrumbs.last.data[AllowedTag.operation],
+        'detailed',
+      );
+    },
+  );
+
   test('a handler the host set after the start stays at close', () async {
     final noticebird = await start();
     void mine(FlutterErrorDetails _) {}
@@ -299,4 +323,9 @@ abstract final class WidgetsBindingLocale {
 
 final class _Counter extends Cubit<int> {
   _Counter() : super(0);
+}
+
+final class _DetailedObserver extends NoticebirdBlocObserver {
+  @override
+  String describeState(Object? state) => 'detailed';
 }

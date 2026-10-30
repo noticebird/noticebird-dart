@@ -1,3 +1,9 @@
+## 0.4.0
+
+Moves with `noticebird` 0.4.0 and the new `noticebird_flutter` 0.4.0; no
+change of its own. The crash event's schema (5) and the feedback report's (1)
+are unchanged.
+
 ## 0.3.0
 
 Moves with `noticebird` 0.3.0. The crash event's schema (5) and the

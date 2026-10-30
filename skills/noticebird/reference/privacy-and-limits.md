@@ -5,7 +5,9 @@ rather than truncating it, except where this file says the value is silently str
 
 ## Configuration ranges
 
-`NoticebirdConfig` throws `ArgumentError` at construction when a value is out of range.
+`NoticebirdConfig` throws `ArgumentError` at construction when a value is out of range,
+and so does `NoticebirdFlutter.start`, which passes its `breadcrumbBuffer` (default 100,
+the trail of a feedback report) and keeps the other defaults.
 
 | Setting | Default | Allowed |
 |---|---|---|
@@ -142,20 +144,23 @@ secret key in a shipped client is a security incident, not a configuration mista
 
 ## Feedback reports (`captureFeedback`)
 
-A report is not an event, and its limits are its own. A value the host passed that breaks
-one throws `ArgumentError` in a debug build and is `FeedbackRejected(invalidInput, path)`
-in release; nothing is shortened silently except where the table says so.
+A report is not an event, and its limits are its own. The message, the contact address,
+the user context and the related event id are refused: one that breaks its limit throws
+`ArgumentError` in a debug build and is `FeedbackRejected(invalidInput, path)` in release.
+The screenshot and the diagnostics are sanitised instead: what breaks a limit is left out,
+the report is sent, and the client's note group says what went.
 
 | Field | Limit |
 |---|---|
 | `message` | 1–4000 characters after redaction; U+0000 removed, then redacted as an exception message is and cut to 4000 |
-| screenshot | one, PNG, JPEG or WebP, at most 5 MiB (5,242,880 bytes); the bytes must start with their type's file signature |
+| screenshot | one, PNG, JPEG or WebP by its bytes' file signature, at most 5 MiB (5,242,880 bytes); bytes of another type, or more, are left out (`noticebird.screenshot_dropped`) |
 | trail | the newest 100 breadcrumbs of the buffer, redacted as in an event; the oldest left out first until the report fits |
-| `diagnostics` | at most 16 groups of at most 32 values, keys `^[a-z][a-zA-Z0-9_]{0,63}$`, at most 16 KiB (16,384 bytes) encoded; a value is a boolean, a finite number, a UTC timestamp, a lowercase UUID v4 or a token of 1–64 characters `[A-Za-z0-9_.:+/-]`; never shortened |
+| `diagnostics` | at most 16 groups of at most 32 values, keys `^[a-z][a-zA-Z0-9_]{0,63}$`, at most 16 KiB (16,384 bytes) encoded; a value is a boolean, a finite number, a UTC timestamp, a lowercase UUID v4 or a token of 1–64 characters `[A-Za-z0-9_.:+/-]`; an enum is sent as its name, a `DateTime` in UTC. The context groups (the `blocs` group of `noticebird_flutter`) come first, then the host's; one group's room is kept for the note. A group or value that breaks a rule is left out and counted (`noticebird.dropped_values`), and the last groups go until the whole fits; a value is never shortened |
+| the note group `noticebird` | the client's own: `dropped_values` (how many diagnostics values were left out), `screenshot_dropped`, `moment_taken_at` (when the moment was taken); a host's group of that name is left out |
 | `userContext` | 1–32 keys `^[A-Za-z][A-Za-z0-9_-]{0,63}$`; a value is a string of 1–256 characters, a finite number, a boolean, an array of 1–16 of those, or an object of 1–32 keys holding those (one nested level, never an object in an array); at most 8 KiB (8,192 bytes) in compact UTF-8 JSON |
 | `contactEmail` | 3–254 characters, an address the report accepts (`FeedbackContact.isValid`) |
 | whole report | 65,536 bytes (64 KiB) encoded |
-| reporter assertion | the provider is called once per report, given 5 seconds; a refusal is not retried |
+| reporter assertion | the provider is given 5 seconds; an assertion is held per user (`setUser` / `setUserId`) until 5 minutes before its `exp`, and reports captured at once share one call; without a user, or for a token without a readable `exp`, it is asked for every report; a refusal is not retried |
 
 `userContext` is checked for its shape only and sent as the host gave it: the platform
 drops the credential and health values it may not keep, before it stores the report.
@@ -170,8 +175,9 @@ Under `regulatedStrict` the client sends no `user`, no `userContext` and no loca
 | age | 7 days (`FeedbackReport.maxAge`), then removed as `FeedbackRejection.expired` |
 | retry | the platform's `Retry-After` (at most 7 days), else 30 s doubling to 6 h, less up to a quarter at random |
 
-`FileFeedbackOfflineStore` is unencrypted, so `regulatedStrict` refuses it; on the web its
-calls throw, so it keeps nothing.
+`FileFeedbackOfflineStore` and `FileCrashOfflineStore`, the stores `NoticebirdFlutter.start`
+keeps in the support directory, are unencrypted, so `regulatedStrict` refuses them and the
+start keeps none there; on the web their calls throw, so the start keeps none there either.
 
 ## Native crash reports (`noticebird_native`)
 

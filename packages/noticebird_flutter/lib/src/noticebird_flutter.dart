@@ -57,8 +57,8 @@ final class NoticebirdFlutter {
   /// The client, attached to the `Noticebird` facade.
   final NoticebirdClient client;
 
-  /// The bloc observer [start] made: `Bloc.observer` unless `observeBlocs`
-  /// was off. A host that sets an observer of its own after [start] keeps
+  /// The bloc observer [start] made or was given: `Bloc.observer` unless
+  /// `observeBlocs` was off. A host that sets an observer of its own after [start] keeps
   /// this one beside it: `MultiBlocObserver(observers: [blocObserver,
   /// mine])`.
   final NoticebirdBlocObserver blocObserver;
@@ -82,7 +82,9 @@ final class NoticebirdFlutter {
   /// - installs the global error handlers ([installErrorHandlers]),
   ///   chained to the ones they replace, and sets `Bloc.observer` to
   ///   [blocObserver] beside the observer it found ([observeBlocs]); a
-  ///   host with a zone of its own passes [reportZoneError] as its handler;
+  ///   host whose breadcrumbs say more passes a subclass of
+  ///   [NoticebirdBlocObserver] as [blocObserver]; a host with a zone of
+  ///   its own passes [reportZoneError] as its handler;
   /// - keeps what does not get through in the app's support directory
   ///   (`noticebird/crashes` and `noticebird/feedback`), unless the host
   ///   passes [crashStore] or [feedbackStore]. None on the web, and none
@@ -129,6 +131,7 @@ final class NoticebirdFlutter {
     FeedbackOfflineStore? feedbackStore,
     bool installErrorHandlers = true,
     bool observeBlocs = true,
+    NoticebirdBlocObserver? blocObserver,
     bool background = false,
   }) {
     final starting = _starting;
@@ -151,6 +154,7 @@ final class NoticebirdFlutter {
       feedbackStore: feedbackStore,
       installErrorHandlers: installErrorHandlers,
       observeBlocs: observeBlocs,
+      blocObserver: blocObserver,
       background: background,
     );
     _starting = start;
@@ -182,6 +186,7 @@ final class NoticebirdFlutter {
     required FeedbackOfflineStore? feedbackStore,
     required bool installErrorHandlers,
     required bool observeBlocs,
+    required NoticebirdBlocObserver? blocObserver,
     required bool background,
   }) async {
     final binding = WidgetsFlutterBinding.ensureInitialized();
@@ -213,7 +218,7 @@ final class NoticebirdFlutter {
     final defaultCrashStore = storeIn('crashes');
     final defaultFeedbackStore = storeIn('feedback');
 
-    final blocObserver = NoticebirdBlocObserver();
+    final observer = blocObserver ?? NoticebirdBlocObserver();
     final NoticebirdConfig config;
     try {
       final feedback = FeedbackConfig(
@@ -230,7 +235,7 @@ final class NoticebirdFlutter {
                 : FileFeedbackOfflineStore(defaultFeedbackStore)),
         onSettled: onFeedbackSettled,
         contextDiagnostics: observeBlocs
-            ? () => {'blocs': blocObserver.liveBlocCounts()}
+            ? () => {'blocs': observer.liveBlocCounts()}
             : null,
       );
       NoticebirdConfig configWith(FeedbackConfig? feedback) => NoticebirdConfig(
@@ -266,10 +271,10 @@ final class NoticebirdFlutter {
         ? handlers.installErrorHandlers(client)
         : null;
     final previousObserver = Bloc.observer;
-    final observer = MultiBlocObserver(
-      observers: [blocObserver, previousObserver],
+    final observers = MultiBlocObserver(
+      observers: [observer, previousObserver],
     );
-    if (observeBlocs) Bloc.observer = observer;
+    if (observeBlocs) Bloc.observer = observers;
 
     AppLifecycleListener? lifecycle;
     StreamSubscription<List<ConnectivityResult>>? connectivity;
@@ -303,7 +308,9 @@ final class NoticebirdFlutter {
       lifecycle?.dispose();
       unawaited(connectivity?.cancel());
       restoreHandlers?.call();
-      if (identical(Bloc.observer, observer)) Bloc.observer = previousObserver;
+      if (identical(Bloc.observer, observers)) {
+        Bloc.observer = previousObserver;
+      }
       client.close();
       if (identical(Noticebird.instance, client)) Noticebird.detach();
       if (identical(_started, started)) {
@@ -315,7 +322,7 @@ final class NoticebirdFlutter {
 
     return _started = started = NoticebirdFlutter._(
       client: client,
-      blocObserver: blocObserver,
+      blocObserver: observer,
       stop: stop,
     );
   }

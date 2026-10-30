@@ -1,10 +1,27 @@
 # Noticebird for Dart and Flutter
 
-Crash reporting for Flutter apps, sent to [Noticebird](https://noticebird.com).
+Crash reporting and user feedback for Flutter apps, sent to
+[Noticebird](https://noticebird.com).
+
+A Flutter app depends on `noticebird_flutter` and starts it once:
+
+```dart
+Future<void> main() async {
+  await NoticebirdFlutter.start(
+    publishableKey: const String.fromEnvironment('NOTICEBIRD_KEY'),
+    appName: 'my_app',
+  );
+  runApp(const MyApp());
+}
+```
 
 This workspace contains the Noticebird packages:
 
-- `packages/noticebird` — the Flutter SDK an app depends on;
+- `packages/noticebird_flutter` — the package a Flutter app depends on: one
+  start wires the client, the error handlers, bloc and navigation
+  breadcrumbs, the offline stores and their delivery;
+- `packages/noticebird` — the pure-Dart client it starts: capture,
+  breadcrumbs, identity, the offline queues and user feedback;
 - `packages/noticebird_protocol` — the pure-Dart, versioned event protocol it
   writes;
 - `packages/noticebird_native` — an optional add-on plugin that delivers the
@@ -17,10 +34,11 @@ READMEs. An AI coding agent integrating the SDK can use the
 
 ## Checks
 
-Run `fvm dart pub get` from the workspace root, then the Flutter tests in
-`packages/noticebird` and `packages/noticebird_native` and the Dart tests in
-`packages/noticebird_protocol`. The native collectors have their own tests:
-`swift test` in
+Run `fvm flutter pub get` from the workspace root, then the Dart tests in
+`packages/noticebird_protocol` and `packages/noticebird`, and the Flutter
+tests in `packages/noticebird_flutter`, `packages/noticebird_native` and
+their examples. The native collectors have their own tests: `swift test` in
 `packages/noticebird_native/ios/noticebird_native/NativeCrashNormalizer` and
 `./gradlew :noticebird_native:testDebugUnitTest` in
-`packages/noticebird_native/example/android`.
+`packages/noticebird_native/example/android`. [`CONTRIBUTING.md`](CONTRIBUTING.md)
+lists the commands.

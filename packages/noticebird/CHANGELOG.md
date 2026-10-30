@@ -1,3 +1,78 @@
+## 0.4.0
+
+`noticebird` is pure Dart now: it no longer depends on the Flutter SDK or on
+`bloc`. A Flutter app starts it with `NoticebirdFlutter.start` of the new
+package `noticebird_flutter`, which installs what this package installed
+before and wires the rest.
+
+Breaking changes:
+
+- `run()`, `installGlobalHandlers()`, `uninstallGlobalHandlers()` and
+  `handlersInstalled` are removed. Migrate to `NoticebirdFlutter.start`,
+  which installs the handlers; a host with a zone of its own passes
+  `NoticebirdFlutter.reportZoneError` as its handler.
+- `ProtocolNoticebirdBlocObserver` is removed. Migrate to
+  `NoticebirdBlocObserver` of `noticebird_flutter`, which the start sets as
+  `Bloc.observer`; `BlocErrorReport` and `captureBlocError` move there too.
+- `FeedbackScreenshot` is removed: `captureFeedback`'s `screenshot` is the
+  picture's bytes (`Uint8List`), PNG, JPEG or WebP by their signature.
+  Bytes of another type, or more than 5 MiB, are left out and the report says
+  so, instead of rejecting it. Migrate by passing the bytes.
+- `feedbackDeliveries` is removed, on the client and the facade. Migrate to
+  `FeedbackConfig.onSettled`, a callback told the end of each kept report.
+- `CrashOfflineStore.readAndClear` is now `read`, which keeps what it read:
+  the client writes the queue back right after each read, and calls one
+  method of the store at a time. Migrate by no longer clearing in the read.
+- `CaptureOutcome.discarded`, a new value: a capture while the transport is
+  a `DiscardingCrashTransport` makes no event and has no event id (it was
+  `sent`). Migrate an exhaustive `switch` by adding the case.
+- A feedback report's `diagnostics` are sanitised instead of refused: a key
+  that is no key, a value the report does not take, a group or value past
+  the limits is left out and counted, and the report is sent. The client
+  notes what it left out in a diagnostics group of its own, `noticebird`
+  (`dropped_values`, `screenshot_dropped`, `moment_taken_at`); a host's
+  group of that name is left out. An enum is sent as its name, a `DateTime`
+  in UTC. Migrate by dropping code that guarded against `invalidInput` on
+  diagnostics.
+- `setRouteTemplate` refuses a template with a query or a fragment
+  (`/lists/:listId?tab=1`) as a raw route: it throws in a debug build and is
+  dropped in a release build. Migrate by passing the template alone.
+- While the transport discards, a `flush()` keeps the stored event queue
+  for a later run that uploads, and `reportNativeCrashes()` claims no
+  native report.
+
+New:
+
+- `NoticebirdClient.feedbackMoment()` (and `Noticebird.feedbackMoment()`)
+  takes what a feedback report is about when the feedback sheet opens: the
+  route template, the context diagnostics and when; `captureFeedback(moment:)`
+  sends it. Without a moment it is taken at the capture. `FeedbackMoment`
+  holds it.
+- `FeedbackConfig.contextDiagnostics`: diagnostics groups a framework
+  integration takes with each moment, before the host's own.
+- `NoticebirdConfig.locale`: the app's locale for each feedback report.
+- `NoticebirdClient.eventIdOf(error)`: the id of the event the last capture
+  of an error made, once that capture settled, for a feedback report's
+  `relatedEventId`.
+- `NoticebirdClient.close()` stops what the client does by itself: the
+  drain of kept feedback, and the delivery of native reports that arrive
+  later.
+- `NoticebirdClient.isRouteTemplate(route)`, the rule `setRouteTemplate`
+  holds a route to.
+- `FileCrashOfflineStore(directory)`: the crash events' offline queue as one
+  file, written to a temporary file and renamed, unencrypted.
+- The reporter assertion is held per user (`setUser` / `setUserId`) until
+  5 minutes before its `exp`, and reports captured at once share one
+  provider call; another user, `null` or a refusal by the platform asks
+  again. Without a user it is asked for every report.
+- A `flush()` asked while one runs runs again after it, instead of skipping;
+  a kept feedback report is drained by the client when it is due, so a
+  `Retry-After` while online does not wait for the next flush.
+- The client writes its crash store one write at a time, each writing the
+  queue as it is when it runs.
+- Platform detection uses `dart:io`, with a branch for the web; a debug
+  build is told by the constants Flutter's `kDebugMode` is made of.
+
 ## 0.3.0
 
 Breaking changes:

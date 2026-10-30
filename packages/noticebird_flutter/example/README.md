@@ -1,14 +1,15 @@
-# noticebird example
+# noticebird_flutter example
 
-A minimal Flutter app showing how a consumer wires up the `noticebird` SDK:
+A minimal Flutter app on `noticebird_flutter`:
 
-- build `AppMetadata` and `PlatformMetadata`, pick a `CrashPrivacyProfile`, and
-  create a `NoticebirdClient` with an HTTP transport using a **publishable**
-  ingest key (`noticebird_pk_...`);
-- register `ProtocolNoticebirdBlocObserver` so BLoC lifecycle events become
-  bounded breadcrumbs;
-- wrap the app in `reporter.run(...)` so Flutter, platform, and zone errors are
-  captured automatically.
+- `NoticebirdFlutter.start` in `main`, before `runApp`: the client, the error
+  handlers, the bloc breadcrumbs, the offline stores and their delivery;
+- `NoticebirdNavigatorObserver` in the app's `navigatorObservers`;
+- a cubit whose changes become breadcrumbs;
+- a handled error (`captureException(..., handled: true)`), an uncaught one
+  that the start's handlers capture so the app keeps running, a feedback
+  report sent with its moment (`feedbackMoment`, `captureFeedback`), a login
+  that sets the user id, and a live debug session.
 
 ## Run
 
@@ -18,9 +19,8 @@ flutter run \
 ```
 
 Without the define the app uses a placeholder key, so capture succeeds but
-delivery fails and events fall back to the in-memory retry queue — which is
-still a faithful demonstration of the zero-crash guarantee.
+delivery fails, and events wait in the store in the support directory for the
+next flush.
 
-The three buttons demonstrate, in order, breadcrumb capture, a handled error
-(`captureException(..., handled: true)`), and an uncaught error that the error
-handlers installed by `run()` capture so the app keeps running.
+`test/example_smoke_test.dart` pumps the app with a client of its own on fake
+transports and asserts on the events and the feedback report they receive.

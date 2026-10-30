@@ -125,9 +125,9 @@ final class NativeCrashCapture implements NativeCrashCollector {
   Future<void> start(NativeRunInfo run) async {
     if (!_supported || _ledger != null) return;
     try {
-      // A host that builds its client before runApp — the `client.run(...)`
-      // pattern — starts native capture before the binding exists, and a
-      // platform channel needs it. runApp creates it moments later; wait for
+      // A host that builds its client before the binding exists (before
+      // runApp or WidgetsFlutterBinding.ensureInitialized) starts native
+      // capture without one, and a platform channel needs it. runApp creates it moments later; wait for
       // that rather than initialize it here, in a zone that is not the app's.
       if (!await _awaitBinding()) return;
       // Every engine calls start, debug builds too: it tells the native side

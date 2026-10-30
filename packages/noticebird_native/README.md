@@ -1,6 +1,7 @@
 # noticebird_native
 
-Native crash capture for [`noticebird`](../noticebird): the crash
+Native crash capture for [`noticebird`](../noticebird), started by
+[`noticebird_flutter`](../noticebird_flutter): the crash
 reports iOS and Android keep about earlier runs of your app — native crashes,
 uncaught Objective-C and JVM exceptions, watchdog and ANR kills, foreground
 low-memory kills — delivered to the Noticebird platform as ordinary
@@ -8,18 +9,21 @@ events on the next launch.
 
 ```yaml
 dependencies:
-  noticebird: ^0.3.0
-  noticebird_native: ^0.3.0
+  noticebird_flutter: ^0.4.0
+  noticebird_native: ^0.4.0
 ```
 
 ```dart
-NoticebirdConfig(
-  // …
+await NoticebirdFlutter.start(
+  publishableKey: key,
+  appName: 'my_app',
   nativeCrashes: NativeCrashCapture(),
 );
 ```
 
-`client.run(...)` delivers the reports. A host that owns its bootstrap calls
+The start delivers the reports of earlier runs; a `background: true` start
+only records its run. A host that builds its client itself passes
+`nativeCrashes` in its `NoticebirdConfig` and calls
 `Noticebird.reportNativeCrashes()` from its UI start only.
 
 | Platform | Source |
