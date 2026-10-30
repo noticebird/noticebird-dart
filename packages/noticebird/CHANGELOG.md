@@ -8,8 +8,9 @@ Breaking changes:
   base, a proxy's path prefix kept. `apiUrl` is required: the SDK no longer
   sends to the hosted API by default. `hostedEndpoint` is now
   `hostedApiUrl` (`https://api.noticebird.com`). An `apiUrl` that is no
-  `http` or `https` URL with a host, has a query or a fragment, or ends in
-  `/v1/envelope` throws an `ArgumentError`. Migrate
+  `http` or `https` URL with a host, has a query, a fragment or credentials,
+  or ends in a route (`/v1`, `/v1/envelope`, `/v1/feedback`) throws an
+  `ArgumentError`. Migrate
   `CrashHttpTransport(endpoint: Uri.parse('https://api.example.com/v1/envelope'), …)`
   to `CrashHttpTransport(apiUrl: Uri.parse('https://api.example.com'), …)`,
   and a transport that relied on the default to

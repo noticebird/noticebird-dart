@@ -50,8 +50,8 @@ and it changes how you use the API:
   its `outcome`, do not wrap the call in a `try`. `captureFeedback` answers a
   `FeedbackOutcome`.
 - The start never fails on the platform: a plugin that throws or does not answer is done
-  without. A missing or malformed key starts a client that uploads nothing (a debug
-  build prints why). An argument no start can work with — an `appName` the protocol
+  without. A missing API URL, or a missing or malformed key, starts a client that
+  uploads nothing and sends no feedback (a debug build prints why). An argument no start can work with — an `appName` the protocol
   refuses, a cap out of range, an unencrypted store under `regulatedStrict` — throws an
   `ArgumentError` at the start, so an invalid setup fails at bootstrap rather than
   silently dropping every event later.
@@ -113,8 +113,8 @@ the old `client` after `close()`: a later start makes its own, on the same store
 
 `apiUrl` is the API's base (`CrashHttpTransport.hostedApiUrl`, or a staging,
 self-hosted or proxied one with its path prefix), never a route: the SDK adds
-`/v1/envelope` and the feedback routes itself, and refuses a URL that ends in
-`/v1/envelope`. Without both an `apiUrl` and a `publishableKey` (absent, empty — a missing
+`/v1/envelope` and the feedback routes itself, and refuses a URL that ends in a route
+(`/v1`, `/v1/envelope`, `/v1/feedback`) or carries credentials. Without both an `apiUrl` and a `publishableKey` (absent, empty — a missing
 `--dart-define` — or one that cannot work) the client uploads nothing and sends no
 feedback; the SDK never picks an API by itself.
 
@@ -560,10 +560,16 @@ final recorder = NoticebirdRecorder(shouldCapture: myCaptureFilter)..attach();
 addTearDown(recorder.close);                 // closes it and detaches it from the facade
 Bloc.observer = NoticebirdBlocObserver(client: recorder.client);
 
-cubit.addError(StateError('boom'));
+// A bloc reads Bloc.observer when it is made: make it after the line above.
+final error = StateError('boom');
+final cubit = ListCubit(load: () => throw error);
+await cubit.load();                          // catches into a state, calls addError
 expect(recorder.events.single['handled'], isTrue); // the event as the platform receives it
 expect(await recorder.eventOf(error), isNotNull);  // by eventIdOf
 ```
+
+The recorder sends no feedback: for feedback, build a client with a fake
+`FeedbackTransport` (below).
 
 An event reaches the recorder while its capture runs. Its `transport`, a
 `RecordingCrashTransport` (`sent`: the canonical JSON; `events`: decoded), goes into a
@@ -588,7 +594,7 @@ Native capture: implement `NativeCrashCollector` with a fake that emits
 
 | Symptom | Cause |
 |---|---|
-| Every capture is `discarded`, and feedback is `FeedbackDisabled` | The start got no `apiUrl` or no usable key — a missing `--dart-define`, a secret `_sk_` key, or an `apiUrl` that names `/v1/envelope`. A debug build printed why. |
+| Every capture is `discarded`, and feedback is `FeedbackDisabled` | The start got no `apiUrl` or no usable key — a missing `--dart-define`, a secret `_sk_` key, or an `apiUrl` that names a route (`/v1/envelope`). A debug build printed why. |
 | A capture comes back `ignored` | `shouldCapture` declined it — the error is reported at the host's own report point, which captures with `filtered: false`. |
 | The same failure arrives twice | No `shouldCapture` declines the type the host reports elsewhere, so a channel (observer, handler, explicit capture) reports it again. |
 | Every event is `dropped` | `app`/`platform` metadata violates the protocol, or a client's `sessionIdFactory` returns something outside `^[A-Za-z0-9_-]{16,64}$`. |

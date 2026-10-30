@@ -5,9 +5,14 @@
 # compile into this one pod, which is why the plugin imports it only under
 # `#if canImport(NativeCrashNormalizer)`.
 #
+require 'yaml'
+
+# The package's version, from its pubspec: the one place it is set.
+pubspec = YAML.load_file(File.join(__dir__, '..', 'pubspec.yaml'))
+
 Pod::Spec.new do |s|
   s.name             = 'noticebird_native'
-  s.version          = '0.5.0'
+  s.version          = pubspec['version'].to_s
   s.summary          = 'Native crash capture for noticebird: iOS MetricKit diagnostics.'
   s.description      = <<-DESC
 Collects MetricKit crash, hang and disk-write diagnostics of earlier runs,

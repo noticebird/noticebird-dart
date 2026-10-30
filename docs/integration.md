@@ -111,8 +111,9 @@ for (final failure in noticebird.platformReadFailures) {
   (`https://api.noticebird.com`), or a local, staging, self-hosted or proxied
   one, a path prefix included (`https://example.com/noticebird`). The SDK
   adds its routes itself — `/v1/envelope` for crash events, the feedback
-  routes for feedback — so the URL never names a route; one that ends in
-  `/v1/envelope` is refused. The SDK never picks an API by itself.
+  routes for feedback — so the URL never names a route: one that ends in
+  `/v1`, `/v1/envelope` or `/v1/feedback`, or carries credentials, is
+  refused. The SDK never picks an API by itself.
 - `publishableKey` must be a publishable key, `<prefix>_pk_<token>`
   (Noticebird issues `noticebird_pk_…` keys); anything else, a secret
   `…_sk_…` key included, is refused.
@@ -338,8 +339,8 @@ and credentials remain forbidden in every profile; there is intentionally no
 else — to Noticebird, where it is triaged apart from crashes. Its types are in
 `package:noticebird_flutter/feedback.dart`, apart from the main library, so
 they cannot clash with an app's own feedback classes. The start sends
-feedback to the API of its key; a start without a usable key answers
-`FeedbackDisabled`.
+feedback to the API at `apiUrl`; a start without an API URL or a usable key
+answers `FeedbackDisabled`.
 
 The feedback sheet is the app's own. Take the moment when it opens — the
 route template, the context diagnostics (the `blocs` group), the host's own
@@ -556,10 +557,13 @@ addTearDown(recorder.close); // closes it, and detaches it from the facade
 Bloc.observer = NoticebirdBlocObserver(client: recorder.client); // or the app's subclass
 // MaterialApp(navigatorObservers: [NoticebirdNavigatorObserver(client: recorder.client)])
 
-cubit.addError(StateError('boom'));
+// A bloc reads Bloc.observer when it is made: make it after the line above.
+final error = StateError('boom');
+final cubit = ListCubit(load: () => throw error);
+await cubit.load(); // catches the error into a state, and calls addError
 final event = recorder.events.single; // the event as the platform receives it
 expect(event['handled'], isTrue);
-expect(await recorder.eventOf(error), isNotNull); // by eventIdOf
+expect((await recorder.eventOf(error))?['eventId'], event['eventId']);
 ```
 
 An event reaches the recorder while its capture runs, before the capture's
@@ -573,8 +577,8 @@ A test that calls `NoticebirdFlutter.start` ends with
 under way included — so the next test starts anew. `Noticebird.detach()`
 resets the facade.
 
-For feedback, implement `FeedbackTransport` the same way and pass it in a
-`FeedbackConfig`: the client hands `submit` the report as
+The recorder sends no feedback. For feedback, build a client with a fake
+`FeedbackTransport` in its `FeedbackConfig`: the client hands `submit` the report as
 `FeedbackReport.toJsonString` wrote it, validated already; decode it to
 assert on its fields, and answer a `FeedbackAccepted`, or a
 `FeedbackTransient` to see a report queued. The example's smoke test does

@@ -14,14 +14,14 @@ void main() {
       'capture runs', () {
     final recorder = NoticebirdRecorder();
 
-    final capture = recorder.client.captureException(
+    recorder.client.captureException(
       StateError('boom'),
       _stack,
       handled: true,
       tags: const {AllowedTag.component: 'ListCubit'},
     );
 
-    expect(capture, isA<Future<CaptureResult>>());
+    // Recorded before the capture's future completes.
     final event = recorder.events.single;
     expect(event['handled'], isTrue);
     expect(event['app'], NoticebirdRecorder.app.toJson());

@@ -193,7 +193,9 @@ import 'package:noticebird_flutter/testing.dart';
 final recorder = NoticebirdRecorder(shouldCapture: myFilter);
 Bloc.observer = NoticebirdBlocObserver(client: recorder.client);
 
-cubit.addError(StateError('boom'));
+// A bloc reads Bloc.observer when it is made: make it after the line above.
+final cubit = MyCubit(load: () => throw StateError('boom'));
+await cubit.load(); // catches the error into a state, and calls addError
 expect(recorder.events.single['tags'], containsPair('component', 'MyCubit'));
 ```
 

@@ -1,17 +1,7 @@
-import 'dart:convert';
-
 import 'package:bloc/bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:noticebird_flutter/noticebird_flutter.dart';
-
-final class _RecordingTransport implements CrashTransport {
-  final events = <Map<String, dynamic>>[];
-
-  @override
-  Future<void> send(String eventJson) async {
-    events.add(jsonDecode(eventJson) as Map<String, dynamic>);
-  }
-}
+import 'package:noticebird_flutter/testing.dart';
 
 final class _CounterCubit extends Cubit<int> {
   _CounterCubit() : super(0);
@@ -22,12 +12,12 @@ final class _CounterCubit extends Cubit<int> {
 }
 
 void main() {
-  late _RecordingTransport transport;
+  late RecordingCrashTransport transport;
   late NoticebirdClient reporter;
   late NoticebirdBlocObserver observer;
 
   setUp(() {
-    transport = _RecordingTransport();
+    transport = RecordingCrashTransport();
     reporter = NoticebirdClient(
       config: NoticebirdConfig(
         privacyProfile: CrashPrivacyProfile.privacyDefault,
@@ -77,7 +67,7 @@ void main() {
         isTrue,
         reason: 'a bloc already caught this error',
       );
-      expect(event['tags']['component'], '_CounterCubit');
+      expect((event['tags']! as Map)['component'], '_CounterCubit');
       cubit.close();
     },
   );
@@ -103,19 +93,19 @@ void main() {
 
       final event = transport.events.single;
       expect(
-        event['exception']['type'],
+        (event['exception']! as Map)['type'],
         'StateError',
         reason: 'the event is the error itself, not its wrapper',
       );
       expect(event['handled'], isTrue);
       expect(event['severity'], CrashSeverity.warning.name);
-      expect(event['tags']['operation'], 'sync.pull');
+      expect((event['tags']! as Map)['operation'], 'sync.pull');
       expect(
-        event['tags']['component'],
+        (event['tags']! as Map)['component'],
         '_CounterCubit',
         reason: 'the component is always the bloc',
       );
-      expect(event['extra']['pending'], 3);
+      expect((event['extra']! as Map)['pending'], 3);
       cubit.close();
     },
   );

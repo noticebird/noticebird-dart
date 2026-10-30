@@ -6,15 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:noticebird_example/main.dart';
 import 'package:noticebird_flutter/feedback.dart';
 import 'package:noticebird_flutter/noticebird_flutter.dart';
-
-final class _RecordingTransport implements CrashTransport {
-  final events = <Map<String, dynamic>>[];
-
-  @override
-  Future<void> send(String eventJson) async {
-    events.add(jsonDecode(eventJson) as Map<String, dynamic>);
-  }
-}
+import 'package:noticebird_flutter/testing.dart';
 
 /// A [FeedbackTransport] that keeps each report's JSON and files it under
 /// one ticket, without a network.
@@ -74,7 +66,7 @@ void main() {
 
   testWidgets('renders the demo actions', (tester) async {
     await tester.pumpWidget(
-      ExampleApp(reporter: _buildReporter(_RecordingTransport())),
+      ExampleApp(reporter: _buildReporter(RecordingCrashTransport())),
     );
 
     expect(find.text('Add breadcrumb'), findsOneWidget);
@@ -86,7 +78,7 @@ void main() {
   });
 
   testWidgets('reporting a handled error sends one event', (tester) async {
-    final transport = _RecordingTransport();
+    final transport = RecordingCrashTransport();
     await tester.pumpWidget(ExampleApp(reporter: _buildReporter(transport)));
 
     await tester.tap(find.text('Report handled error'));
@@ -99,7 +91,7 @@ void main() {
   });
 
   testWidgets('sending feedback delivers one bug report', (tester) async {
-    final transport = _RecordingTransport();
+    final transport = RecordingCrashTransport();
     final feedback = _RecordingFeedbackTransport();
     await tester.pumpWidget(
       ExampleApp(reporter: _buildReporter(transport, feedback: feedback)),
@@ -120,7 +112,7 @@ void main() {
     tester,
   ) async {
     await tester.pumpWidget(
-      ExampleApp(reporter: _buildReporter(_RecordingTransport())),
+      ExampleApp(reporter: _buildReporter(RecordingCrashTransport())),
     );
 
     await tester.tap(find.text('Send feedback'));
@@ -132,7 +124,7 @@ void main() {
   testWidgets('starting a live debug session syncs the next breadcrumb', (
     tester,
   ) async {
-    final transport = _RecordingTransport();
+    final transport = RecordingCrashTransport();
     final reporter = _buildReporter(transport);
     Bloc.observer = NoticebirdBlocObserver(client: reporter);
     await tester.pumpWidget(ExampleApp(reporter: reporter));
@@ -144,7 +136,7 @@ void main() {
 
     expect(
       transport.events.where(
-        (e) => e['exception']['type'] == 'LiveBreadcrumbSync',
+        (e) => (e['exception']! as Map)['type'] == 'LiveBreadcrumbSync',
       ),
       hasLength(1),
     );

@@ -75,6 +75,17 @@ void main() {
       expect(await start(), isNot(same(first)));
     });
 
+    test('lets the next start go after a start that threw', () async {
+      await expectLater(
+        NoticebirdFlutter.start(appName: 'example_app', requireVerified: true),
+        throwsArgumentError,
+      );
+
+      await NoticebirdFlutter.resetForTesting();
+
+      expect(await start(), isA<NoticebirdFlutter>());
+    });
+
     test('closes a start still under way', () async {
       final handler = FlutterError.onError;
       final starting = start();

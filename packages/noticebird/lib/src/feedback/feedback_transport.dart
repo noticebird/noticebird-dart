@@ -10,7 +10,7 @@ import 'package:noticebird_protocol/noticebird_protocol.dart';
 /// bytes to it when they are not stored yet ([upload]), and is then
 /// submitted ([submit]); a report without one is only submitted.
 ///
-/// `FeedbackHttpTransport` is the transport to the hosted API. A host that
+/// `FeedbackHttpTransport` is the transport to a Noticebird API. A host that
 /// writes its own, to relay reports through its backend for instance,
 /// answers each request with the [FeedbackDelivery] its answer means, and
 /// never throws: a failure to reach the other side is a

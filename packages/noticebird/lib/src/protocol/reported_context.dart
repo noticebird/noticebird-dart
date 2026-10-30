@@ -14,13 +14,15 @@ final class ReportedContext {
     this.locale,
   });
 
-  /// The app every crash event and feedback report names: its name,
-  /// version, build and release.
+  /// The app this run's crash events and feedback reports name: its name,
+  /// version, build and release. A native crash of an earlier run names
+  /// the app of that run.
   final AppMetadata app;
 
-  /// The platform every crash event and feedback report names: the
-  /// operating system, its version (`not-collected` under
-  /// `regulatedStrict`) and the device class. No device model leaves the
+  /// The platform this run's crash events and feedback reports name: the
+  /// operating system, its version and the device class, as the config
+  /// holds them (`hostPlatformMetadata` by default, whose version is
+  /// `not-collected` under `regulatedStrict`). No device model leaves the
   /// device.
   final PlatformMetadata platform;
 

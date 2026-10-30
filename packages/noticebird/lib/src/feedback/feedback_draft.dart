@@ -91,10 +91,7 @@ final class FeedbackDraft {
       'email': ?user?.email,
       'name': ?user?.name,
     };
-    final keptLocale =
-        locale != null && _passes(() => FeedbackReport.checkLocale(locale))
-        ? locale
-        : null;
+    final keptLocale = feedbackLocale(locale);
     final keptRoute =
         routeTemplate != null &&
             _passes(() => FeedbackReport.checkRouteTemplate(routeTemplate))
@@ -253,6 +250,14 @@ final class FeedbackDraft {
       throw FeedbackInputException(error.path, error.message);
     }
   }
+
+  /// [locale] as a report carries it: `null` for one the report refuses,
+  /// which it leaves out. The client's `reportedContext` reads it too, so a
+  /// host shows the locale the report sends.
+  static String? feedbackLocale(String? locale) =>
+      locale != null && _passes(() => FeedbackReport.checkLocale(locale))
+      ? locale
+      : null;
 
   static bool _passes(void Function() check) {
     try {

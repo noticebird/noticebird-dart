@@ -424,6 +424,10 @@ void main() {
         'https://proxy.example.com/noticebird/v1/envelope',
       ),
       (Uri.parse('http://localhost:8080'), 'http://localhost:8080/v1/envelope'),
+      (
+        Uri.parse('https://proxy.example.com:8443/v1x//'),
+        'https://proxy.example.com:8443/v1x/v1/envelope',
+      ),
     ]) {
       final httpClient = _RequestRecordingClient();
       final reporter = NoticebirdClient(
@@ -449,6 +453,9 @@ void main() {
     for (final apiUrl in [
       'https://api.noticebird.com/v1/envelope',
       'https://api.noticebird.com/v1/envelope/',
+      'https://api.noticebird.com/v1',
+      'https://api.noticebird.com/v1/feedback',
+      'https://user:secret@api.noticebird.com',
       'ftp://api.noticebird.com',
       'https://api.noticebird.com?key=x',
       'https://api.noticebird.com#top',

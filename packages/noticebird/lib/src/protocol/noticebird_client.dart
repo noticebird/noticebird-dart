@@ -483,8 +483,8 @@ final class NoticebirdClient {
       await _feedbackQueue?.count() ?? 0;
 
   /// The app and the device as this client's reports carry them: the app
-  /// and the platform of every event and feedback report, and the locale a
-  /// feedback report sent now carries ([NoticebirdConfig.locale]; none under
+  /// and the platform of this run's events and feedback reports, and the
+  /// locale a feedback report sent now carries ([NoticebirdConfig.locale]; none under
   /// [CrashPrivacyProfile.regulatedStrict], none the protocol refuses). For
   /// a host that shows what goes out with a report. Never throws.
   ReportedContext get reportedContext => ReportedContext(
@@ -495,13 +495,12 @@ final class NoticebirdClient {
         : _locale(),
   );
 
-  /// The app's locale as a language tag ([NoticebirdConfig.locale]); `null`
-  /// for none, for one the report refuses, and when asking throws.
+  /// The app's locale as a language tag ([NoticebirdConfig.locale]), as a
+  /// report carries it ([FeedbackDraft.feedbackLocale]); `null` for none,
+  /// for one the report refuses, and when asking throws.
   String? _locale() {
     try {
-      final locale = _config.locale?.call();
-      if (locale != null) FeedbackReport.checkLocale(locale);
-      return locale;
+      return FeedbackDraft.feedbackLocale(_config.locale?.call());
     } catch (_) {
       return null;
     }

@@ -19,8 +19,9 @@ final class CrashHttpTransport implements CrashTransport {
   /// owns its routes (`/v1/envelope`, the feedback routes).
   ///
   /// Throws an [ArgumentError] for an [apiUrl] that is no `http` or `https`
-  /// URL with a host, that has a query or a fragment, or that names the
-  /// envelope route itself, and for a [publishableKey] that is no
+  /// URL with a host, that has a query, a fragment or credentials, or that
+  /// ends in a route of the API (`/v1`, `/v1/envelope`, `/v1/feedback`)
+  /// rather than at its base, and for a [publishableKey] that is no
   /// publishable key (`<prefix>_pk_…`).
   CrashHttpTransport({
     required Uri apiUrl,
@@ -32,8 +33,6 @@ final class CrashHttpTransport implements CrashTransport {
        _httpClient = httpClient ?? http.Client(),
        _ownsHttpClient = httpClient == null;
 
-  static const _envelopeRoute = '/v1/envelope';
-
   /// The API's base, its path without a trailing `/`.
   final Uri _apiUrl;
   final String _publishableKey;
@@ -41,21 +40,22 @@ final class CrashHttpTransport implements CrashTransport {
   final bool _ownsHttpClient;
   final Duration timeout;
 
-  late final Uri _envelope = apiRoute(_apiUrl, _envelopeRoute);
+  late final Uri _envelope = apiRoute(_apiUrl, ApiRoutes.envelope);
 
   static Uri _checkApiUrl(Uri apiUrl) {
     String? problem;
+    final path = apiUrl.path.replaceFirst(RegExp(r'/+$'), '');
     if (!(apiUrl.isScheme('https') || apiUrl.isScheme('http')) ||
         apiUrl.host.isEmpty) {
       problem = 'The API URL is an http or https URL with a host';
     } else if (apiUrl.hasQuery || apiUrl.hasFragment) {
       problem = 'The API URL has no query or fragment';
-    }
-    final path = apiUrl.path.replaceFirst(RegExp(r'/+$'), '');
-    if (problem == null && path.endsWith(_envelopeRoute)) {
+    } else if (apiUrl.userInfo.isNotEmpty) {
+      problem = 'The API URL carries no credentials; the key is sent apart';
+    } else if (ApiRoutes.named(path)) {
       problem =
           'Pass the API base, such as https://api.noticebird.com; the SDK '
-          'adds $_envelopeRoute itself';
+          'adds its routes (${ApiRoutes.version}/…) itself';
     }
     if (problem != null) {
       throw ArgumentError.value(apiUrl, 'apiUrl', problem);
@@ -104,6 +104,32 @@ final class CrashHttpTransport implements CrashTransport {
         {'error': final String error} => error,
         _ => null,
       };
+}
+
+/// The routes of a Noticebird API the SDK sends to, below its base URL: the
+/// one place they are named. Not exported.
+abstract final class ApiRoutes {
+  /// The version prefix every route starts with.
+  static const version = '/v1';
+
+  /// A crash event: `POST`.
+  static const envelope = '$version/envelope';
+
+  /// A feedback report: `POST`; its attachments below it.
+  static const feedback = '$version/feedback';
+
+  /// The slot of a report's attachment: `POST`, and the upload route the
+  /// platform answers.
+  static String attachment(String reportId, int index) =>
+      '$feedback/${Uri.encodeComponent(reportId)}/attachments/$index';
+
+  /// Whether [path], a base URL's path without a trailing `/`, names a
+  /// route or the version prefix rather than the API's base: a host that
+  /// passed a route as the base.
+  static bool named(String path) =>
+      path.endsWith(version) ||
+      path.endsWith(envelope) ||
+      path.endsWith(feedback);
 }
 
 /// The route [route] (`/v1/…`) of the API at [apiUrl], a base whose path

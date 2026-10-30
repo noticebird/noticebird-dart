@@ -24,8 +24,9 @@ final class FeedbackConfig {
     }
   }
 
-  /// Where reports go: `FeedbackHttpTransport` for the hosted API. `null`
-  /// for a build without an endpoint: `NoticebirdClient.captureFeedback`
+  /// Where reports go: `FeedbackHttpTransport.of(crashTransport)`, to the
+  /// API the crash transport names. `null` for a build without an API URL
+  /// or a publishable key: `NoticebirdClient.captureFeedback`
   /// answers `FeedbackDisabled`, and the rest of this config is checked all
   /// the same.
   final FeedbackTransport? transport;

@@ -37,13 +37,15 @@ final class RecordingCrashTransport implements CrashTransport {
 /// ```dart
 /// final recorder = NoticebirdRecorder(shouldCapture: shouldCaptureError);
 /// Bloc.observer = NoticebirdBlocObserver(client: recorder.client);
-/// cubit.addError(StateError('boom'));
+/// // Made after the observer is set, a cubit that calls addError when its
+/// // load fails:
+/// await ListCubit(load: () => throw StateError('boom')).load();
 /// expect(recorder.events.single['handled'], isTrue);
 /// ```
 final class NoticebirdRecorder {
   /// A recorder whose client asks [shouldCapture] as the host's does, under
-  /// [privacyProfile] and [pii], and stamps its events and breadcrumbs by
-  /// [clock] when given.
+  /// [privacyProfile] and [pii], and stamps its events by [clock] when
+  /// given; a breadcrumb carries the time its observer gave it.
   NoticebirdRecorder({
     bool Function(Object error)? shouldCapture,
     CrashPrivacyProfile privacyProfile = CrashPrivacyProfile.privacyDefault,

@@ -368,17 +368,16 @@ final class NoticebirdFlutter {
   /// `Noticebird.detach()`.
   @visibleForTesting
   static Future<void> resetForTesting() async {
-    final starting = _starting;
-    if (starting != null) {
+    // A start made while an earlier one was being closed is closed too.
+    for (var starting = _starting; starting != null; starting = _starting) {
       try {
         (await starting).close();
       } catch (_) {
         // A start that threw started nothing.
       }
+      // Closing clears both; a start that threw left nothing to clear.
+      if (identical(_starting, starting)) _starting = null;
     }
-    _started?.close();
-    _starting = null;
-    _started = null;
   }
 
   static AppMetadata _app(String name, PackageInfo? info) {

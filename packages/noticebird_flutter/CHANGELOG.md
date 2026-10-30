@@ -8,8 +8,8 @@ Breaking changes:
   — the start makes a client that uploads nothing and sends no feedback:
   the SDK no longer sends to the hosted API by default. Migrate by passing
   `apiUrl: CrashHttpTransport.hostedApiUrl` (or your API's base, without
-  `/v1/envelope`), and stop passing an empty key to keep a build from
-  sending.
+  `/v1/envelope`). A build that must not send now leaves out `apiUrl` or
+  `publishableKey`; an empty one still sends nothing.
 
 Changes:
 

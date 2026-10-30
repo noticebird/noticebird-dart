@@ -90,10 +90,7 @@ final class FeedbackHttpTransport implements FeedbackTransport {
           path: error.path,
         );
       }
-      final url = _route(
-        '/v1/feedback/${Uri.encodeComponent(reportId)}'
-        '/attachments/${attachment.index}',
-      );
+      final url = _route(ApiRoutes.attachment(reportId, attachment.index));
       final response = await _send(
         'POST',
         url,
@@ -146,7 +143,7 @@ final class FeedbackHttpTransport implements FeedbackTransport {
     try {
       final response = await _send(
         'POST',
-        _route('/v1/feedback'),
+        _route(ApiRoutes.feedback),
         _jsonHeaders,
         utf8.encode(reportJson),
         _requestTimeout,

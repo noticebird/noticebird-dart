@@ -1,5 +1,9 @@
 group = "dev.noticebird.nativecrashes"
-version = "0.5.0"
+// The package's version, from its pubspec: the one place it is set.
+version = file("../pubspec.yaml").readLines()
+    .first { it.startsWith("version:") }
+    .removePrefix("version:")
+    .trim()
 
 buildscript {
     val kotlinVersion = "2.4.0"

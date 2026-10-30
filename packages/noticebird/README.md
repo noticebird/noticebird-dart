@@ -147,10 +147,11 @@ import 'package:noticebird/testing.dart';
 final recorder = NoticebirdRecorder(shouldCapture: myFilter)..attach();
 addTearDown(recorder.close);
 
-await codeUnderTest();
+final error = StateError('boom');
+await codeUnderTest(failingWith: error); // reports error, handled
 expect(recorder.events.single['handled'], isTrue);
 expect(await recorder.eventOf(error), isNotNull);
 ```
 
 Its `transport`, a `RecordingCrashTransport`, can go into a client a test
-builds itself. `Noticebird.detach()` resets the facade.
+builds itself. The recorder sends no feedback. `Noticebird.detach()` resets the facade.
