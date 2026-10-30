@@ -362,6 +362,25 @@ final class NoticebirdFlutter {
   /// stays.
   void close() => _stop();
 
+  /// Closes what [start] started, a start still under way included, so the
+  /// next [start] in a test starts anew: for a test's `tearDown`. A
+  /// recorder or client the test attached to the facade itself goes with
+  /// `Noticebird.detach()`.
+  @visibleForTesting
+  static Future<void> resetForTesting() async {
+    final starting = _starting;
+    if (starting != null) {
+      try {
+        (await starting).close();
+      } catch (_) {
+        // A start that threw started nothing.
+      }
+    }
+    _started?.close();
+    _starting = null;
+    _started = null;
+  }
+
   static AppMetadata _app(String name, PackageInfo? info) {
     String part(String? value) =>
         value == null || value.trim().isEmpty ? 'unknown' : value.trim();
