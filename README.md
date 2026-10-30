@@ -8,6 +8,7 @@ A Flutter app depends on `noticebird_flutter` and starts it once:
 ```dart
 Future<void> main() async {
   await NoticebirdFlutter.start(
+    apiUrl: CrashHttpTransport.hostedApiUrl,
     publishableKey: const String.fromEnvironment('NOTICEBIRD_KEY'),
     appName: 'my_app',
   );

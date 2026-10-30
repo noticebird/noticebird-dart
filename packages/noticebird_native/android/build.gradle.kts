@@ -1,5 +1,5 @@
 group = "dev.noticebird.nativecrashes"
-version = "0.3.0"
+version = "0.5.0"
 
 buildscript {
     val kotlinVersion = "2.4.0"

@@ -1,3 +1,38 @@
+## 0.5.0
+
+Breaking changes:
+
+- `CrashHttpTransport` takes the API's base, `apiUrl`, in place of the
+  envelope URL `endpoint`, and adds its routes itself: crash events go to
+  `<apiUrl>/v1/envelope`, feedback to the feedback routes below the same
+  base, a proxy's path prefix kept. `apiUrl` is required: the SDK no longer
+  sends to the hosted API by default. `hostedEndpoint` is now
+  `hostedApiUrl` (`https://api.noticebird.com`). An `apiUrl` that is no
+  `http` or `https` URL with a host, has a query or a fragment, or ends in
+  `/v1/envelope` throws an `ArgumentError`. Migrate
+  `CrashHttpTransport(endpoint: Uri.parse('https://api.example.com/v1/envelope'), …)`
+  to `CrashHttpTransport(apiUrl: Uri.parse('https://api.example.com'), …)`,
+  and a transport that relied on the default to
+  `apiUrl: CrashHttpTransport.hostedApiUrl`.
+- `FeedbackHttpTransport.of` no longer throws: the crash transport checks
+  the API URL.
+
+Changes:
+
+- `captureException` asks the capture filter before it keeps the capture:
+  a capture `NoticebirdConfig.shouldCapture` ignored no longer replaces the
+  error's earlier one, so `eventIdOf` keeps answering the id of the event
+  the host's own report point made for an error it rethrew.
+- `NoticebirdClient.reportedContext` and `Noticebird.reportedContext`
+  (`ReportedContext`): the app, the platform and the locale as a report
+  carries them, for a feedback form that shows what goes out. The locale is
+  the one a feedback report sent now carries: none under `regulatedStrict`
+  and none the protocol refuses.
+- `package:noticebird/testing.dart`: `NoticebirdRecorder`, a real client
+  whose events are recorded instead of sent, without a network and without
+  deduplication (`events`, `eventOf(error)`, `attach()`, `close()`), on a
+  `RecordingCrashTransport`.
+
 ## 0.4.0
 
 `noticebird` is pure Dart now: it no longer depends on the Flutter SDK or on

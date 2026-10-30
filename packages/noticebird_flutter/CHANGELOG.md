@@ -1,3 +1,29 @@
+## 0.5.0
+
+Breaking changes:
+
+- `NoticebirdFlutter.start` takes the API's base, `apiUrl`, in place of
+  `endpoint`, and `publishableKey` is optional. Without both an `apiUrl`
+  and a `publishableKey` — either absent or empty, or one that cannot work
+  — the start makes a client that uploads nothing and sends no feedback:
+  the SDK no longer sends to the hosted API by default. Migrate by passing
+  `apiUrl: CrashHttpTransport.hostedApiUrl` (or your API's base, without
+  `/v1/envelope`), and stop passing an empty key to keep a build from
+  sending.
+
+Changes:
+
+- `NoticebirdBlocObserver.traces(bloc)`, a protected hook: whether a bloc's
+  events and changes leave a breadcrumb, by default every bloc but an
+  `UntracedBloc`. A subclass leaves a marker of its own out of the trail by
+  overriding it, instead of `onEvent` and `onChange`; that bloc's errors
+  are still captured and it is still counted.
+- `NoticebirdFlutter.resetForTesting()` closes what `start` started, a start
+  still under way included, so a test's next start starts anew.
+- `package:noticebird_flutter/testing.dart` re-exports `noticebird`'s test
+  support: `NoticebirdRecorder`, to which the SDK's bloc observer reports
+  without a network.
+
 ## 0.4.0
 
 First release: a Flutter app's whole integration with Noticebird.

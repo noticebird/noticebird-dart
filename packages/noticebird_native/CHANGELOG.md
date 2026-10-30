@@ -1,3 +1,10 @@
+## 0.5.0
+
+- Moves with `noticebird` 0.5.0 and `noticebird_flutter` 0.5.0; no change of
+  its own. The podspec and the Android library now carry the package's
+  version (they still said 0.3.0). The crash lab example takes
+  `NOTICEBIRD_API_URL`, the API's base, in place of `NOTICEBIRD_INGEST_URL`.
+
 ## 0.4.0
 
 - Moves with `noticebird` 0.4.0 and the new `noticebird_flutter` 0.4.0; no

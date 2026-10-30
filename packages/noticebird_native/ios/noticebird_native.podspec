@@ -7,7 +7,7 @@
 #
 Pod::Spec.new do |s|
   s.name             = 'noticebird_native'
-  s.version          = '0.3.0'
+  s.version          = '0.5.0'
   s.summary          = 'Native crash capture for noticebird: iOS MetricKit diagnostics.'
   s.description      = <<-DESC
 Collects MetricKit crash, hang and disk-write diagnostics of earlier runs,

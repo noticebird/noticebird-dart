@@ -10,10 +10,13 @@ description: >
   dropped", "how do I add a breadcrumb", "attach the user to crashes", "Noticebird
   sends nothing", "capture a handled error", "test code that reports crashes", "send
   user feedback", "add a report-a-bug button", "attach a screenshot to feedback",
-  "verified reporter", "my own zone", "my own bloc observer".
+  "verified reporter", "my own zone", "my own bloc observer", "show what a report
+  sends", "my own untraced marker", "reset Noticebird between tests".
   Triggers on: noticebird_flutter, NoticebirdFlutter, NoticebirdFlutter.start,
   reportZoneError, installErrorHandlers, observeBlocs, background start,
-  NoticebirdNavigatorObserver, NoticebirdBlocObserver, UntracedBloc, MultiBlocObserver,
+  apiUrl, hostedApiUrl, NoticebirdNavigatorObserver, NoticebirdBlocObserver, traces,
+  UntracedBloc, MultiBlocObserver, reportedContext, ReportedContext, testing.dart,
+  NoticebirdRecorder, RecordingCrashTransport, resetForTesting,
   BlocErrorReport, captureBlocError, NoticebirdClient, Noticebird, captureException,
   CaptureOutcome, CaptureResult, discarded, eventIdOf, captureFeedback,
   feedbackMoment, FeedbackMoment, feedback.dart, FeedbackConfig, FeedbackHttpTransport,
@@ -78,6 +81,7 @@ import 'package:noticebird_flutter/noticebird_flutter.dart';
 
 Future<void> main() async {
   await NoticebirdFlutter.start(
+    apiUrl: CrashHttpTransport.hostedApiUrl, // the API's base; the SDK adds its routes
     publishableKey: const String.fromEnvironment('NOTICEBIRD_KEY'),
     appName: 'myapp',                   // version and build come from the platform
     shouldCapture: (error) => error is! ReportedElsewhere, // optional
@@ -107,7 +111,14 @@ reports them), and `close()`, which puts back what it installed (each only while
 still the start's) and detaches the client; the host's `httpClient` stays open. Do not use
 the old `client` after `close()`: a later start makes its own, on the same stores.
 
-The other options: `endpoint` and `httpClient` (where and over what it sends),
+`apiUrl` is the API's base (`CrashHttpTransport.hostedApiUrl`, or a staging,
+self-hosted or proxied one with its path prefix), never a route: the SDK adds
+`/v1/envelope` and the feedback routes itself, and refuses a URL that ends in
+`/v1/envelope`. Without both an `apiUrl` and a `publishableKey` (absent, empty — a missing
+`--dart-define` — or one that cannot work) the client uploads nothing and sends no
+feedback; the SDK never picks an API by itself.
+
+The other options: `httpClient` (the host's HTTP stack),
 `uploadCrashes: false` (crash events `discarded`, feedback still sent), `privacyProfile`,
 `pii`, `breadcrumbBuffer`, `reporterAssertion`, `requireVerified`, `onFeedbackSettled`,
 `crashStore` and `feedbackStore` (your own stores), `installErrorHandlers`, `observeBlocs`,
@@ -160,7 +171,8 @@ stands for the error — of this event when it is `sent` or `queued`, of the ear
 repeats when `deduplicated`, `null` when nothing went (`dropped`, `ignored`, `discarded`,
 or a repeat of a dropped event). `client.eventIdOf(error)` answers the same id later from
 the error alone, once its capture settled — also for an error a global handler captured
-without waiting. Pass it as a feedback report's `relatedEventId`.
+without waiting; a later capture the filter ignores (the error rethrown after its report)
+leaves it. Pass it as a feedback report's `relatedEventId`.
 
 | `CaptureOutcome` | Meaning |
 |---|---|
@@ -379,20 +391,24 @@ The sheet's bloc or cubit implements `UntracedBloc`, so the user's typing leaves
 breadcrumbs and does not push out the steps that led to the report: the trail is taken at
 the capture. `relatedEventId` is a `CaptureResult.eventId`, or
 `await Noticebird.eventIdOf(error)` for the error an error screen shows.
+`Noticebird.reportedContext` answers the app, the platform (operating system, its
+version, the device class) and the locale as a report sent now carries them: show those in
+the sheet's "what is sent" disclosure rather than reading your own copy. No device model
+leaves the device.
 
 The client fills in the app, platform, locale, session, the `setUser` user and the newest
 breadcrumbs (redacted as in an event; a report does not count them as sent). The moment's
 route is checked where the report is built, by `isRouteTemplate`, and redacted as
 `setRouteTemplate`'s is: a raw route given to `feedbackMoment(routeTemplate:)` throws in a
-debug build and is left out in release. `FeedbackDisabled` comes from a start without a
-usable key, a client without a `FeedbackConfig` or one without a `transport`, and the
-facade while no client is attached.
+debug build and is left out in release. `FeedbackDisabled` comes from a start without an
+API URL or a usable key, a client without a `FeedbackConfig` or one without a
+`transport`, and the facade while no client is attached.
 
 | `FeedbackOutcome` | Meaning |
 |---|---|
 | `FeedbackDelivered(ticket, verified)` | The platform has it. Show `ticket.display` (such as `FB-12`) as it is; `ticket` is `null` when the answer named none, such as for a resent report the platform stored already but can no longer compare. |
 | `FeedbackQueued(reportId)` | Not through yet; kept in the store and sent when due. |
-| `FeedbackDisabled` | No client attached, no feedback config, or one without a transport (no usable key). |
+| `FeedbackDisabled` | No client attached, no feedback config, or one without a transport (no API URL or no usable key). |
 | `FeedbackRejected(reason, path, code)` | Never delivered. `reason` is a `FeedbackRejection`: `invalidInput`, `unverified`, `strictProject`, `clock`, `notAccepted`, `noStore`, `evicted`, `expired`, `refused`, `failed`. |
 
 **Sanitised, never refused.** The `screenshot` and the moment's `diagnostics` never cost
@@ -458,7 +474,9 @@ A subclass of `NoticebirdBlocObserver` that names its steps in more detail
 start sets and counts that one. `observeBlocs: false` leaves `Bloc.observer` to the host
 entirely; reports then go without the `blocs` group. A bloc that implements `UntracedBloc` leaves no breadcrumbs (its errors
 are still captured, and it is still counted): use it for a bloc that changes with every
-keystroke, such as a feedback sheet's.
+keystroke, such as a feedback sheet's. The observer asks `traces(bloc)`: a subclass with
+an untraced marker of its own overrides it (`super.traces(bloc) && bloc is! MyUntraced`)
+rather than `onEvent`/`onChange`.
 
 A bloc reports a caught error through `addError`, never with `captureException` beside
 the observer — that is a second path, and it skips the bloc's tag. When the failure
@@ -527,39 +545,35 @@ await NoticebirdFlutter.start(
 
 ## Testing
 
-A test does not call `NoticebirdFlutter.start`: it builds a `NoticebirdClient` of its own
-on fake transports, attaches it to the facade (and detaches it in teardown), and hands it
-to the observers it pumps — `NoticebirdBlocObserver(client: client)` as `Bloc.observer`,
-`NoticebirdNavigatorObserver(client: client)` in the navigator. Code under test that
-calls `Noticebird.*` then reports to that client; code that runs with nothing attached
-reports nowhere.
+Test support is in `package:noticebird_flutter/testing.dart` (`package:noticebird/testing.dart`
+outside Flutter). `NoticebirdRecorder` is a real client whose events are recorded instead
+of sent: built, sanitized and checked as in the app, without a network, and without
+deduplication, so a report made twice shows as two. Hand its `client` to what the test
+pumps — `NoticebirdBlocObserver(client: …)` (or the app's subclass) as `Bloc.observer`,
+`NoticebirdNavigatorObserver(client: …)` in the navigator, the app's own adapter — or
+`attach()` it to the facade, so code that calls `Noticebird.*` reports to it.
 
 ```dart
-final class FakeTransport implements CrashTransport {
-  final sent = <Map<String, dynamic>>[];
-  @override
-  Future<void> send(String eventJson) async {
-    sent.add(jsonDecode(eventJson) as Map<String, dynamic>);
-  }
-}
+import 'package:noticebird_flutter/testing.dart';
 
-final client = NoticebirdClient(
-  config: NoticebirdConfig(
-    privacyProfile: CrashPrivacyProfile.privacyDefault,
-    app: const AppMetadata(name: 'test', version: '1.0.0', build: '1', release: 'test@1.0.0+1'),
-    feedback: FeedbackConfig(transport: FakeFeedbackTransport()), // when feedback is tested
-  ),
-  transport: FakeTransport(), // or none: crash uploads off, captures `discarded`
-);
-Noticebird.attach(client);
-addTearDown(Noticebird.detach);
+final recorder = NoticebirdRecorder(shouldCapture: myCaptureFilter)..attach();
+addTearDown(recorder.close);                 // closes it and detaches it from the facade
+Bloc.observer = NoticebirdBlocObserver(client: recorder.client);
+
+cubit.addError(StateError('boom'));
+expect(recorder.events.single['handled'], isTrue); // the event as the platform receives it
+expect(await recorder.eventOf(error), isNotNull);  // by eventIdOf
 ```
 
-The fake transport gets each event as the client wrote it — its canonical JSON, validated
-when the event was built, so an event the protocol refuses is `dropped` before it gets
-there — and decodes it to assert on its fields. A flush sends a stored event as the same
-text. Inject `clock` and `eventIdFactory` into the client for deterministic assertions on
-deduplication windows and event ids.
+An event reaches the recorder while its capture runs. Its `transport`, a
+`RecordingCrashTransport` (`sent`: the canonical JSON; `events`: decoded), goes into a
+`NoticebirdClient` a test builds itself when it needs another config: a `FeedbackConfig`
+with a fake feedback transport, `clock` and `eventIdFactory` for deterministic ids and
+deduplication windows, or no transport at all (captures `discarded`).
+
+A test that calls `NoticebirdFlutter.start` ends with
+`await NoticebirdFlutter.resetForTesting()`, which closes it (a start still under way
+included) so the next one starts anew; `Noticebird.detach()` resets the facade.
 
 Feedback: implement `FeedbackTransport` (`requestSlot`, `upload`, `submit`). `submit` gets
 the report as `FeedbackReport.toJsonString` wrote it, validated already; `jsonDecode` it to
@@ -574,7 +588,7 @@ Native capture: implement `NativeCrashCollector` with a fake that emits
 
 | Symptom | Cause |
 |---|---|
-| Every capture is `discarded`, and feedback is `FeedbackDisabled` | The start got no usable key — a missing `--dart-define`, or a secret `_sk_` key. A debug build printed why. |
+| Every capture is `discarded`, and feedback is `FeedbackDisabled` | The start got no `apiUrl` or no usable key — a missing `--dart-define`, a secret `_sk_` key, or an `apiUrl` that names `/v1/envelope`. A debug build printed why. |
 | A capture comes back `ignored` | `shouldCapture` declined it — the error is reported at the host's own report point, which captures with `filtered: false`. |
 | The same failure arrives twice | No `shouldCapture` declines the type the host reports elsewhere, so a channel (observer, handler, explicit capture) reports it again. |
 | Every event is `dropped` | `app`/`platform` metadata violates the protocol, or a client's `sessionIdFactory` returns something outside `^[A-Za-z0-9_-]{16,64}$`. |

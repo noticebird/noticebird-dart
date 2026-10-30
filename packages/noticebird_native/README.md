@@ -14,6 +14,7 @@ it to the start:
 
 ```dart
 await NoticebirdFlutter.start(
+  apiUrl: api,
   publishableKey: key,
   appName: 'my_app',
   nativeCrashes: NativeCrashCapture(),

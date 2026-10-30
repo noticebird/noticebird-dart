@@ -5,7 +5,7 @@ Noticebird.
 
 The client builds typed events of the protocol's schema 5, applies the
 configured privacy profile, keeps bounded breadcrumbs and retries, and sends
-events to the Noticebird ingestion endpoint, and a user's feedback report to
+events to a Noticebird API's ingestion route, and a user's feedback report to
 its feedback routes. It is pure Dart: no Flutter, no database or backend SDK.
 
 **A Flutter app depends on [`noticebird_flutter`](../noticebird_flutter)
@@ -20,7 +20,10 @@ shows.
 ## The client
 
 ```dart
-final transport = CrashHttpTransport(publishableKey: 'noticebird_pk_...');
+final transport = CrashHttpTransport(
+  apiUrl: CrashHttpTransport.hostedApiUrl, // or a staging or self-hosted API
+  publishableKey: 'noticebird_pk_...',
+);
 final client = NoticebirdClient(
   config: NoticebirdConfig(
     privacyProfile: CrashPrivacyProfile.privacyDefault,
@@ -38,9 +41,10 @@ Noticebird.attach(client); // the static facade, from anywhere
 
 Consumers use only publishable ingest keys. The project, environment and
 privacy profile are derived by the service from the key and are never
-accepted as security claims in an event payload. The transport sends to
-`https://api.noticebird.com/v1/envelope` by default; pass `endpoint` only for
-a local, staging or self-hosted override. A client without a `transport`
+accepted as security claims in an event payload. The transport takes the
+API's base URL (`CrashHttpTransport.hostedApiUrl`, `https://api.noticebird.com`,
+or a staging, self-hosted or proxied one, a path prefix included) and adds the
+routes itself; it never picks an API by itself. A client without a `transport`
 uploads no crash events but still keeps the trail, the user and the route for
 feedback: a capture is `discarded`, the stored queue stays and native reports
 stay unclaimed, for a build that uploads.
@@ -49,7 +53,13 @@ stay unclaimed, for a build that uploads.
 `CaptureOutcome` (`sent`, `deduplicated`, `queued`, `dropped`, `ignored`,
 `discarded`), its `eventId` the id of the event that stands for the error.
 `eventIdOf(error)` answers that id later from the error alone, also for an
-error a global handler captured without waiting.
+error a global handler captured without waiting; a later capture the filter
+ignores (the error rethrown after the host reported it) leaves it.
+
+`reportedContext` says what the client tells about the app and the device:
+the app, the platform (operating system, its version, the device class) and
+the locale a feedback report carries — for a feedback form that shows what
+goes out. No device model leaves the device.
 
 `flush()` sends what waits; the client also drains kept feedback by itself
 when it is due. `close()` stops what the client does by itself.
@@ -71,7 +81,7 @@ import 'package:noticebird/feedback.dart';
 NoticebirdConfig(
   // …
   feedback: FeedbackConfig(
-    // The crash transport's endpoint, key and HTTP client.
+    // The crash transport's API, key and HTTP client.
     transport: FeedbackHttpTransport.of(transport),
     // Optional: reports that do not get through wait here.
     offlineStore: FileFeedbackOfflineStore(directory),
@@ -123,3 +133,24 @@ contact address, diagnostics, user context and reporter assertion.
 - Route values must be templates, never raw identifiers.
 
 The protocol package is exported as `noticebird_protocol`.
+
+## Testing
+
+`package:noticebird/testing.dart` holds `NoticebirdRecorder`: a real client
+whose events are recorded instead of sent, with no network and no
+deduplication, so a test sees what the platform would receive and a report
+made twice:
+
+```dart
+import 'package:noticebird/testing.dart';
+
+final recorder = NoticebirdRecorder(shouldCapture: myFilter)..attach();
+addTearDown(recorder.close);
+
+await codeUnderTest();
+expect(recorder.events.single['handled'], isTrue);
+expect(await recorder.eventOf(error), isNotNull);
+```
+
+Its `transport`, a `RecordingCrashTransport`, can go into a client a test
+builds itself. `Noticebird.detach()` resets the facade.

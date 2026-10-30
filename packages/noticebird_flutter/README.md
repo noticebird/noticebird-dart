@@ -14,6 +14,7 @@ import 'package:noticebird_flutter/noticebird_flutter.dart';
 
 Future<void> main() async {
   await NoticebirdFlutter.start(
+    apiUrl: CrashHttpTransport.hostedApiUrl,
     publishableKey: const String.fromEnvironment('NOTICEBIRD_KEY'),
     appName: 'my_app',
   );
@@ -91,13 +92,17 @@ apart from the main library, so they cannot clash with an app's own.
 
 ## The start's options
 
-`publishableKey` and `appName` are required. A key that is empty or malformed
-(a missing `--dart-define`) starts a client that uploads nothing and sends no
-feedback; a debug build prints why.
+`appName` is required. The start sends to the API at `apiUrl`, its base
+(`CrashHttpTransport.hostedApiUrl` for the hosted API, or a staging,
+self-hosted or proxied one such as `https://example.com/noticebird`; the SDK
+adds its own routes), with `publishableKey`. Without both — either absent or
+empty (a missing `--dart-define`), or one that cannot work — it starts a
+client that uploads nothing and sends no feedback; a debug build prints why.
+The SDK never picks an API by itself.
 
 | Concern | Options |
 |---|---|
-| Where it sends | `endpoint` (the `/v1/envelope` URL; by default the hosted API), `httpClient` (the host's HTTP stack), `uploadCrashes` (`false`: crash events are discarded, feedback is still sent) |
+| Where it sends | `apiUrl` and `publishableKey` (above), `httpClient` (the host's HTTP stack), `uploadCrashes` (`false`: crash events are discarded, feedback is still sent) |
 | What an event carries | `privacyProfile`, `pii`, `shouldCapture`, `breadcrumbBuffer` |
 | Feedback | `reporterAssertion`, `requireVerified`, `onFeedbackSettled` |
 | Native crashes | `nativeCrashes`: `NativeCrashCapture()` of `noticebird_native` |
@@ -131,7 +136,7 @@ it with `reportZoneError`:
 
 ```dart
 runZonedGuarded(() async {
-  await NoticebirdFlutter.start(publishableKey: key, appName: 'my_app');
+  await NoticebirdFlutter.start(apiUrl: api, publishableKey: key, appName: 'my_app');
   runApp(const MyApp());
 }, NoticebirdFlutter.reportZoneError);
 ```
@@ -162,7 +167,9 @@ type, a bloc's `addError` is captured as handled (wrap it in a
 report's `blocs` diagnostics group counts the live blocs per type.
 A host whose breadcrumbs say more about a step subclasses
 `NoticebirdBlocObserver` (`describeEvent`, `describeChange`, `describeState`)
-and passes it as `blocObserver:`; the start sets and counts that one.
+and passes it as `blocObserver:`; the start sets and counts that one. A host
+with an untraced marker of its own overrides `traces(bloc)`
+(`super.traces(bloc) && bloc is! MyUntraced`); its errors are still captured.
 `observeBlocs: false` leaves `Bloc.observer` to the host, and the report goes
 without that group.
 
@@ -173,6 +180,26 @@ under `regulatedStrict`, whose stores must be encrypted: pass your own
 `crashStore` and `feedbackStore` there. Without one an event that did not get
 through is kept in memory only, and a feedback report is
 `FeedbackRejected(FeedbackRejection.noStore)`.
+
+## Testing
+
+`package:noticebird_flutter/testing.dart` holds `NoticebirdRecorder`, a real
+client that records its events instead of sending them. The SDK's bloc
+observer, or the app's subclass, reports to it as in the app:
+
+```dart
+import 'package:noticebird_flutter/testing.dart';
+
+final recorder = NoticebirdRecorder(shouldCapture: myFilter);
+Bloc.observer = NoticebirdBlocObserver(client: recorder.client);
+
+cubit.addError(StateError('boom'));
+expect(recorder.events.single['tags'], containsPair('component', 'MyCubit'));
+```
+
+A test that calls `NoticebirdFlutter.start` ends with
+`NoticebirdFlutter.resetForTesting()`, which closes it, a start still under
+way included; `Noticebird.detach()` resets the facade.
 
 ## Dependencies
 
