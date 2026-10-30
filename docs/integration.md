@@ -9,10 +9,38 @@ app, see `packages/noticebird_flutter/example`.
 A Flutter app depends on `noticebird_flutter`; the client (`noticebird`) and
 the protocol package come with it, and it re-exports both.
 
+The packages are not on pub.dev: an app takes them from the repository, at the
+release's tag. A git package's own dependencies are resolved from pub.dev, so
+the app also names `noticebird` and `noticebird_protocol` at the same tag, as
+`dependency_overrides`:
+
 ```yaml
 dependencies:
-  noticebird_flutter: ^0.4.0
+  noticebird_flutter:
+    git:
+      url: https://github.com/noticebird/noticebird-dart.git
+      ref: v0.4.0
+      path: packages/noticebird_flutter
+  noticebird_native: # only for native crashes, §11
+    git:
+      url: https://github.com/noticebird/noticebird-dart.git
+      ref: v0.4.0
+      path: packages/noticebird_native
+
+dependency_overrides:
+  noticebird:
+    git:
+      url: https://github.com/noticebird/noticebird-dart.git
+      ref: v0.4.0
+      path: packages/noticebird
+  noticebird_protocol:
+    git:
+      url: https://github.com/noticebird/noticebird-dart.git
+      ref: v0.4.0
+      path: packages/noticebird_protocol
 ```
+
+Move every `ref` together: the four packages are released as one version.
 
 Native crash capture is a separate add-on package, `noticebird_native`
 (§11); a consumer that does not add it carries no native code. A program
@@ -33,6 +61,11 @@ Future<void> main() async {
   );
   runApp(const MyApp());
 }
+
+// The app's navigator: navigation breadcrumbs and the screen's route (§3).
+MaterialApp(
+  navigatorObservers: [NoticebirdNavigatorObserver(tracksRouteTemplate: true)],
+);
 ```
 
 The start:
@@ -57,6 +90,19 @@ connection trigger). It throws an `ArgumentError` only for an argument no
 start can work with: an `appName` the protocol refuses, a `breadcrumbBuffer`
 out of range, an unencrypted store under `regulatedStrict`. A second `start`,
 also one made while the first is starting, answers the first.
+
+`platformReadFailures` lists the reads the start went on without, each a
+`PlatformReadFailure` with its `read` (`packageInfo` or `supportDirectory`),
+`error` and `stackTrace` (a `TimeoutException` when it did not answer), for a
+host that reports what its start did without:
+
+```dart
+final noticebird = await NoticebirdFlutter.start(…);
+for (final failure in noticebird.platformReadFailures) {
+  Noticebird.captureException(failure.error, failure.stackTrace,
+      handled: true, tags: {AllowedTag.operation: 'start.${failure.read}'});
+}
+```
 
 ### The key and the endpoint
 
@@ -90,10 +136,12 @@ also one made while the first is starting, answers the first.
 | `installErrorHandlers`, `observeBlocs`, `blocObserver` | `true`, `true`, a plain observer | §3. |
 | `background` | `false` | A headless engine's start; below. |
 
-`start` answers a `NoticebirdFlutter`: its `client`, its `blocObserver`, and
-`close()`, which puts back the handlers and the bloc observer it installed
-(each only while it is still the start's), stops its triggers and detaches the
-client. A later `start` starts anew.
+`start` answers a `NoticebirdFlutter`: its `client`, its `blocObserver`, its
+`platformReadFailures`, and `close()`, which puts back the handlers and the
+bloc observer it installed (each only while it is still the start's), stops
+its triggers and detaches the client. The HTTP client of `httpClient` stays
+the host's. A later `start` starts anew, with a client of its own on the same
+stores: do not use the old `client` after `close()`.
 
 ### A background engine
 
@@ -166,10 +214,18 @@ without that group.
 ### Navigation
 
 ```dart
-MaterialApp(navigatorObservers: [NoticebirdNavigatorObserver()]);
+MaterialApp(
+  navigatorObservers: [NoticebirdNavigatorObserver(tracksRouteTemplate: true)],
+);
 ```
 
-Each navigator needs its own observer (a router's `observers`). A route is
+Each navigator needs its own observer (a router's `observers`). With
+`tracksRouteTemplate: true` the observer also keeps the client's route
+template (`setRouteTemplate`) on the topmost page of its navigator (a
+`PageRoute`, past dialogs and sheets; a page whose name is no template leaves
+none), so events and feedback
+reports name the screen without the host setting a route. It is off by
+default: turn it on for one navigator, the one that holds the app's pages. A route is
 named by `describe`, when the host gives one — the place for a router's path
 pattern — else by its `settings.name` when that is a template
 (`NoticebirdClient.isRouteTemplate`: no query or fragment, no id-like
@@ -275,15 +331,17 @@ feedback to the API of its key; a start without a usable key answers
 `FeedbackDisabled`.
 
 The feedback sheet is the app's own. Take the moment when it opens — the
-route template, the context diagnostics (the `blocs` group) and when — so the
-report is about the screen the user was on, not the sheet; send it with the
-report:
+route template, the context diagnostics (the `blocs` group), the host's own
+diagnostics and when — so the report is about the screen and the state the
+user was in, not the sheet; send it with the report:
 
 ```dart
 import 'package:noticebird_flutter/feedback.dart';
 
 // When the sheet opens:
-final moment = Noticebird.feedbackMoment();
+final moment = Noticebird.feedbackMoment(
+  diagnostics: {'sync': {'pending': 3}},   // optional: content-free values
+);
 
 // When the user sends:
 final outcome = await Noticebird.captureFeedback(
@@ -293,13 +351,18 @@ final outcome = await Noticebird.captureFeedback(
   trigger: FeedbackTrigger.manual,         // optional: what opened the form
   screenshot: pngBytes,                    // optional: the picture's bytes
   contactEmail: email,                     // optional: only with consent
-  diagnostics: {'sync': {'pending': 3}},   // optional: content-free values
   relatedEventId: eventId,                 // optional: the crash it is about
 );
 ```
 
 The sheet's bloc or cubit implements `UntracedBloc`, so the user's typing
-leaves no breadcrumbs. The trail itself is taken at the capture.
+leaves no breadcrumbs. The trail itself is taken at the capture. The moment's
+route is the client's route template unless `feedbackMoment(routeTemplate:)`
+names one; it is checked where the report is built, by
+`NoticebirdClient.isRouteTemplate` and redacted as `setRouteTemplate`'s is: a
+raw route throws in a debug build and is left out in a release build.
+`Noticebird.captureFeedback` answers `FeedbackDisabled` while no client is
+attached.
 
 The client fills in the app, platform, locale, session, the user of `setUser`
 and the newest breadcrumbs, redacted as in an event. The message is redacted
@@ -308,19 +371,22 @@ never refused:
 
 - `screenshot` is PNG, JPEG or WebP by its bytes' signature; bytes of another
   type, or too many, are left out.
-- `diagnostics` are content-free values in named groups: a boolean, a finite
-  number, an enum (sent as its name), a `DateTime` (sent in UTC), a UUID or a
-  short token. A key or value the report does not take, and a group or value
-  past the limits, is left out.
+- the moment's `diagnostics` are content-free values in named groups: a
+  boolean, a finite number, an enum (sent as its name), a `DateTime` (sent in
+  UTC), a UUID or a short token. They follow the context groups, and a group
+  of a context group's name is left out; a key or value the report does not
+  take, and a group or value past the limits, is left out.
 
 The report then says what was left out in a diagnostics group of the
 client's own, `noticebird` (`dropped_values`, `screenshot_dropped`, and
-`moment_taken_at`, when the moment was taken); a host's group of that name is
+`moment_taken_at` for a moment passed in and taken before the capture); a
+host's group of that name is
 left out, and a debug build prints what went. `userContext` is what the app
 tells about its user on purpose; the client checks its shape
 (`FeedbackUserContext.check`) and sends it as given, and the platform drops
 what it may not keep. Under `regulatedStrict` no user, user context or locale
-is sent. The exact limits are in the skill's
+is sent; the reporter assertion, when one is configured, is the one identity
+such a report carries. The exact limits are in the skill's
 [privacy and limits reference](../skills/noticebird/reference/privacy-and-limits.md).
 
 `relatedEventId` names the crash a report is about: a `CaptureResult`'s
@@ -333,7 +399,7 @@ The outcome is sealed:
 |---|---|
 | `FeedbackDelivered` | The platform has the report; `ticket.display` (such as `FB-12`) is for the reporter, `verified` says whether the reporter assertion was accepted. `ticket` is `null` when the answer named none, such as for a resent report the platform stored already but can no longer compare, its screenshot deleted by retention. |
 | `FeedbackQueued` | It did not get through yet and waits in the offline store, under `reportId`. |
-| `FeedbackDisabled` | The client has no feedback config. |
+| `FeedbackDisabled` | No client is attached, or the client has no feedback config or no feedback transport (a start without a usable key). |
 | `FeedbackRejected` | Not delivered, and never will be: `reason` (a `FeedbackRejection`) says why, `path` names the value at fault. |
 
 `captureFeedback` never throws in a release build. A value the app passed that the report
@@ -513,11 +579,7 @@ the client delivers it as a schema-5 event with a `native` block.
 
 ### Opt in: one argument
 
-```yaml
-dependencies:
-  noticebird_flutter: ^0.4.0
-  noticebird_native: ^0.4.0
-```
+Add `noticebird_native` beside `noticebird_flutter`, at the same tag (§1).
 
 ```dart
 await NoticebirdFlutter.start(
@@ -611,10 +673,8 @@ crash lab with deliberate crashes for device and emulator smokes.
 `noticebird` is the pure-Dart client the start makes. A program outside
 Flutter, or a host that owns every part of the wiring, builds it itself:
 
-```yaml
-dependencies:
-  noticebird: ^0.4.0
-```
+It depends on `noticebird` and `noticebird_protocol` from the repository, at
+the release's tag (§1, without `noticebird_flutter`).
 
 ```dart
 final transport = CrashHttpTransport(publishableKey: 'noticebird_pk_...');
@@ -632,7 +692,7 @@ final client = NoticebirdClient(
       transport: FeedbackHttpTransport.of(transport),
     ),
   ),
-  transport: transport,
+  transport: transport, // optional: without one, crash uploads are off
 );
 Noticebird.attach(client);
 ```
@@ -640,8 +700,12 @@ Noticebird.attach(client);
 Such a host installs its own error handlers, calls `flush()` when it wants
 what waits sent (a kept feedback report is still drained when it is due),
 calls `reportNativeCrashes()` from the engine that shows the UI, and
-`close()` when it is done. `transport: const DiscardingCrashTransport()`
-uploads no crash events. The config's other knobs:
+`close()` when it is done. A client without a `transport` uploads no crash
+events: a capture is `discarded`, the stored queue is kept and native reports
+stay unclaimed, while the trail, the user and the route are still kept for
+feedback. A `FeedbackConfig` without a `transport` sends no feedback
+(`FeedbackDisabled`), and the rest of it is still checked. The config's other
+knobs:
 
 | Field | Default | Notes |
 |---|---|---|

@@ -13,6 +13,10 @@ instead**, whose `NoticebirdFlutter.start` makes this client and wires the
 error handlers, breadcrumbs, stores and delivery around it. Build the client
 yourself only outside Flutter, or when you own every part of that wiring.
 
+The packages are not on pub.dev: depend on them from the repository at the
+release's tag, as [Depend on the SDK](../../docs/integration.md#1-depend-on-the-sdk)
+shows.
+
 ## The client
 
 ```dart
@@ -27,7 +31,7 @@ final client = NoticebirdClient(
     // Optional: where an event that did not get through waits.
     offlineStore: FileCrashOfflineStore(directory),
   ),
-  transport: transport,
+  transport: transport, // optional: without one, crash uploads are off
 );
 Noticebird.attach(client); // the static facade, from anywhere
 ```
@@ -36,7 +40,10 @@ Consumers use only publishable ingest keys. The project, environment and
 privacy profile are derived by the service from the key and are never
 accepted as security claims in an event payload. The transport sends to
 `https://api.noticebird.com/v1/envelope` by default; pass `endpoint` only for
-a local, staging or self-hosted override.
+a local, staging or self-hosted override. A client without a `transport`
+uploads no crash events but still keeps the trail, the user and the route for
+feedback: a capture is `discarded`, the stored queue stays and native reports
+stay unclaimed, for a build that uploads.
 
 `captureException` returns a `CaptureResult`: its `outcome` is the
 `CaptureOutcome` (`sent`, `deduplicated`, `queued`, `dropped`, `ignored`,
@@ -73,8 +80,8 @@ NoticebirdConfig(
   ),
 );
 
-// When the feedback form opens:
-final moment = client.feedbackMoment();
+// When the feedback form opens, with the app's own diagnostics:
+final moment = client.feedbackMoment(diagnostics: {'sync': {'pending': 3}});
 // When the user sends it:
 final outcome = await client.captureFeedback(
   kind: FeedbackKind.bug,
@@ -89,12 +96,12 @@ switch (outcome) {
   case FeedbackRejected(:final reason):
     showFailure(reason);
   case FeedbackDisabled():
-    break; // no NoticebirdConfig.feedback
+    break; // no NoticebirdConfig.feedback, or one without a transport
 }
 ```
 
-The moment is what the report is about — the route template and the context
-diagnostics when the form opened; the client adds the app, platform,
+The moment is what the report is about — the route template, the context
+diagnostics and the app's own diagnostics when the form opened; the client adds the app, platform,
 session, user and the breadcrumb trail, and redacts the message on the
 device. `captureFeedback` never throws in a release build (a debug build
 throws an `ArgumentError` for input the report refuses, to show it). See

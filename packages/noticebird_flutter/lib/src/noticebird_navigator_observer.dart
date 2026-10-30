@@ -23,12 +23,11 @@ import 'package:noticebird/noticebird.dart';
 /// - else by its kind (`MaterialPageRoute`).
 ///
 /// With [tracksRouteTemplate], it also keeps the client's route template
-/// ([NoticebirdClient.setRouteTemplate]) on the topmost route of its
-/// navigator whose name is a template: a page's, not a dialog's or a
-/// sheet's, so a feedback sheet opened over a screen leaves the screen's
-/// template for the report's moment. Turn it on for one navigator, the one
-/// that holds the app's pages; with none whose name is a template, the
-/// client has no route template.
+/// ([NoticebirdClient.setRouteTemplate]) on the topmost page of its
+/// navigator (a `PageRoute`, past dialogs and sheets), so a feedback sheet
+/// opened over a screen leaves the screen's template for the report's
+/// moment. A topmost page whose name is no template leaves the client with
+/// none. Turn it on for one navigator, the one that holds the app's pages.
 ///
 /// The crumbs go to [client], or the client attached to `Noticebird` when
 /// there is none; before one is attached they go nowhere.
@@ -99,11 +98,13 @@ class NoticebirdNavigatorObserver extends NavigatorObserver {
       final reporter = _client ?? Noticebird.instance;
       if (reporter == null) return;
       if (tracksRouteTemplate) {
+        // The topmost page, past dialogs and sheets: its template, or none.
+        final page = _stack.reversed
+            .whereType<PageRoute<dynamic>>()
+            .firstOrNull;
+        final name = page == null ? null : _name(page);
         reporter.setRouteTemplate(
-          _stack.reversed
-              .map(_name)
-              .where(NoticebirdClient.isRouteTemplate)
-              .firstOrNull,
+          name != null && NoticebirdClient.isRouteTemplate(name) ? name : null,
         );
       }
       reporter.addBreadcrumb(

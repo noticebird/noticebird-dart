@@ -274,7 +274,7 @@ final class NoticebirdClient {
     }
     Map<String, Map<String, Object?>> context = const {};
     try {
-      context = Map.unmodifiable(
+      context = _snapshot(
         _config.feedback?.contextDiagnostics?.call() ?? const {},
       );
     } catch (_) {
@@ -284,9 +284,18 @@ final class NoticebirdClient {
       takenAt: takenAt,
       routeTemplate: routeTemplate ?? _routeTemplate,
       contextDiagnostics: context,
-      diagnostics: diagnostics,
+      // Copied, so a change to the host's map after the moment is not in it.
+      diagnostics: _snapshot(diagnostics),
     );
   }
+
+  /// [groups] as they are now: a change to them later is not in the copy.
+  static Map<String, Map<String, Object?>> _snapshot(
+    Map<String, Map<String, Object?>> groups,
+  ) => Map.unmodifiable({
+    for (final MapEntry(key: name, value: group) in groups.entries)
+      name: Map<String, Object?>.unmodifiable(group),
+  });
 
   /// Sends a user's feedback report — a bug, an idea, anything else — with
   /// [message] in the user's words, and says what became of it. Its types
@@ -326,10 +335,11 @@ final class NoticebirdClient {
   ///   ([eventIdOf]).
   ///
   /// A value the host passed that the report refuses — an empty message, a
-  /// contact address, a user context, a related event id, a raw route in
-  /// the moment — throws an
+  /// contact address, a user context, a related event id — throws an
   /// [ArgumentError] in a debug build and is
-  /// [FeedbackRejection.invalidInput] in a release build; nothing is sent.
+  /// [FeedbackRejection.invalidInput] in a release build; nothing is sent. A
+  /// raw route in the moment throws in a debug build too, and is left out
+  /// in a release build, the report sent without it.
   /// What the client fills in itself never is: a locale or route template
   /// the report refuses is left out, and a session id or app or platform
   /// metadata it refuses is [FeedbackRejection.failed]. Otherwise it never

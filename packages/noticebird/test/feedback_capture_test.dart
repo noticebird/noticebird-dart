@@ -1100,6 +1100,23 @@ void main() {
       expect(sent()['routeTemplate'], '/invite/[REDACTED]');
     });
 
+    test('a moment keeps the host\'s diagnostics as they were', () async {
+      final reporter = client();
+      final sync = <String, Object?>{'pending': 1};
+      final moment = reporter.feedbackMoment(diagnostics: {'sync': sync});
+      sync['pending'] = 2;
+
+      await reporter.captureFeedback(
+        kind: FeedbackKind.bug,
+        message: 'x',
+        moment: moment,
+      );
+
+      expect(sent()['diagnostics'], {
+        'sync': {'pending': 1},
+      });
+    });
+
     test(
       'context groups that throw add nothing, and the report goes',
       () async {

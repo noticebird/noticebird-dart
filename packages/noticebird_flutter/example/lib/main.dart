@@ -39,7 +39,11 @@ class ExampleApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) => MaterialApp(
     title: 'noticebird example',
-    navigatorObservers: [NoticebirdNavigatorObserver(client: reporter)],
+    navigatorObservers: [
+      // Breadcrumbs of every step, and the client's route template on the
+      // topmost page, so a feedback report knows the screen it is about.
+      NoticebirdNavigatorObserver(client: reporter, tracksRouteTemplate: true),
+    ],
     theme: ThemeData(useMaterial3: true, colorSchemeSeed: Colors.indigo),
     home: HomePage(reporter: reporter),
   );

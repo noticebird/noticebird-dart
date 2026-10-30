@@ -17,10 +17,13 @@ import 'noticebird_client.dart';
 /// call sites in a host app can write `Noticebird.captureException(...)`
 /// instead of resolving the instance from DI at every call site.
 ///
-/// Every member no-ops (or returns `null`/empty) when no client is attached
-/// yet — e.g. before bootstrap reaches [attach], or in builds/tests that
-/// never attach one at all — matching [NoticebirdClient]'s own rule that
-/// reporting must never affect the host application.
+/// Every member no-ops (or answers `null` or empty) when no client is
+/// attached yet — e.g. before bootstrap reaches [attach], or in builds and
+/// tests that never attach one at all — matching [NoticebirdClient]'s own
+/// rule that reporting must never affect the host application. The one
+/// exception is [captureFeedback], which answers [FeedbackDisabled]: its
+/// caller switches on a sealed outcome to tell the user what became of the
+/// report, and "no client" is that outcome.
 final class Noticebird {
   Noticebird._();
 

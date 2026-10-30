@@ -7,11 +7,10 @@ uncaught Objective-C and JVM exceptions, watchdog and ANR kills, foreground
 low-memory kills — delivered to the Noticebird platform as ordinary
 events on the next launch.
 
-```yaml
-dependencies:
-  noticebird_flutter: ^0.4.0
-  noticebird_native: ^0.4.0
-```
+Add it beside `noticebird_flutter`, from the repository at the same tag (the
+packages are not on pub.dev; see
+[Depend on the SDK](../../docs/integration.md#1-depend-on-the-sdk)), and pass
+it to the start:
 
 ```dart
 await NoticebirdFlutter.start(

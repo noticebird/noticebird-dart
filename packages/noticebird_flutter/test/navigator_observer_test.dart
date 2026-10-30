@@ -6,6 +6,27 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:noticebird_flutter/noticebird_flutter.dart';
 
+final class _Sheet extends PopupRoute<void> {
+  @override
+  Color? get barrierColor => null;
+
+  @override
+  bool get barrierDismissible => true;
+
+  @override
+  String? get barrierLabel => null;
+
+  @override
+  Duration get transitionDuration => Duration.zero;
+
+  @override
+  Widget buildPage(
+    BuildContext context,
+    Animation<double> a,
+    Animation<double> b,
+  ) => const SizedBox();
+}
+
 final class _Route extends PageRouteBuilder<void> {
   _Route(String? name)
     : super(
@@ -124,7 +145,7 @@ void main() {
     test('the client\'s route follows the topmost page, past a sheet', () {
       final home = _Route('/home');
       final list = _Route('/lists/:listId');
-      final sheet = _Route(null);
+      final sheet = _Sheet();
 
       observer.didPush(home, null);
       observer.didPush(list, home);
@@ -139,6 +160,12 @@ void main() {
       expect(client.feedbackMoment().routeTemplate, '/home');
 
       observer.didReplace(newRoute: _Route('/l/abc?q=1'), oldRoute: home);
+      expect(client.feedbackMoment().routeTemplate, isNull);
+
+      // A page without a template is no template, not the one below it.
+      observer
+        ..didReplace(newRoute: _Route('/home'), oldRoute: null)
+        ..didPush(_Route(null), null);
       expect(client.feedbackMoment().routeTemplate, isNull);
     });
 

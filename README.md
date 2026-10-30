@@ -13,7 +13,16 @@ Future<void> main() async {
   );
   runApp(const MyApp());
 }
+
+// The navigator that holds the app's pages:
+MaterialApp(
+  navigatorObservers: [NoticebirdNavigatorObserver(tracksRouteTemplate: true)],
+);
 ```
+
+The packages are not on pub.dev: an app depends on them from this repository
+at a release's tag, as [Depend on the SDK](docs/integration.md#1-depend-on-the-sdk)
+shows.
 
 This workspace contains the Noticebird packages:
 

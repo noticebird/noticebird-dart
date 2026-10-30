@@ -22,7 +22,7 @@ description: >
   contextDiagnostics, reporterAssertion, requireVerified, onSettled, onFeedbackSettled,
   FeedbackSettled, FeedbackOfflineStore, FileFeedbackOfflineStore, pendingFeedbackCount,
   shouldCapture, filtered, hostPlatformMetadata, processSessionId,
-  DiscardingCrashTransport, uploadCrashes, addBreadcrumb, TypedBreadcrumb,
+  uploadCrashes, platformReadFailures, PlatformReadFailure, tracksRouteTemplate, addBreadcrumb, TypedBreadcrumb,
   BreadcrumbCategory, AllowedTag, setRouteTemplate, isRouteTemplate, setUser, setUserId,
   CrashPrivacyProfile, regulatedStrict, CrashHttpTransport, noticebird_pk_, crash_pk_,
   CrashOfflineStore, FileCrashOfflineStore, flush, close, noticebird_native,
@@ -85,15 +85,27 @@ Future<void> main() async {
   );
   runApp(const MyApp());
 }
+
+// The navigator that holds the app's pages: breadcrumbs, and the screen's route.
+MaterialApp(navigatorObservers: [NoticebirdNavigatorObserver(tracksRouteTemplate: true)]);
 ```
+
+The packages are not on pub.dev: the app depends on `noticebird_flutter` (and
+`noticebird_native`) from the repository at the release's tag, with `noticebird` and
+`noticebird_protocol` at the same tag as `dependency_overrides` — the YAML is in the
+repository's `docs/integration.md`, §1 "Depend on the SDK".
 
 The start makes the client and attaches it to the `Noticebird` facade, installs
 `FlutterError.onError` and `PlatformDispatcher.onError` (each chained to the one it
 replaces), sets `Bloc.observer`, fills each feedback report's locale and `blocs`
 diagnostics group, keeps unsent events and reports in the support directory, and sends
 what waits at start, on resume and when the connection returns. A second `start` answers
-the first. It answers a `NoticebirdFlutter`: its `client`, its `blocObserver`, and
-`close()`, which puts back what it installed (each only while it is still the start's).
+the first. It answers a `NoticebirdFlutter`: its `client`, its `blocObserver`, its
+`platformReadFailures` (each `PlatformReadFailure` a read it went on without —
+`packageInfo` or `supportDirectory` — with its `error` and `stackTrace`, for a host that
+reports them), and `close()`, which puts back what it installed (each only while it is
+still the start's) and detaches the client; the host's `httpClient` stays open. Do not use
+the old `client` after `close()`: a later start makes its own, on the same stores.
 
 The other options: `endpoint` and `httpClient` (where and over what it sends),
 `uploadCrashes: false` (crash events `discarded`, feedback still sent), `privacyProfile`,
@@ -157,7 +169,7 @@ without waiting. Pass it as a feedback report's `relatedEventId`.
 | `queued` | Transport failed; the event sits in the retry queue for the next flush. |
 | `dropped` | Could not be captured at all — protocol violation in config metadata, `maxPendingEvents: 0`, or the platform refused the event for good (see `CrashTransport.send`; a flush drops it too). |
 | `ignored` | The host's `shouldCapture` declined the error. |
-| `discarded` | Crash uploads are off (`uploadCrashes: false`, a key that cannot work, or a `DiscardingCrashTransport`): no event was made. |
+| `discarded` | Crash uploads are off (`uploadCrashes: false`, a key that cannot work, or a client built without a `transport`): no event was made. |
 
 ### One report per failure: one filter, one bypass
 
@@ -247,7 +259,7 @@ set here is also whose reporter assertion the client holds (*Feedback*).
 Navigation becomes breadcrumbs with an observer on each navigator:
 
 ```dart
-MaterialApp(navigatorObservers: [NoticebirdNavigatorObserver()]);
+MaterialApp(navigatorObservers: [NoticebirdNavigatorObserver(tracksRouteTemplate: true)]);
 GoRouter(observers: [NoticebirdNavigatorObserver(describe: (route) => …)], …);
 ```
 
@@ -259,7 +271,12 @@ so an app that pushes such names gives a `describe`.
 What `describe` answers leaves the device: a template or a kind, never a value the user
 typed.
 
-The route events and reports carry is the one the host sets:
+The route events and reports carry is the client's route template. With
+`tracksRouteTemplate: true` the observer keeps it on the topmost page of its navigator
+(a `PageRoute`, past dialogs and sheets), so a feedback sheet opened over a screen leaves
+the screen's template for the report; a page whose name is no template leaves none. It is off by default:
+turn it on for one navigator, the one that holds the app's pages. Without it, the host
+sets the route itself:
 
 ```dart
 Noticebird.setRouteTemplate('/lists/:listId');   // template only
@@ -334,14 +351,16 @@ never deduplicated or filtered. Errors the app catches stay `captureException`.
 The sheet is the app's own; the SDK has no widgets. Its types live in their own library,
 so they cannot clash with an app's own feedback classes; import it where you mean them.
 Take the **moment** when the sheet opens — the route template, the context diagnostics
-(the live blocs) and when — so the report is about the screen the user was on, not the
-sheet, and send it with the report:
+(the live blocs), your own diagnostics and when — so the report is about the screen and
+the state the user was in, not the sheet, and send it with the report:
 
 ```dart
 import 'package:noticebird_flutter/feedback.dart';
 
 // initState of the sheet:
-_moment = Noticebird.feedbackMoment();
+_moment = Noticebird.feedbackMoment(
+  diagnostics: {'sync': {'pending': 3, 'online': false}}, // content-free values only
+);
 
 // On send:
 final outcome = await Noticebird.captureFeedback(
@@ -351,7 +370,6 @@ final outcome = await Noticebird.captureFeedback(
   trigger: FeedbackTrigger.manual,            // optional: manual, shake, errorScreen, other
   screenshot: pngBytes,                       // optional: PNG, JPEG or WebP bytes
   contactEmail: consented ? email : null,     // only with the user's consent
-  diagnostics: {'sync': {'pending': 3, 'online': false}}, // content-free values only
   userContext: {'plan': 'pro'},               // what the app tells about its user
   relatedEventId: eventId,                    // the crash it is about
 );
@@ -363,21 +381,26 @@ the capture. `relatedEventId` is a `CaptureResult.eventId`, or
 `await Noticebird.eventIdOf(error)` for the error an error screen shows.
 
 The client fills in the app, platform, locale, session, the `setUser` user and the newest
-breadcrumbs (redacted as in an event; a report does not count them as sent). A start
-without a usable key, or a client without a `FeedbackConfig`, answers `FeedbackDisabled`.
+breadcrumbs (redacted as in an event; a report does not count them as sent). The moment's
+route is checked where the report is built, by `isRouteTemplate`, and redacted as
+`setRouteTemplate`'s is: a raw route given to `feedbackMoment(routeTemplate:)` throws in a
+debug build and is left out in release. `FeedbackDisabled` comes from a start without a
+usable key, a client without a `FeedbackConfig` or one without a `transport`, and the
+facade while no client is attached.
 
 | `FeedbackOutcome` | Meaning |
 |---|---|
 | `FeedbackDelivered(ticket, verified)` | The platform has it. Show `ticket.display` (such as `FB-12`) as it is; `ticket` is `null` when the answer named none, such as for a resent report the platform stored already but can no longer compare. |
 | `FeedbackQueued(reportId)` | Not through yet; kept in the store and sent when due. |
-| `FeedbackDisabled` | No feedback config (no usable key). |
+| `FeedbackDisabled` | No client attached, no feedback config, or one without a transport (no usable key). |
 | `FeedbackRejected(reason, path, code)` | Never delivered. `reason` is a `FeedbackRejection`: `invalidInput`, `unverified`, `strictProject`, `clock`, `notAccepted`, `noStore`, `evicted`, `expired`, `refused`, `failed`. |
 
-**Sanitised, never refused.** What you pass as `screenshot` and `diagnostics` never costs
+**Sanitised, never refused.** The `screenshot` and the moment's `diagnostics` never cost
 the report: a screenshot of no known type or too large, and a diagnostics key, value, group
 or size the report does not take, is left out, and the report says so in the client's own
 diagnostics group `noticebird` (`dropped_values`, `screenshot_dropped`, and
-`moment_taken_at`); a debug build prints it. Do not name a group `noticebird`: it is left
+`moment_taken_at` for a moment passed in and taken before the capture); a debug build
+prints it. Do not name a group `noticebird`, or after a context group (`blocs`): it is left
 out. An enum goes as its name, a `DateTime` in UTC. What *is* refused — an empty message, a
 contact address, a user context, a related event id — throws `ArgumentError` in a **debug
 build only**, and is `FeedbackRejected(invalidInput, path)` in release. Check a form's
@@ -402,7 +425,8 @@ itself. Each kept report's end goes to `onFeedbackSettled` as a
 - The message is redacted on the device like an exception message.
 - `userContext` is checked for its shape only and sent as given: the platform drops the
   credential and health values it may not keep. Still send only what you mean to.
-- Under `regulatedStrict` no `user`, no `userContext` and no locale are sent.
+- Under `regulatedStrict` no `user`, no `userContext` and no locale are sent; the reporter
+  assertion, when one is configured, is the one identity such a report carries.
 - `contactEmail` is the user's consent to be contacted: pass it only when they gave it.
 - `diagnostics` are content-free: booleans, numbers, timestamps, UUIDs and short tokens,
   never free text.
@@ -413,11 +437,12 @@ The exact limits are in `reference/privacy-and-limits.md`.
 
 The start sets `Bloc.observer` to bloc's `MultiBlocObserver` of its
 `NoticebirdBlocObserver` and the observer it found. It turns every bloc event and state
-change into a breadcrumb named by runtime types (never content), reports `onError` as
-`handled: true` — the bloc caught it into an error state, so by definition it did not
-crash the app — and counts the live blocs per type for each feedback report's `blocs`
+change into a breadcrumb named by runtime types (never content), captures a bloc's
+`addError` as `handled: true`, and counts the live blocs per type for each feedback report's `blocs`
 group. The capture goes through `shouldCapture`, so an error the host reports elsewhere
-is not reported here again.
+is not reported here again. An error thrown in a bloc's event handler reaches `onError`
+too, and bloc rethrows it after: the platform handler's later capture of it is
+deduplicated against the handled one.
 
 A host with an observer of its own sets it after the start, beside the SDK's:
 
@@ -524,7 +549,7 @@ final client = NoticebirdClient(
     app: const AppMetadata(name: 'test', version: '1.0.0', build: '1', release: 'test@1.0.0+1'),
     feedback: FeedbackConfig(transport: FakeFeedbackTransport()), // when feedback is tested
   ),
-  transport: FakeTransport(),
+  transport: FakeTransport(), // or none: crash uploads off, captures `discarded`
 );
 Noticebird.attach(client);
 addTearDown(Noticebird.detach);

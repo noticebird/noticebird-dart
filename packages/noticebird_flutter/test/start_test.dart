@@ -151,7 +151,8 @@ void main() {
   });
 
   test('keeps an event and a feedback report in the support directory for '
-      'the next start, which sends them', () async {
+      'the next start, which sends the event, and keeps the report until it '
+      'is due', () async {
     final first = await start();
     offline = true;
     await Noticebird.captureException(StateError('boom'), _stack);

@@ -3,8 +3,9 @@
 - Moves with `noticebird` 0.4.0 and the new `noticebird_flutter` 0.4.0; no
   change of its own. `NoticebirdFlutter.start(nativeCrashes:
   NativeCrashCapture())` delivers the reports of earlier runs, in place of
-  `noticebird`'s removed `run()`. While crash uploads are off, the client
-  claims no report, so a later build that uploads still sends them.
+  `noticebird`'s removed `run()`. While crash uploads are off (a client
+  without a transport), the client claims no report, so a later build that
+  uploads still sends them.
 
 ## 0.3.0
 

@@ -320,6 +320,9 @@ final class NoticebirdFlutter {
         _started = null;
         _starting = null;
       }
+      // The HTTP client the transport made for itself; one the host passed
+      // stays the host's.
+      ingest?.close();
     }
 
     return _started = started = NoticebirdFlutter._(

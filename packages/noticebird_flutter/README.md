@@ -3,10 +3,9 @@
 Noticebird for a Flutter app: privacy-safe crash reporting, breadcrumbs,
 offline delivery and user feedback, started with one call.
 
-```yaml
-dependencies:
-  noticebird_flutter: ^0.4.0
-```
+The packages are not on pub.dev: depend on them from the repository at the
+release's tag, as [Depend on the SDK](../../docs/integration.md#1-depend-on-the-sdk)
+shows.
 
 ## The whole integration
 
@@ -34,10 +33,16 @@ itself. It never fails on the platform and never hangs: a plugin that throws
 or does not answer within `NoticebirdFlutter.platformReadTimeout` is done
 without.
 
-Navigation becomes breadcrumbs with an observer on each navigator:
+Navigation becomes breadcrumbs with an observer on each navigator; on the
+one that holds the app's pages, `tracksRouteTemplate: true` also keeps the
+client's route template on the topmost page (past dialogs and sheets; a
+page whose name is no template leaves none), so events and feedback reports name their screen
+without the host setting a route:
 
 ```dart
-MaterialApp(navigatorObservers: [NoticebirdNavigatorObserver()]);
+MaterialApp(
+  navigatorObservers: [NoticebirdNavigatorObserver(tracksRouteTemplate: true)],
+);
 ```
 
 A route is named by its `settings.name` when that is a template
@@ -50,14 +55,16 @@ routes with `describe`.
 ### A feedback sheet
 
 The sheet is the app's own; the SDK has no widgets. Take the moment when the
-sheet opens, so the report is about the screen the user was on, and send it
-with the report:
+sheet opens, so the report is about the screen and the state the user was in,
+and send it with the report. The app's own diagnostics go into the moment:
 
 ```dart
 import 'package:noticebird_flutter/feedback.dart';
 
 // When the sheet opens:
-final moment = Noticebird.feedbackMoment();
+final moment = Noticebird.feedbackMoment(
+  diagnostics: {'sync': {'pending': 3}}, // optional: content-free values
+);
 
 // When the user sends:
 final outcome = await Noticebird.captureFeedback(
@@ -78,8 +85,8 @@ class FeedbackFormCubit extends Cubit<FeedbackFormState>
 
 `captureFeedback` never throws in a release build (in a debug build, input
 the report refuses throws an `ArgumentError`, to show it); its
-`FeedbackOutcome` says what became of the
-report. The feedback types are in `package:noticebird_flutter/feedback.dart`,
+`FeedbackOutcome` says what became of the report, `FeedbackDisabled` while
+no client is attached. The feedback types are in `package:noticebird_flutter/feedback.dart`,
 apart from the main library, so they cannot clash with an app's own.
 
 ## The start's options
@@ -98,9 +105,13 @@ feedback; a debug build prints why.
 | What it installs | `installErrorHandlers`, `observeBlocs`, `blocObserver` |
 | Engine | `background` |
 
-`start` answers a `NoticebirdFlutter` with the `client`, the `blocObserver`
-and `close()`, which puts back what the start installed (only while it is
-still the start's) and detaches the client. A second `start`, also one made
+`start` answers a `NoticebirdFlutter` with the `client`, the `blocObserver`,
+the `platformReadFailures` (each `PlatformReadFailure` a read it went on
+without — `packageInfo` or `supportDirectory` — with its `error` and
+`stackTrace`, for a host that reports them) and `close()`, which puts back
+what the start installed (only while it is still the start's) and detaches
+the client; the `httpClient` stays the host's. A later `start` makes a client
+of its own on the same stores: do not use the old `client` after `close()`. A second `start`, also one made
 while the first is starting, answers the first. It throws an `ArgumentError`
 only for an argument no start can work with, such as an `appName` the
 protocol refuses or an unencrypted store under `regulatedStrict`.
