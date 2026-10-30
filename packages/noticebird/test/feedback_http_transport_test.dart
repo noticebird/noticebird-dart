@@ -1,6 +1,6 @@
 // FeedbackHttpTransport against a fake HTTP client: the error table of the
 // feedback protocol row by row, the upload rules, the lenient reading of an
-// answer, the API it derives from the crash endpoint, and the conformance
+// answer, the routes below the crash transport's API URL, and the conformance
 // kit's HTTP pairs replayed against it.
 
 import 'dart:async';
@@ -36,11 +36,11 @@ void main() {
 
   FeedbackHttpTransport transport(
     FutureOr<http.Response> Function(http.Request request) answer, {
-    Uri? endpoint,
+    Uri? apiUrl,
     String key = _key,
   }) => FeedbackHttpTransport.of(
     CrashHttpTransport(
-      endpoint: endpoint,
+      apiUrl: apiUrl ?? CrashHttpTransport.hostedApiUrl,
       publishableKey: key,
       httpClient: MockClient((request) async {
         sent = request;
@@ -539,7 +539,11 @@ void main() {
     test('declares its length', () async {
       final client = _RecordingClient();
       final delivery = await FeedbackHttpTransport.of(
-        CrashHttpTransport(publishableKey: _key, httpClient: client),
+        CrashHttpTransport(
+          apiUrl: CrashHttpTransport.hostedApiUrl,
+          publishableKey: _key,
+          httpClient: client,
+        ),
       ).upload(apiSlot, _bytes);
       expect(delivery, const FeedbackAttachmentStored());
       expect(client.request!.contentLength, _bytes.length);
@@ -547,8 +551,8 @@ void main() {
 
     test('refuses a URL that is not https, unless to a local http API '
         'itself', () async {
-      final local = Uri.parse('http://localhost:8080/v1/envelope');
-      for (final (endpoint, url) in [
+      final local = Uri.parse('http://localhost:8080');
+      for (final (apiUrl, url) in [
         (null, 'http://api.noticebird.com/v1/feedback/x/attachments/0'),
         (null, 'ftp://api.noticebird.com/upload'),
         (null, 'https:upload'),
@@ -558,7 +562,7 @@ void main() {
         expect(
           await transport(
             (_) => http.Response('', 204),
-            endpoint: endpoint,
+            apiUrl: apiUrl,
           ).upload(slot(url), _bytes),
           const FeedbackFinalRefusal(code: 'invalid_upload_url'),
           reason: url,
@@ -567,10 +571,7 @@ void main() {
       expect(sent, isNull);
 
       final delivery =
-          await transport(
-            (_) => http.Response('', 204),
-            endpoint: local,
-          ).upload(
+          await transport((_) => http.Response('', 204), apiUrl: local).upload(
             slot('http://localhost:8080/v1/feedback/x/attachments/0'),
             _bytes,
           );
@@ -580,22 +581,18 @@ void main() {
 
     test('through a proxy, the relative uploadUrl keeps its path prefix and '
         'the key', () async {
-      for (final endpoint in [
-        'https://proxy.example.com/noticebird/v1/envelope',
-        'http://10.0.2.2:8080/v1/envelope',
-        'http://localhost:8080/api/v1/envelope',
+      for (final api in [
+        'https://proxy.example.com/noticebird',
+        'http://10.0.2.2:8080',
+        'http://localhost:8080/api',
       ]) {
-        final api = endpoint.substring(
-          0,
-          endpoint.length - '/v1/envelope'.length,
-        );
         final uploadUrl = Uri.parse(
           '$api/v1/feedback/$_reportId/attachments/0',
         );
         final requests = <http.Request>[];
         final proxied = FeedbackHttpTransport.of(
           CrashHttpTransport(
-            endpoint: Uri.parse(endpoint),
+            apiUrl: Uri.parse(api),
             publishableKey: _key,
             httpClient: MockClient((request) async {
               requests.add(request);
@@ -623,18 +620,18 @@ void main() {
               uploadHeaders: const {'content-type': 'image/png'},
             ),
           ),
-          reason: endpoint,
+          reason: api,
         );
         expect(
           await proxied.upload((delivery as FeedbackSlotPending).slot, _bytes),
           const FeedbackAttachmentStored(),
-          reason: endpoint,
+          reason: api,
         );
         final [slotRequest, put] = requests;
-        expect(slotRequest.url, uploadUrl, reason: endpoint);
+        expect(slotRequest.url, uploadUrl, reason: api);
         expect(put.method, 'PUT');
-        expect(put.url, uploadUrl, reason: endpoint);
-        expect(put.headers['authorization'], 'Bearer $_key', reason: endpoint);
+        expect(put.url, uploadUrl, reason: api);
+        expect(put.headers['authorization'], 'Bearer $_key', reason: api);
         expect(put.headers['content-type'], 'image/png');
         expect(put.bodyBytes, _bytes);
       }
@@ -729,22 +726,20 @@ void main() {
   });
 
   group('the API', () {
-    test('is the crash endpoint without /v1/envelope', () async {
-      for (final (endpoint, api) in [
+    test('is the routes below the crash transport\'s API URL', () async {
+      for (final (apiUrl, api) in [
         (null, _api),
-        (CrashHttpTransport.hostedEndpoint, _api),
+        (CrashHttpTransport.hostedApiUrl, _api),
+        (Uri.parse('https://api.noticebird.com/'), _api),
         (
-          Uri.parse('https://proxy.example.com/noticebird/v1/envelope'),
+          Uri.parse('https://proxy.example.com/noticebird'),
           'https://proxy.example.com/noticebird',
         ),
-        (
-          Uri.parse('http://localhost:8080/v1/envelope'),
-          'http://localhost:8080',
-        ),
+        (Uri.parse('http://localhost:8080'), 'http://localhost:8080'),
       ]) {
         final answered = transport(
           (_) => json(200, {'uploaded': true}),
-          endpoint: endpoint,
+          apiUrl: apiUrl,
         );
         await answered.submit('{}');
         expect(sent!.url, Uri.parse('$api/v1/feedback'));
@@ -752,27 +747,6 @@ void main() {
         expect(
           sent!.url,
           Uri.parse('$api/v1/feedback/$_reportId/attachments/0'),
-        );
-      }
-    });
-
-    test('refuses an endpoint that is not a crash endpoint', () {
-      for (final endpoint in [
-        'https://api.noticebird.com',
-        'https://api.noticebird.com/v1/feedback',
-        'https://api.noticebird.com/v1/envelope/',
-        'ftp://api.noticebird.com/v1/envelope',
-        '/v1/envelope',
-      ]) {
-        final crash = CrashHttpTransport(
-          endpoint: Uri.parse(endpoint),
-          publishableKey: _key,
-          httpClient: MockClient((_) async => http.Response('', 204)),
-        );
-        expect(
-          () => FeedbackHttpTransport.of(crash),
-          throwsArgumentError,
-          reason: endpoint,
         );
       }
     });

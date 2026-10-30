@@ -25,6 +25,7 @@ void main() {
     fakeAsync((async) {
       NoticebirdFlutter? started;
       NoticebirdFlutter.start(
+        apiUrl: CrashHttpTransport.hostedApiUrl,
         publishableKey: 'noticebird_pk_example00000000000000000',
         appName: 'example_app',
         uploadCrashes: false,

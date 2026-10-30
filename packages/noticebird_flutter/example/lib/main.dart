@@ -7,6 +7,9 @@ import 'package:noticebird_flutter/noticebird_flutter.dart';
 /// Noticebird platform. Override it with
 /// `--dart-define=NOTICEBIRD_PUBLISHABLE_KEY=noticebird_pk_...`. Only
 /// publishable keys belong in a client; never embed a secret key.
+///
+/// The example sends to the hosted API; a staging or self-hosted API is
+/// another `apiUrl`, its base (`https://api.example.com`).
 const _publishableKey = String.fromEnvironment(
   'NOTICEBIRD_PUBLISHABLE_KEY',
   defaultValue: 'noticebird_pk_example00000000000000000',
@@ -18,6 +21,7 @@ Future<void> main() async {
   // resume and when the connection returns. It never throws on the
   // platform, and the client never rethrows into the app.
   final noticebird = await NoticebirdFlutter.start(
+    apiUrl: CrashHttpTransport.hostedApiUrl,
     publishableKey: _publishableKey,
     appName: 'noticebird_example',
   );

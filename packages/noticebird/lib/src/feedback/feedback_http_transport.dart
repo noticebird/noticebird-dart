@@ -11,13 +11,12 @@ import '../protocol/crash_http_transport.dart';
 import '../protocol/http_answer.dart';
 import 'feedback_transport.dart';
 
-/// The [FeedbackTransport] to the hosted API, over `package:http`, made from
-/// the app's [CrashHttpTransport] with [FeedbackHttpTransport.of], so the
-/// key, the endpoint and the HTTP client are configured once.
+/// The [FeedbackTransport] to a Noticebird API, over `package:http`, made
+/// from the app's [CrashHttpTransport] with [FeedbackHttpTransport.of], so
+/// the key, the API and the HTTP client are configured once.
 ///
-/// It sends to the API the crash endpoint belongs to, whose `/v1/envelope`
-/// it replaces with the feedback routes, so a proxy's path prefix stays.
-/// Every request carries the publishable key as
+/// It sends to the feedback routes below the crash transport's API URL, so
+/// a proxy's path prefix stays. Every request carries the publishable key as
 /// `Authorization: Bearer <key>`, and none of its methods throws.
 ///
 /// The upload goes where the slot's answer says: its `uploadUrl`, absolute
@@ -45,13 +44,10 @@ import 'feedback_transport.dart';
 final class FeedbackHttpTransport implements FeedbackTransport {
   /// The feedback transport to the API [crash] sends to, with its key and
   /// over its HTTP client, which stays [crash]'s to close.
-  ///
-  /// Throws an [ArgumentError] for a crash endpoint that is not an `http` or
-  /// `https` URL ending in `/v1/envelope`.
   factory FeedbackHttpTransport.of(CrashHttpTransport crash) {
     final connection = crashHttpConnection(crash);
     return FeedbackHttpTransport._(
-      _apiOf(connection.endpoint),
+      connection.apiUrl,
       connection.publishableKey,
       connection.httpClient,
     );
@@ -72,29 +68,11 @@ final class FeedbackHttpTransport implements FeedbackTransport {
   /// The wait of a `429` without a readable `Retry-After`.
   static const _defaultRetryAfter = Duration(seconds: 60);
 
-  static const _envelopeRoute = '/v1/envelope';
-
   final Uri _base;
 
   /// Checked by the crash transport, before it opened a client.
   final String _publishableKey;
   final http.Client _httpClient;
-
-  static Uri _apiOf(Uri endpoint) {
-    if (!(endpoint.isScheme('https') || endpoint.isScheme('http')) ||
-        endpoint.host.isEmpty ||
-        !endpoint.path.endsWith(_envelopeRoute)) {
-      throw ArgumentError.value(
-        endpoint,
-        'endpoint',
-        'The crash endpoint is an http or https URL ending in $_envelopeRoute',
-      );
-    }
-    final path = endpoint.path;
-    return endpoint.replace(
-      path: path.substring(0, path.length - _envelopeRoute.length),
-    );
-  }
 
   @override
   Future<FeedbackDelivery> requestSlot(
@@ -179,7 +157,7 @@ final class FeedbackHttpTransport implements FeedbackTransport {
     }
   }
 
-  Uri _route(String route) => _base.replace(path: '${_base.path}$route');
+  Uri _route(String route) => apiRoute(_base, route);
 
   Map<String, String> get _jsonHeaders => {
     'authorization': 'Bearer $_publishableKey',

@@ -22,6 +22,7 @@ import 'noticebird_bloc_observer.dart';
 /// ```dart
 /// Future<void> main() async {
 ///   await NoticebirdFlutter.start(
+///     apiUrl: CrashHttpTransport.hostedApiUrl,
 ///     publishableKey: const String.fromEnvironment('NOTICEBIRD_KEY'),
 ///     appName: 'my_app',
 ///   );
@@ -78,13 +79,15 @@ final class NoticebirdFlutter {
   ///
   /// It makes the client and attaches it to the `Noticebird` facade, and:
   ///
-  /// - sends crash events and feedback to the API of [publishableKey] (a
-  ///   publishable key, `<prefix>_pk_…`), at [endpoint] (its `/v1/envelope`
-  ///   URL; by default the hosted API), over [httpClient] when the host
-  ///   has its own. Crash events go only while [uploadCrashes]; feedback
-  ///   goes either way, since a user asked for it. A [publishableKey] that
-  ///   is empty or malformed, as from a missing `--dart-define`, starts a
-  ///   client that uploads nothing and sends no feedback;
+  /// - sends crash events and feedback to the API at [apiUrl] (its base,
+  ///   such as `CrashHttpTransport.hostedApiUrl`; the SDK adds its own
+  ///   routes) with [publishableKey] (a publishable key, `<prefix>_pk_…`),
+  ///   over [httpClient] when the host has its own. Crash events go only
+  ///   while [uploadCrashes]; feedback goes either way, since a user asked
+  ///   for it. Without both an [apiUrl] and a [publishableKey] — either
+  ///   absent or empty, as from a missing `--dart-define`, or one that
+  ///   cannot work — it starts a client that uploads nothing and sends no
+  ///   feedback: the SDK never picks an API by itself;
   /// - names the app [appName], with the version and build the platform
   ///   reports (`unknown` when it does not answer);
   /// - installs the global error handlers ([installErrorHandlers]),
@@ -122,9 +125,9 @@ final class NoticebirdFlutter {
   /// [breadcrumbBuffer] out of range, an unencrypted store passed under
   /// `regulatedStrict`.
   static Future<NoticebirdFlutter> start({
-    required String publishableKey,
     required String appName,
-    Uri? endpoint,
+    Uri? apiUrl,
+    String? publishableKey,
     http.Client? httpClient,
     bool uploadCrashes = true,
     CrashPrivacyProfile privacyProfile = CrashPrivacyProfile.privacyDefault,
@@ -145,9 +148,9 @@ final class NoticebirdFlutter {
     final starting = _starting;
     if (starting != null) return starting;
     final start = _start(
-      publishableKey: publishableKey,
       appName: appName,
-      endpoint: endpoint,
+      apiUrl: apiUrl,
+      publishableKey: publishableKey,
       httpClient: httpClient,
       uploadCrashes: uploadCrashes,
       privacyProfile: privacyProfile,
@@ -177,9 +180,9 @@ final class NoticebirdFlutter {
   }
 
   static Future<NoticebirdFlutter> _start({
-    required String publishableKey,
     required String appName,
-    required Uri? endpoint,
+    required Uri? apiUrl,
+    required String? publishableKey,
     required http.Client? httpClient,
     required bool uploadCrashes,
     required CrashPrivacyProfile privacyProfile,
@@ -200,17 +203,26 @@ final class NoticebirdFlutter {
     final binding = WidgetsFlutterBinding.ensureInitialized();
 
     CrashHttpTransport? ingest;
-    FeedbackHttpTransport? feedbackTransport;
-    try {
-      ingest = CrashHttpTransport(
-        endpoint: endpoint,
-        publishableKey: publishableKey.trim(),
-        httpClient: httpClient,
+    final key = publishableKey?.trim() ?? '';
+    if (apiUrl == null || key.isEmpty) {
+      _debugNote(
+        'no uploads and no feedback: '
+        '${apiUrl == null ? 'no API URL' : 'no publishable key'}',
       );
-      feedbackTransport = FeedbackHttpTransport.of(ingest);
-    } on ArgumentError catch (error) {
-      _debugNote('no uploads and no feedback: $error');
+    } else {
+      try {
+        ingest = CrashHttpTransport(
+          apiUrl: apiUrl,
+          publishableKey: key,
+          httpClient: httpClient,
+        );
+      } on ArgumentError catch (error) {
+        _debugNote('no uploads and no feedback: $error');
+      }
     }
+    final feedbackTransport = ingest == null
+        ? null
+        : FeedbackHttpTransport.of(ingest);
 
     final strict = privacyProfile == CrashPrivacyProfile.regulatedStrict;
     final keepsStores = !kIsWeb && !background && !strict;
@@ -243,7 +255,7 @@ final class NoticebirdFlutter {
                 ? null
                 : FileCrashOfflineStore(defaultCrashStore)),
         locale: () => binding.platformDispatcher.locale.toLanguageTag(),
-        // Without a key the feedback config has no transport: it sends
+        // Without an API the feedback config has no transport: it sends
         // nothing, and its arguments are checked all the same.
         feedback: FeedbackConfig(
           transport: feedbackTransport,

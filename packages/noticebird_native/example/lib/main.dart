@@ -9,9 +9,10 @@ import 'package:flutter/services.dart';
 
 import 'ffi_crashes.dart' if (dart.library.js_interop) 'ffi_crashes_web.dart';
 
-/// The platform's ingestion endpoint and a publishable key of a test project.
-/// Without both, delivered events are only shown on screen.
-const _ingestUrl = String.fromEnvironment('NOTICEBIRD_INGEST_URL');
+/// The platform's API URL (its base, such as `https://api.noticebird.com`)
+/// and a publishable key of a test project. Without both, delivered events
+/// are only shown on screen.
+const _apiUrl = String.fromEnvironment('NOTICEBIRD_API_URL');
 const _publishableKey = String.fromEnvironment('NOTICEBIRD_PUBLISHABLE_KEY');
 
 /// Every event this run delivered, as the wire carries it, newest last: the
@@ -56,10 +57,10 @@ void main() {
       ),
     ),
     transport: LabTransport(
-      _ingestUrl.isEmpty || _publishableKey.isEmpty
+      _apiUrl.isEmpty || _publishableKey.isEmpty
           ? null
           : CrashHttpTransport(
-              endpoint: Uri.parse(_ingestUrl),
+              apiUrl: Uri.parse(_apiUrl),
               publishableKey: _publishableKey,
             ),
     ),
@@ -161,9 +162,9 @@ class _CrashLabPageState extends State<CrashLabPage> {
         ],
         const SizedBox(height: 24),
         Text(
-          _ingestUrl.isEmpty
+          _apiUrl.isEmpty
               ? 'Delivered this run (shown only)'
-              : 'Delivered this run (also sent to $_ingestUrl)',
+              : 'Delivered this run (also sent to $_apiUrl)',
           style: Theme.of(context).textTheme.titleMedium,
         ),
         ValueListenableBuilder<List<Map<String, dynamic>>>(

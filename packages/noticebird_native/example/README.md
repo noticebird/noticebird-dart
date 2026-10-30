@@ -11,7 +11,7 @@ than with `NoticebirdFlutter.start`, and calls `reportNativeCrashes()` before
 
 ```sh
 flutter run --profile \
-  --dart-define=NOTICEBIRD_INGEST_URL=https://<platform>/v1/envelope \
+  --dart-define=NOTICEBIRD_API_URL=https://<platform> \
   --dart-define=NOTICEBIRD_PUBLISHABLE_KEY=noticebird_pk_<test project key>
 ```
 

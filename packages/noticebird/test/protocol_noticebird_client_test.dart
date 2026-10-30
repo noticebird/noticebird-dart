@@ -405,57 +405,65 @@ void main() {
   test('close() leaves an injected http client open', () {
     final httpClient = _ClosableClient();
     CrashHttpTransport(
-      endpoint: Uri.parse('https://ingest.example.com/v1/envelope'),
+      apiUrl: Uri.parse('https://ingest.example.com'),
       publishableKey: 'crash_pk_test0000000000000000',
       httpClient: httpClient,
     ).close();
     expect(httpClient.closed, isFalse);
   });
 
-  test(
-    'HTTP transport uses the hosted ingestion endpoint by default',
-    () async {
+  test('HTTP transport posts to the envelope route below the API URL, a '
+      "proxy's path prefix kept", () async {
+    for (final (apiUrl, envelope) in [
+      (
+        CrashHttpTransport.hostedApiUrl,
+        'https://api.noticebird.com/v1/envelope',
+      ),
+      (
+        Uri.parse('https://proxy.example.com/noticebird/'),
+        'https://proxy.example.com/noticebird/v1/envelope',
+      ),
+      (Uri.parse('http://localhost:8080'), 'http://localhost:8080/v1/envelope'),
+    ]) {
       final httpClient = _RequestRecordingClient();
-      final hostedReporter = NoticebirdClient(
+      final reporter = NoticebirdClient(
         config: config(),
         transport: CrashHttpTransport(
+          apiUrl: apiUrl,
           publishableKey: 'crash_pk_test0000000000000000',
           httpClient: httpClient,
         ),
       );
 
-      await hostedReporter.captureException(
-        StateError('hosted endpoint'),
+      await reporter.captureException(
+        StateError('api url'),
         StackTrace.fromString('#0 A.b (package:app/a.dart:1:1)'),
       );
 
+      expect(httpClient.requestUri, Uri.parse(envelope), reason: '$apiUrl');
+    }
+  });
+
+  test('HTTP transport refuses an API URL it cannot send to, the envelope '
+      'URL itself included', () {
+    for (final apiUrl in [
+      'https://api.noticebird.com/v1/envelope',
+      'https://api.noticebird.com/v1/envelope/',
+      'ftp://api.noticebird.com',
+      'https://api.noticebird.com?key=x',
+      'https://api.noticebird.com#top',
+      '/v1',
+      '',
+    ]) {
       expect(
-        httpClient.requestUri,
-        Uri.parse('https://api.noticebird.com/v1/envelope'),
+        () => CrashHttpTransport(
+          apiUrl: Uri.parse(apiUrl),
+          publishableKey: 'crash_pk_test0000000000000000',
+        ),
+        throwsArgumentError,
+        reason: apiUrl,
       );
-    },
-  );
-
-  test('HTTP transport honors an explicit endpoint override', () async {
-    final httpClient = _RequestRecordingClient();
-    final customEndpoint = Uri.parse(
-      'https://staging.crash.example/v1/envelope',
-    );
-    final customReporter = NoticebirdClient(
-      config: config(),
-      transport: CrashHttpTransport(
-        endpoint: customEndpoint,
-        publishableKey: 'crash_pk_test0000000000000000',
-        httpClient: httpClient,
-      ),
-    );
-
-    await customReporter.captureException(
-      StateError('custom endpoint'),
-      StackTrace.fromString('#0 A.b (package:app/a.dart:1:1)'),
-    );
-
-    expect(httpClient.requestUri, customEndpoint);
+    }
   });
 
   test('HTTP transport sends the key as a bearer token', () async {
@@ -463,6 +471,7 @@ void main() {
     final bearerReporter = NoticebirdClient(
       config: config(),
       transport: CrashHttpTransport(
+        apiUrl: CrashHttpTransport.hostedApiUrl,
         publishableKey: 'crash_pk_test0000000000000000',
         httpClient: httpClient,
       ),
@@ -487,7 +496,10 @@ void main() {
       'acme2_pk_test0000000000000000',
     ]) {
       expect(
-        () => CrashHttpTransport(publishableKey: key).close(),
+        () => CrashHttpTransport(
+          apiUrl: CrashHttpTransport.hostedApiUrl,
+          publishableKey: key,
+        ).close(),
         returnsNormally,
         reason: key,
       );
@@ -506,7 +518,10 @@ void main() {
       '',
     ]) {
       expect(
-        () => CrashHttpTransport(publishableKey: key),
+        () => CrashHttpTransport(
+          apiUrl: CrashHttpTransport.hostedApiUrl,
+          publishableKey: key,
+        ),
         throwsArgumentError,
         reason: key,
       );
@@ -1093,6 +1108,7 @@ void main() {
     }) {
       final bodies = <String>[];
       final transport = CrashHttpTransport(
+        apiUrl: CrashHttpTransport.hostedApiUrl,
         publishableKey: 'crash_pk_test_123456',
         httpClient: MockClient((request) async {
           bodies.add(request.body);
@@ -1172,6 +1188,7 @@ void main() {
         var refusing = true;
         final bodies = <String>[];
         final api = CrashHttpTransport(
+          apiUrl: CrashHttpTransport.hostedApiUrl,
           publishableKey: 'crash_pk_test_123456',
           httpClient: MockClient((request) async {
             bodies.add(request.body);

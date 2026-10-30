@@ -4,29 +4,64 @@ import 'http_answer.dart';
 import 'noticebird_config.dart';
 import 'publishable_key.dart';
 
+/// The [CrashTransport] to a Noticebird API, over `package:http`: it posts
+/// each event to the API's envelope route, `<apiUrl>/v1/envelope`, with the
+/// publishable key as `Authorization: Bearer <key>`.
 final class CrashHttpTransport implements CrashTransport {
-  /// Hosted endpoint used when consumers do not provide an [endpoint].
+  /// The hosted Noticebird API, for a host that sends there: the SDK never
+  /// sends anywhere by itself, so a host passes it as [apiUrl].
   ///
   /// Platform maintainers can update this single value in a new SDK release.
-  static final Uri hostedEndpoint = Uri.parse(
-    'https://api.noticebird.com/v1/envelope',
-  );
+  static final Uri hostedApiUrl = Uri.parse('https://api.noticebird.com');
 
+  /// A transport to the API at [apiUrl]: its base, such as [hostedApiUrl]
+  /// or a proxy's `https://example.com/noticebird`, below which the SDK
+  /// owns its routes (`/v1/envelope`, the feedback routes).
+  ///
+  /// Throws an [ArgumentError] for an [apiUrl] that is no `http` or `https`
+  /// URL with a host, that has a query or a fragment, or that names the
+  /// envelope route itself, and for a [publishableKey] that is no
+  /// publishable key (`<prefix>_pk_…`).
   CrashHttpTransport({
-    Uri? endpoint,
+    required Uri apiUrl,
     required String publishableKey,
     http.Client? httpClient,
     this.timeout = const Duration(seconds: 5),
-  }) : _endpoint = endpoint ?? hostedEndpoint,
+  }) : _apiUrl = _checkApiUrl(apiUrl),
        _publishableKey = checkPublishableKey(publishableKey),
        _httpClient = httpClient ?? http.Client(),
        _ownsHttpClient = httpClient == null;
 
-  final Uri _endpoint;
+  static const _envelopeRoute = '/v1/envelope';
+
+  /// The API's base, its path without a trailing `/`.
+  final Uri _apiUrl;
   final String _publishableKey;
   final http.Client _httpClient;
   final bool _ownsHttpClient;
   final Duration timeout;
+
+  late final Uri _envelope = apiRoute(_apiUrl, _envelopeRoute);
+
+  static Uri _checkApiUrl(Uri apiUrl) {
+    String? problem;
+    if (!(apiUrl.isScheme('https') || apiUrl.isScheme('http')) ||
+        apiUrl.host.isEmpty) {
+      problem = 'The API URL is an http or https URL with a host';
+    } else if (apiUrl.hasQuery || apiUrl.hasFragment) {
+      problem = 'The API URL has no query or fragment';
+    }
+    final path = apiUrl.path.replaceFirst(RegExp(r'/+$'), '');
+    if (problem == null && path.endsWith(_envelopeRoute)) {
+      problem =
+          'Pass the API base, such as https://api.noticebird.com; the SDK '
+          'adds $_envelopeRoute itself';
+    }
+    if (problem != null) {
+      throw ArgumentError.value(apiUrl, 'apiUrl', problem);
+    }
+    return apiUrl.replace(path: path);
+  }
 
   /// Releases the underlying HTTP client if this transport created it.
   /// A client injected by the caller stays open and remains the caller's
@@ -39,7 +74,7 @@ final class CrashHttpTransport implements CrashTransport {
   Future<void> send(String eventJson) async {
     final response = await _httpClient
         .post(
-          _endpoint,
+          _envelope,
           headers: {
             'authorization': 'Bearer $_publishableKey',
             'content-type': 'application/json',
@@ -71,11 +106,16 @@ final class CrashHttpTransport implements CrashTransport {
       };
 }
 
+/// The route [route] (`/v1/…`) of the API at [apiUrl], a base whose path
+/// has no trailing `/`. Not exported.
+Uri apiRoute(Uri apiUrl, String route) =>
+    apiUrl.replace(path: '${apiUrl.path}$route');
+
 /// The API [transport] sends to, the key it sends and the HTTP client it
 /// sends with, for the feedback transport that shares them. Not exported.
-({Uri endpoint, String publishableKey, http.Client httpClient})
+({Uri apiUrl, String publishableKey, http.Client httpClient})
 crashHttpConnection(CrashHttpTransport transport) => (
-  endpoint: transport._endpoint,
+  apiUrl: transport._apiUrl,
   publishableKey: transport._publishableKey,
   httpClient: transport._httpClient,
 );

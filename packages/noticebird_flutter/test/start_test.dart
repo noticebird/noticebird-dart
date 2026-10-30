@@ -22,6 +22,7 @@ import 'package:path_provider_platform_interface/path_provider_platform_interfac
 import 'support/fake_platforms.dart';
 
 const _key = 'noticebird_pk_example00000000000000000';
+final _api = Uri.parse('https://api.example.com/noticebird');
 final _stack = StackTrace.fromString('#0 A.b (package:app/a.dart:1:1)');
 
 void main() {
@@ -64,11 +65,13 @@ void main() {
   });
 
   Future<NoticebirdFlutter> start({
-    String publishableKey = _key,
+    Uri? apiUrl,
+    String? publishableKey = _key,
     bool uploadCrashes = true,
     bool background = false,
     bool observeBlocs = true,
   }) async => started = await NoticebirdFlutter.start(
+    apiUrl: apiUrl ?? _api,
     publishableKey: publishableKey,
     appName: 'example_app',
     httpClient: httpClient,
@@ -117,6 +120,7 @@ void main() {
     for (final key in [_key, '']) {
       await expectLater(
         NoticebirdFlutter.start(
+          apiUrl: _api,
           publishableKey: key,
           appName: 'example_app',
           httpClient: httpClient,
@@ -165,6 +169,7 @@ void main() {
     offline = false;
     final settled = <FeedbackSettled>[];
     started = await NoticebirdFlutter.start(
+      apiUrl: _api,
       publishableKey: _key,
       appName: 'example_app',
       httpClient: httpClient,
@@ -195,6 +200,7 @@ void main() {
   test('regulatedStrict keeps no default store, and refuses an unencrypted '
       'one', () async {
     started = await NoticebirdFlutter.start(
+      apiUrl: _api,
       publishableKey: _key,
       appName: 'example_app',
       httpClient: httpClient,
@@ -208,6 +214,7 @@ void main() {
 
     await expectLater(
       NoticebirdFlutter.start(
+        apiUrl: _api,
         publishableKey: _key,
         appName: 'example_app',
         httpClient: httpClient,
@@ -222,6 +229,7 @@ void main() {
       'start does not', () async {
     final collector = _Collector();
     final noticebird = await NoticebirdFlutter.start(
+      apiUrl: _api,
       publishableKey: _key,
       appName: 'example_app',
       httpClient: httpClient,
@@ -233,6 +241,7 @@ void main() {
     noticebird.close();
 
     started = await NoticebirdFlutter.start(
+      apiUrl: _api,
       publishableKey: _key,
       appName: 'example_app',
       httpClient: httpClient,
@@ -298,19 +307,51 @@ void main() {
     );
   });
 
-  test('a key that cannot work starts a client that uploads nothing and '
-      'sends no feedback', () async {
-    await start(publishableKey: '');
+  test('without an API URL, or without a key that can work, the client '
+      'uploads nothing and sends no feedback', () async {
+    for (final (index, noApi) in <Future<NoticebirdFlutter> Function()>[
+      () => NoticebirdFlutter.start(
+        appName: 'example_app',
+        publishableKey: _key,
+        httpClient: httpClient,
+      ),
+      () => start(publishableKey: null),
+      () => start(publishableKey: ' '),
+      () => start(publishableKey: 'noticebird_sk_secret0000000000'),
+      () => start(apiUrl: Uri.parse('https://api.example.com/v1/envelope')),
+    ].indexed) {
+      started = await noApi();
+
+      expect(
+        (await Noticebird.captureException(
+          StateError('boom'),
+          _stack,
+        ))?.outcome,
+        CaptureOutcome.discarded,
+        reason: 'start $index',
+      );
+      expect(
+        await Noticebird.captureFeedback(kind: FeedbackKind.bug, message: 'x'),
+        const FeedbackDisabled(),
+        reason: 'start $index',
+      );
+      started!.close();
+    }
+    expect(requests, isEmpty);
+  });
+
+  test('sends to the routes below the API URL', () async {
+    await start();
+    await Noticebird.captureException(StateError('boom'), _stack);
+    await Noticebird.captureFeedback(kind: FeedbackKind.bug, message: 'x');
 
     expect(
-      (await Noticebird.captureException(StateError('boom'), _stack))?.outcome,
-      CaptureOutcome.discarded,
+      [for (final request in requests) request.url.toString()],
+      containsAll([
+        'https://api.example.com/noticebird/v1/envelope',
+        'https://api.example.com/noticebird/v1/feedback',
+      ]),
     );
-    expect(
-      await Noticebird.captureFeedback(kind: FeedbackKind.bug, message: 'x'),
-      const FeedbackDisabled(),
-    );
-    expect(requests, isEmpty);
   });
 
   test('a background start keeps no store and flushes nothing by '
@@ -352,6 +393,7 @@ void main() {
     () async {
       final mine = _DetailedObserver();
       final noticebird = await NoticebirdFlutter.start(
+        apiUrl: _api,
         publishableKey: _key,
         appName: 'example_app',
         httpClient: httpClient,

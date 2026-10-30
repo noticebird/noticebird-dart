@@ -983,6 +983,7 @@ void main() {
         'delivered and not queued', () async {
       final bodies = <String>[];
       final api = CrashHttpTransport(
+        apiUrl: CrashHttpTransport.hostedApiUrl,
         publishableKey: 'crash_pk_test_123456',
         httpClient: MockClient((request) async {
           bodies.add(request.body);

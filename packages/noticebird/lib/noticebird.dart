@@ -1,4 +1,5 @@
-export 'src/protocol/crash_http_transport.dart' hide crashHttpConnection;
+export 'src/protocol/crash_http_transport.dart'
+    hide apiRoute, crashHttpConnection;
 export 'src/protocol/file_crash_offline_store.dart';
 export 'src/protocol/noticebird_client.dart';
 export 'src/protocol/noticebird_facade.dart';
