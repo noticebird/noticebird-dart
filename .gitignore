@@ -11,5 +11,4 @@ build/
 # Local agent instructions and skills, kept outside this repository.
 /AGENTS.md
 /CLAUDE.md
-/AGENTS_CORE.md
 /.claude/
