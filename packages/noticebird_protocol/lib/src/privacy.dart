@@ -1,4 +1,4 @@
-/// The kinds of data that must never leave the device, in any privacy
+/// The kinds of data a client redacts from technical text, in any privacy
 /// profile: the categories [PrivacyPatterns] sorts its patterns and `extra`
 /// keys into ([PrivacyPatterns.extraKeyViolation]).
 enum PrivacyViolation {
@@ -15,11 +15,14 @@ enum PrivacyViolation {
   identifier,
 }
 
-/// The patterns of data that must never leave the device, as
-/// regular-expression sources a client builds its redaction from, as the
+/// The patterns of what a client redacts from technical text, as
+/// regular-expression sources it builds its redaction from, as the
 /// `noticebird` client does for an event's free text and a feedback
-/// report's message. A host must not pass such data in a value the client
-/// sends as it is, such as a feedback report's `userContext`.
+/// report's message. Identity the host sends on purpose is not technical
+/// text: an e-mail address in `CrashUser.email` or a feedback report's
+/// contact goes as it is. Nor is a value the client sends as the host gave
+/// it, such as a feedback report's `userContext`, so a host keeps such data
+/// out of it.
 ///
 /// Each is matched case-insensitively and is open-ended: none needs a word
 /// boundary after its match, so a redaction built from them still removes a

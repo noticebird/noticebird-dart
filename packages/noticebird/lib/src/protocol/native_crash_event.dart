@@ -117,8 +117,8 @@ String nativeExceptionType(NativeCrashRecord record) {
 
 /// The message: an exception's own message through the sanitizer, otherwise
 /// one composed from enumerated fields only, followed by a native abort
-/// message when there is one. Numbers stay short, because a
-/// run of ten or more digits reads as a phone number to the platform.
+/// message when there is one. Numbers stay short, because a run of ten or
+/// more digits reads as a phone number.
 String _message(NativeCrashRecord record, String type) {
   final exceptionMessage = record.exceptionMessage?.trim();
   final detail = exceptionMessage == null || exceptionMessage.isEmpty

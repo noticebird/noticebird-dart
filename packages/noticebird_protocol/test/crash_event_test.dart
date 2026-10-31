@@ -233,6 +233,33 @@ void main() {
       }
     });
 
+    test('isTagValue answers what a tag takes', () {
+      for (final value in <TagScalar>[
+        '',
+        'x' * maxTagValueLength,
+        3,
+        0.5,
+        true,
+      ]) {
+        expect(isTagValue(value), isTrue, reason: '$value');
+        v5Event(tags: {AllowedTag.feature: value}).toJson();
+      }
+      for (final value in <TagScalar>[
+        'x' * (maxTagValueLength + 1),
+        double.nan,
+        double.infinity,
+        -double.infinity,
+        const {'k': 'v'},
+        const ['v'],
+      ]) {
+        expect(isTagValue(value), isFalse, reason: '$value');
+        expect(
+          () => v5Event(tags: {AllowedTag.feature: value}).toJson(),
+          throwsA(isA<ProtocolException>()),
+        );
+      }
+    });
+
     test('extra is bounded JSON with keys of its pattern', () {
       final cases = <String, (Map<String, Object?>, ProtocolViolation, String)>{
         'too many fields': (

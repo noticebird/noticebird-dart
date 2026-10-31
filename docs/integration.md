@@ -297,8 +297,8 @@ The platform checks every crash event again when it arrives and refuses one
 that is invalid. The client writes each event by the protocol's rules (the
 limits are in the skill's
 [privacy and limits reference](../skills/noticebird/reference/privacy-and-limits.md)):
-what it can repair it repairs — a value cut, a breadcrumb or an `extra` key
-left out — and an event it cannot write, such as one with a session id the
+what it can repair it repairs — a value cut, a tag, a breadcrumb or an
+`extra` key left out — and an event it cannot write, such as one with a session id the
 protocol refuses or over 64 KiB, is `dropped` on the device.
 
 ### One report per failure
@@ -451,14 +451,24 @@ held; without a user it asks for every report.
 What your backend mints for the signed-in user:
 
 - a compact JWS (three base64url parts joined by dots, at most 4096
-  characters), `alg` `EdDSA` (Ed25519), its `kid` naming a signing key the
-  project knows;
+  characters);
+- a header of `alg` `EdDSA` (Ed25519) and `kid`, naming a signing key the
+  project knows, and optionally `typ`, which is then `"JWT"`; no other
+  header field;
 - `aud`: the project's id;
 - `sub`: the user, 1–100 characters; optionally `email` (at most 254
-  characters) and `name` (at most 200 characters);
-- `iat` and `exp` in seconds, `exp − iat` at most 24 hours;
+  characters, holding an `@`), `name` (1–200 characters, so not empty) and
+  `role` (matching `^[a-z][a-z0-9_-]{0,31}$`);
+- `iat` and `exp` in whole seconds, `exp` after `iat` and at most 24 hours
+  after it;
+- no claim other than `sub`, `aud`, `iat`, `exp`, `email`, `name` and
+  `role`. Mint the claims yourself: an `iss`, `jti` or `nbf`, such as jose's
+  `setIssuer`/`setJti` or jsonwebtoken's `issuer`/`jwtid`/`notBefore`
+  options add, or one an identity provider's token carries, makes every
+  report unverified;
 - valid when the report is captured: `iat` at most 5 minutes after the
-  capture, and the capture before `exp`.
+  capture and at most 5 minutes ahead of the platform's clock, and the
+  capture before `exp`.
 
 An assertion that breaks any of these, or that the platform otherwise
 refuses, leaves the report unverified, or, with `requireVerified: true`,

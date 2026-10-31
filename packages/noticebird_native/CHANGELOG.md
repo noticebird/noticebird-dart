@@ -3,10 +3,12 @@
 - Moves with `noticebird` 0.6.0 and `noticebird_protocol` 0.6.0, whose
   removals (`CrashEvent.maxTags`, `TypedBreadcrumb.maxDataTags`,
   `CrashEvent.userId`, `CrashEvent.userIdPattern`) this package never used;
-  no change of its own. Through `noticebird` 0.6.0, a breadcrumb of the
-  crashed run's trail that the protocol refuses is left out of the native
-  crash event alone. The podspec and the Android library read 0.6.0 from
-  the pubspec.
+  no change of its own. Its run ledger already left a breadcrumb the
+  protocol refuses out of the crashed run's trail alone in 0.5.0; what
+  `noticebird` 0.6.0 adds, the same for the run state it hands a
+  collector and for the native crash event built from a collector's
+  record, matters only for a custom `NativeCrashCollector`. The podspec
+  and the Android library read 0.6.0 from the pubspec.
 
 ## 0.5.0
 

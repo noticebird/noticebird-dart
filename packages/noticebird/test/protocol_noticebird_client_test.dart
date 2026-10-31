@@ -199,6 +199,22 @@ void main() {
     expect(component, endsWith('…'));
   });
 
+  for (final number in [double.nan, double.infinity, -double.infinity]) {
+    test(
+      'a capture tag of $number is left out alone, not the event lost',
+      () async {
+        final result = await reporter.captureException(
+          StateError('boom'),
+          StackTrace.fromString('#0 A.b (package:app/a.dart:1:1)'),
+          tags: {AllowedTag.retryCount: number, AllowedTag.component: 'list'},
+        );
+
+        expect(result.outcome, CaptureOutcome.sent);
+        expect(transport.events.single['tags'], {'component': 'list'});
+      },
+    );
+  }
+
   // The rule the feedback trail follows: a breadcrumb the protocol refuses
   // used to fail validation at capture time and drop the whole event.
   for (final (name, refused) in [
@@ -861,7 +877,7 @@ void main() {
     );
 
     test(
-      'a name the firewall would misread keeps its words, a script name drops the frame',
+      'a name a redaction pattern would misread keeps its words, a script name drops the frame',
       () async {
         final event = await capture(
           '    at AuthHeader.bearer ($host/main.dart.js:1:2)\n'
@@ -958,7 +974,7 @@ void main() {
   });
 
   test(
-    'setUserId sends the id as given, in the protocol\'s shape, and clears on null',
+    'setUserId sends the id as given, in the client\'s own form, and clears on null',
     () async {
       reporter = NoticebirdClient(
         config: config(
@@ -979,8 +995,8 @@ void main() {
       );
       expect(transport.events.single['user']['id'], 'user1');
 
-      // An opaque id survives as it is: a UUID (every Supabase user id) and a
-      // numeric id were once redacted by the free-text sanitizer.
+      // An opaque id survives as it is: a UUID and a numeric id were once
+      // redacted by the free-text sanitizer.
       reporter.setUserId('19fda259-c28b-421b-ad04-979d2d0abbed');
       await reporter.captureException(
         StateError('uuid'),
@@ -1005,6 +1021,32 @@ void main() {
       expect(transport.events.last['user'], isNull);
     },
   );
+
+  test('setUserId normalises an id by the client\'s own rule, which the '
+      'protocol does not require', () async {
+    reporter = NoticebirdClient(
+      config: config(
+        profile: CrashPrivacyProfile.custom,
+        pii: const CrashPiiConfig(
+          enabled: true,
+          allowedFields: {CrashPiiField.userId},
+        ),
+      ),
+      transport: transport,
+    );
+    const id = 'oidc|tenant-7:user_42';
+    // The protocol takes the id as it is ...
+    const CrashUser(id: id).check();
+
+    // ... and the client sends its own stable form of it, so an account's
+    // reports keep the id they were stored under.
+    reporter.setUserId(id);
+    await reporter.captureException(
+      StateError('boom'),
+      StackTrace.fromString('#0 A.b (package:app/a.dart:1:1)'),
+    );
+    expect(transport.events.single['user'], {'id': 'oidctenant-7user_42'});
+  });
 
   test('clearBreadcrumbs empties the ring buffer without capturing', () async {
     reporter.addBreadcrumb(
@@ -1166,14 +1208,14 @@ void main() {
 
     const finalAnswers = [
       (413, '{"error":"payload_too_large"}'),
-      (422, '{"error":"privacy_rejected","reason":"policyViolation"}'),
+      (422, '{"error":"privacy_rejected"}'),
     ];
     const retryableAnswers = [
       (400, '{"error":"invalid_event"}'),
       (400, '<html>Bad Request</html>'),
       (413, '<html>Request Entity Too Large</html>'),
       (422, '<html>Unprocessable Entity</html>'),
-      (503, '{"error":"api_container_unavailable"}'),
+      (503, '{"error":"unavailable"}'),
     ];
 
     for (final answer in finalAnswers) {

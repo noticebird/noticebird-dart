@@ -29,9 +29,16 @@ Changes:
 - `NoticebirdRecorder`'s doc says what it records: each event built,
   sanitized and encoded by the real client, as in the app, and not what the
   platform would accept.
+- `setUserId`'s doc and the consumer docs say that stripping an id to
+  `[A-Za-z0-9_-]` and cutting it to 100 characters is this client's own
+  stable normalisation, not a rule of the protocol. It is unchanged, so an
+  account keeps the id its earlier reports were stored under.
 
 Fixes:
 
+- A capture tag the protocol refuses, a NaN or an infinite number, is left
+  out of the event alone (`isTagValue`), as a breadcrumb's data or an
+  `extra` value is. Before, it dropped the whole event (`dropped`).
 - A breadcrumb the protocol refuses, such as one whose action is outside
   `TypedBreadcrumb.actionPattern` (`Route.Push`) or longer than
   `TypedBreadcrumb.maxActionLength`, or whose data holds a NaN or infinite

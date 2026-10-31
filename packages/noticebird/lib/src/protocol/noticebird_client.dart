@@ -199,10 +199,15 @@ final class NoticebirdClient {
   }
 
   /// Sets the account identifier attached to subsequent events, or clears it
-  /// when `null`. The id is sent as given, in the shape the protocol requires:
-  /// characters outside `[A-Za-z0-9_-]` are stripped and the result is cut to
-  /// 100 characters, so a malformed value can never poison every subsequent
-  /// capture.
+  /// when `null`.
+  ///
+  /// The client normalises the id to a stable form of its own: characters
+  /// outside `[A-Za-z0-9_-]` are stripped and the result is cut to 100
+  /// characters. That is this client's normalisation, not a rule of the
+  /// protocol, which takes any `user.id` of 1 to 100 characters
+  /// ([CrashUser.check]); it stays as it is so that an account keeps the id
+  /// its earlier reports were stored under. A UUID or a numeric id stays
+  /// intact; an id that is empty after it is no id.
   ///
   /// Whether it is sent at all is the host's choice, made once in
   /// [NoticebirdConfig.pii] (`CrashPiiField.userId`); `regulatedStrict`
@@ -216,10 +221,11 @@ final class NoticebirdClient {
         _feedbackSender?.identity = null;
         return;
       }
-      // The id is sent as given: whether identity leaves the device is the
-      // host's choice ([NoticebirdConfig.pii]), not something this method
-      // second-guesses by content. It only enforces the shape the protocol
-      // requires for an id. A UUID or a numeric id stays intact — the free-text
+      // The id is sent as given, in the client's own stable form: whether
+      // identity leaves the device is the host's choice
+      // ([NoticebirdConfig.pii]), not something this method second-guesses by
+      // content. Changing the form would split an account's reports over two
+      // ids, so it stays. A UUID or a numeric id stays intact — the free-text
       // sanitizer used to turn every UUID into `REDACTED`.
       final sanitized = truncateCrashText(
         userId.replaceAll(RegExp(r'[^A-Za-z0-9_-]'), ''),
@@ -330,8 +336,8 @@ final class NoticebirdClient {
   /// - The moment's route template is held to [isRouteTemplate] and
   ///   redacted as [setRouteTemplate]'s is.
   /// - [userContext] is what the host tells about its user on purpose
-  ///   ([FeedbackUserContext.check] checks its shape); it is sent as given,
-  ///   and the platform drops what it may not keep.
+  ///   ([FeedbackUserContext.check] checks its shape); it is sent as
+  ///   given.
   /// - [relatedEventId] is the id of a crash event this report is about
   ///   ([eventIdOf]).
   ///
@@ -615,6 +621,10 @@ final class NoticebirdClient {
   /// tag values, redacted and shortened the same way
   /// ([sanitizeGroupingKey]); without one, Noticebird groups the event
   /// itself.
+  ///
+  /// [tags] are redacted and shortened as breadcrumb data is; a tag that is
+  /// still no tag value ([isTagValue]), such as a NaN or an infinite number,
+  /// is left out alone.
   ///
   /// The [CaptureResult] carries the event's id
   /// ([CaptureResult.eventId]), for a feedback report about this error;
@@ -1079,10 +1089,13 @@ final class NoticebirdClient {
     );
     // Redacted and shortened rather than rejected, as breadcrumbs are: an
     // over-long tag value would fail validation when the event is written,
-    // and an id or an address in one must not leave the device.
+    // and an id or an address in one must not leave the device. A tag the
+    // protocol refuses even so (a NaN or an infinite number) is left out
+    // alone, as a breadcrumb or an `extra` value is, never the event.
     final safeTags = Map<AllowedTag, TagScalar>.unmodifiable({
-      for (final entry in tags.entries)
-        entry.key: sanitizeTagValue(entry.value),
+      for (final MapEntry(:key, :value) in tags.entries)
+        if (sanitizeTagValue(value) case final safe when isTagValue(safe))
+          key: safe,
     });
     final safeExtra = strict
         ? const <String, Object?>{}

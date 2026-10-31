@@ -180,7 +180,7 @@ leaves it. Pass it as a feedback report's `relatedEventId`.
 | `sent` | Delivered to the transport. Its breadcrumbs count as sent: the next event starts after them. |
 | `deduplicated` | The same error already captured inside the deduplication window (default 1 minute): the same `groupingKey`, or without one the same exception type and top app frames, line numbers aside. |
 | `queued` | Transport failed; the event sits in the retry queue for the next flush. |
-| `dropped` | Could not be captured at all — a session id the protocol refuses, a NaN or infinite tag number, an event over 64 KiB, `maxPendingEvents: 0` — or the platform refused the event for good (see `CrashTransport.send`; a flush drops it too). |
+| `dropped` | Could not be captured at all — a session id the protocol refuses, an event over 64 KiB, `maxPendingEvents: 0` — or the platform refused the event for good (see `CrashTransport.send`; a flush drops it too). |
 | `ignored` | The host's `shouldCapture` declined the error. |
 | `discarded` | Crash uploads are off (`uploadCrashes: false`, a key that cannot work, or a client built without a `transport`): no event was made. |
 
@@ -260,7 +260,8 @@ event or a report redacts and shortens them. Reading it sends nothing.
 
 Two ways in; the last call wins:
 
-- `setUserId(String?)` — the account id, sent as given in the protocol's shape: characters
+- `setUserId(String?)` — the account id, sent in the client's own stable form (not a
+  protocol rule, so an account keeps the id its reports were stored under): characters
   outside `[A-Za-z0-9_-]` are stripped and the result is cut to 100. A UUID or numeric id
   stays intact.
 - `setUser(CrashUser?)` — explicit identity (`id`, `email`, `name`, `ipAddress`, of 1–100,
@@ -312,8 +313,8 @@ is a word (`/users/jdoe`) passes.
 
 `tags` keys come from the fixed `AllowedTag` enum (`feature`, `operation`, `component`,
 `connectivity`, `foreground`, `retryCount`) with scalar values only: a string (redacted
-and cut to 100 characters), a finite number or a boolean. A NaN or infinite number drops
-the event.
+and cut to 100 characters), a finite number or a boolean. A NaN or infinite number leaves
+that tag out alone.
 
 `extra` is free-form but heavily policed — forbidden key substrings, a key pattern, a
 depth limit and per-value caps, all applied silently before send. See

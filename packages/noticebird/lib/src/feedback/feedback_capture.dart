@@ -60,8 +60,8 @@ final class FeedbackDelivered extends FeedbackOutcome {
   const FeedbackDelivered({this.ticket, required this.verified});
 
   /// The ticket the report was filed under, to show the reporter; `null`
-  /// when the answer named none, and for a report the platform had stored
-  /// already but could no longer compare: then no answer names its ticket.
+  /// when the answer named none, as when a `report_conflict` after a slot
+  /// conflict delivers the report without a ticket.
   final FeedbackTicket? ticket;
 
   /// Whether the platform verified the report's reporter assertion; `false`

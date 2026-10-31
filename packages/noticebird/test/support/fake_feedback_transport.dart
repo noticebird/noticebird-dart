@@ -1,58 +1,15 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
-import 'package:test/test.dart';
 import 'package:noticebird/feedback.dart';
 
 /// The ticket [FakeFeedbackTransport] files every accepted report under.
 const fakeTicket = FeedbackTicket(number: 7, display: 'FB-7');
 
-/// The fields every report holds.
-const _requiredFields = {
-  'schemaVersion',
-  'reportId',
-  'createdAt',
-  'kind',
-  'message',
-  'app',
-  'platform',
-  'sessionId',
-};
-
-/// The fields a report may hold besides [_requiredFields].
-const _optionalFields = {
-  'trigger',
-  'contact',
-  'routeTemplate',
-  'relatedEventId',
-  'user',
-  'userContext',
-  'reporterAssertion',
-  'trail',
-  'diagnostics',
-  'attachments',
-};
-
-/// [reportJson] decoded, after the test fails unless it is a report of the
-/// current schema version: a JSON object with every field a report needs
-/// and no field a report does not have.
-Map<String, Object?> _wellFormedReport(String reportJson) {
-  final json = jsonDecode(reportJson);
-  expect(json, isA<Map<String, Object?>>());
-  final report = json as Map<String, Object?>;
-  expect(report['schemaVersion'], FeedbackReport.schemaVersion);
-  expect(report.keys, containsAll(_requiredFields));
-  expect(
-    report.keys,
-    everyElement(isIn(_requiredFields.union(_optionalFields))),
-  );
-  return report;
-}
-
-/// A [FeedbackTransport] that takes what it is given as the platform does:
-/// the slot body through `toSlotJson`, the report as a report's JSON object
-/// of the current schema version. Answers from its queues, and by default as
-/// a platform that takes everything.
+/// A [FeedbackTransport] that decodes what it is given: the slot body
+/// through `toSlotJson`, the report as a JSON object. The report's field set
+/// is pinned by `noticebird_protocol`'s own feedback test. Answers from its
+/// queues, and by default as an API that takes everything.
 final class FakeFeedbackTransport implements FeedbackTransport {
   final requests = <String>[];
   final slotReportIds = <String>[];
@@ -98,7 +55,7 @@ final class FakeFeedbackTransport implements FeedbackTransport {
     requests.add('submit');
     await beforeSubmit?.call();
     if (submitThrows) throw StateError('broken transport');
-    final json = _wellFormedReport(reportJson);
+    final json = jsonDecode(reportJson) as Map<String, Object?>;
     submitted.add(json);
     return submitAnswers.isEmpty
         ? FeedbackAccepted(

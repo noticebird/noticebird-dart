@@ -217,12 +217,14 @@ void main() {
       }),
     );
     ledger(runId: 'run-good').recordStart();
-    // A crumb that no longer validates costs only itself.
+    // A crumb that no longer reads or that the protocol refuses, such as an
+    // action outside its pattern, costs only itself.
     final file = File('${root.path}/runs/run-good/engine-e1.json');
     final json = jsonDecode(file.readAsStringSync()) as Map<String, Object?>;
     json['breadcrumbs'] = [
       _crumb(1).toJson(),
       {'occurredAt': 'yesterday'},
+      {..._crumb(2).toJson(), 'action': 'Route.Push'},
     ];
     file.writeAsStringSync(jsonEncode(json));
 

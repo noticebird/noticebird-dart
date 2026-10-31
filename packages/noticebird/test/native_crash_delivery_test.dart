@@ -661,7 +661,7 @@ void main() {
     });
   });
 
-  group('what the platform firewall would reject', () {
+  group('what a redaction pattern would match', () {
     test('compiler hash suffixes and long digit runs leave symbols', () {
       final event = _build(
         _record(

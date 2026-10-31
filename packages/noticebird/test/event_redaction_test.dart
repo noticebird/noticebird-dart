@@ -6,8 +6,7 @@ import 'package:test/test.dart';
 import 'support/privacy_matches.dart';
 
 /// An event the client builds holds no match of the protocol's
-/// [PrivacyPatterns], what the platform's privacy firewall rejects a whole
-/// event over, in a field the client redacts. A host's trail holds such
+/// [PrivacyPatterns] in a field the client redacts. A host's trail holds such
 /// values on purpose (a route with a list's id, a bloc state's ids): the
 /// buffer keeps them for [NoticebirdClient.recentBreadcrumbs], and the event
 /// carries them redacted.
@@ -96,7 +95,7 @@ void main() {
     );
   });
 
-  group('every value the firewall rejects is redacted', () {
+  group('every value a redaction pattern matches is redacted', () {
     final values = <String, String>{
       'uuid': 'open $uuid',
       'e-mail': 'invite person@example.com',
@@ -137,7 +136,7 @@ void main() {
     }
   });
 
-  group('a route template with what the firewall rejects', () {
+  group('a route template with what a redaction pattern matches', () {
     for (final MapEntry(key: route, value: redacted) in {
       '/invite/person@example.com': '/invite/[REDACTED]',
       '/hosts/1.2.3.4/status': '/hosts/[REDACTED]/status',
@@ -207,7 +206,7 @@ void main() {
     }
   });
 
-  test('an extra key the firewall reads as health data is dropped', () async {
+  test('an extra key that names health data is dropped', () async {
     final reporter = client();
     await reporter.captureException(
       StateError('boom'),

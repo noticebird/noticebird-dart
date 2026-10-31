@@ -20,8 +20,8 @@ enum FeedbackContentType {
   final String mimeType;
 
   /// Whether [bytes] start with this type's file signature, so that what
-  /// was declared is what the bytes are. The server checks it on upload; a
-  /// client checks it before it asks for a slot.
+  /// was declared is what the bytes are. A client checks it before it asks
+  /// for a slot.
   bool matches(List<int> bytes) {
     bool startsWith(int offset, List<int> signature) {
       if (bytes.length < offset + signature.length) return false;

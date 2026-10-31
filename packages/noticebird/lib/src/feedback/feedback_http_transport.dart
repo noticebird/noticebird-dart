@@ -36,11 +36,19 @@ import 'feedback_transport.dart';
 /// protocol refuses, with the code, violation and path the API would answer
 /// (`invalid_report`).
 ///
-/// An answer is final only where the protocol's error table says so: its
-/// `error` codes at their status, and a `404`, `411`, `413` or `415`. Any
-/// other answer that is no `2xx`, such as a gateway's `403` page without an
-/// `error`, a `421` or a redirect, is a [FeedbackTransient]: it did not come
-/// from the API, and a later try may reach it.
+/// The final answers are these, by status and `error` code:
+/// - `400` `invalid_report`;
+/// - `401` `invalid_key` or `origin_not_allowed`, and `401`
+///   `invalid_reporter_assertion` ([FeedbackAssertionRefused]);
+/// - `403` `feedback_disabled` or `attachments_disabled`;
+/// - `409` `report_conflict` or `attachment_conflict`, and `409`
+///   `attachment_missing` ([FeedbackBackToSlot]);
+/// - a `404`, `411`, `413` or `415`, whatever its body.
+///
+/// A `429` is a [FeedbackRetryAfter]. Any other answer that is no `2xx`,
+/// such as a gateway's `403` page without an `error`, a `421` or a
+/// redirect, is a [FeedbackTransient]: it did not come from the API, and a
+/// later try may reach it.
 final class FeedbackHttpTransport implements FeedbackTransport {
   /// The feedback transport to the API [crash] sends to, with its key and
   /// over its HTTP client, which stays [crash]'s to close.
@@ -186,11 +194,10 @@ final class FeedbackHttpTransport implements FeedbackTransport {
     }
   }
 
-  /// The answer's delivery: [success] reads a `2xx`, the error table of the
-  /// protocol the rest. Final is only what that table names. Any other
-  /// answer is transient: a `3xx`; a `408`, `421`, `425` or other `4xx` the
-  /// table does not name, such as a gateway's `403` without an `error`; a
-  /// `5xx`.
+  /// The answer's delivery: [success] reads a `2xx`, the final answers of
+  /// the class doc the rest. Any other answer is transient: a `3xx`; a
+  /// `408`, `421`, `425` or other `4xx` not named there, such as a
+  /// gateway's `403` without an `error`; a `5xx`.
   static FeedbackDelivery _deliveryOf(
     http.Response response,
     FeedbackDelivery Function(Map<String, Object?>? body) success,

@@ -21,8 +21,20 @@ Breaking changes:
 
 Changes:
 
+- `isTagValue` answers whether a value is one a tag or a breadcrumb's data
+  takes, by the rule `toJson` checks: a string of at most
+  `maxTagValueLength` characters, a finite number or a boolean. A client
+  leaves out a tag that is none, rather than lose the event.
 - The README says what a client builds with the package, and no longer how
   the platform reads, groups or judges an event.
+- The dartdoc says what each value means for a client, not how the platform
+  handles it: `PrivacyViolation` and `PrivacyPatterns` are what a client
+  redacts from technical text (identity sent on purpose, such as
+  `CrashUser.email`, is not), `CrashUser` holds no medical data or
+  credentials in any profile, `nativeStackTraceMarker` keeps native frames
+  out of the stack trace text, where they would read as identifiers, and
+  `groupingKey` groups every event with the same parts into one issue.
+- The unused `crypto` dev dependency is dropped.
 
 ## 0.5.0
 

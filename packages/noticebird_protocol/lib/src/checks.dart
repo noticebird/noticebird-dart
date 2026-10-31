@@ -23,31 +23,19 @@ void checkText(
   }
 }
 
-/// Refuses [tags] at [path] unless each is a scalar: a string of at most
-/// [maxTagValueLength] characters, a finite number or a boolean. Their
+/// Refuses [tags] at [path] unless each is a tag value ([isTagValue]). Their
 /// number needs no check: a map holds each [AllowedTag] once at most.
 void checkTags(Map<AllowedTag, TagScalar> tags, String path) {
   for (final MapEntry(:key, :value) in tags.entries) {
-    if (value is! String && value is! num && value is! bool) {
-      throw ProtocolException(
-        ProtocolViolation.invalidType,
-        '$path.${key.name}',
-        'Tag value must be a scalar',
-      );
-    }
-    if (value is num && !value.isFinite) {
-      throw ProtocolException(
-        ProtocolViolation.invalidValue,
-        '$path.${key.name}',
-        'Tag numbers must be finite',
-      );
-    }
-    if (value is String && value.length > maxTagValueLength) {
-      throw ProtocolException(
+    if (isTagValue(value)) continue;
+    final (violation, message) = switch (value) {
+      String() => (
         ProtocolViolation.oversized,
-        '$path.${key.name}',
         'Tag string exceeds $maxTagValueLength characters',
-      );
-    }
+      ),
+      num() => (ProtocolViolation.invalidValue, 'Tag numbers must be finite'),
+      _ => (ProtocolViolation.invalidType, 'Tag value must be a scalar'),
+    };
+    throw ProtocolException(violation, '$path.${key.name}', message);
   }
 }

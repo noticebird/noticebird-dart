@@ -1,5 +1,5 @@
-// NoticebirdClient.captureFeedback against a fake transport that reads every
-// report it is given as the platform does: the report the client builds from
+// NoticebirdClient.captureFeedback against a fake transport that decodes
+// every report it is given: the report the client builds from
 // the host's input and its own context, the delivery of a screenshot and a
 // report, the reporter assertion and its fallback, the outcome of each
 // final refusal, and input the report refuses, in a debug and a release
@@ -1351,7 +1351,7 @@ void main() {
   });
 
   test('every report the client builds from generated input is one the '
-      'platform reads', () async {
+      'protocol writes', () async {
     final random = Random(20261030);
     String pick(List<String> values) => values[random.nextInt(values.length)];
     String text(int maxPieces) => [

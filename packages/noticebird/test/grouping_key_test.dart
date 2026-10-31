@@ -98,7 +98,7 @@ void main() {
   });
 
   test(
-    'a part the firewall rejects is redacted, not the report lost',
+    'a part a redaction pattern matches is redacted, not the report lost',
     () async {
       await client().captureException(
         StateError('refused'),

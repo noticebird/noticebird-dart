@@ -176,6 +176,15 @@ final class PlatformMetadata {
 /// report was lost over a label.
 const int maxTagValueLength = 100;
 
+/// Whether [value] is a tag value an event or a breadcrumb takes: a string
+/// of at most [maxTagValueLength] characters, a finite number or a boolean.
+bool isTagValue(TagScalar value) => switch (value) {
+  String() => value.length <= maxTagValueLength,
+  num() => value.isFinite,
+  bool() => true,
+  _ => false,
+};
+
 /// [value] shortened to [maxLength] (by default [maxTagValueLength]),
 /// ellipsis included, or returned unchanged when it already fits. Non-string
 /// scalars have no length to clamp.

@@ -161,14 +161,11 @@ final class FeedbackSendPostponed extends FeedbackSendResult {
 ///   rejection. The provider is not asked again for this report, and a held
 ///   assertion that was refused is let go of ([forgetAssertion]).
 /// - [FeedbackFinalRefusal] rejects the report, with a reason the host can
-///   act on where there is one; but `report_conflict` at the slot means a
-///   report is stored under this id already, and the report is submitted.
-///   That answers a replay with its ticket, or `report_conflict` again,
-///   which then delivers the report without a ticket: a report id is this
-///   client's own UUID v4 from a secure random source, so the stored
-///   report can only be its own earlier delivery of this report, which the
-///   platform can no longer compare once retention deleted its attachment.
-///   A submit postponed after such a slot goes on as
+///   act on where there is one; but after `report_conflict` at the slot the
+///   report is submitted, and a `report_conflict` to that submit delivers
+///   it without a ticket: a report id is this client's own UUID v4 from a
+///   secure random source, so the conflict can only be this report's own
+///   earlier delivery. A submit postponed after such a slot goes on as
 ///   [FeedbackSendStep.submitStored], so it still knows. A
 ///   `report_conflict` to a first submit stays a refusal.
 /// - [FeedbackRetryAfter] and [FeedbackTransient] postpone it.
@@ -386,14 +383,13 @@ final class FeedbackSender {
           hasAssertion = false;
         case FeedbackFinalRefusal(code: 'report_conflict')
             when step == _Step.slot:
-          // A report is stored under this id already: this one, by an
-          // earlier delivery whose end was not kept.
+          // This report's own earlier delivery, whose end was not kept:
+          // submit it.
           storedAlready = true;
           step = _Step.submit;
         case FeedbackFinalRefusal(code: 'report_conflict')
             when step == _Step.submit && storedAlready:
-          // That earlier delivery, which the platform cannot compare with
-          // this one once retention deleted its attachment.
+          // That earlier delivery again: delivered, without a ticket.
           return const FeedbackSendAccepted(FeedbackAccepted(verified: false));
         case FeedbackFinalRefusal():
           return FeedbackSendRejected(_rejected(answer));

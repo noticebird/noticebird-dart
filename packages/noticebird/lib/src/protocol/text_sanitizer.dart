@@ -1,6 +1,6 @@
 import 'package:noticebird_protocol/noticebird_protocol.dart';
 
-/// Redacts what must never leave the device from free text — e-mail
+/// Redacts from technical free text what [PrivacyPatterns] match — e-mail
 /// addresses, JWTs, credentials, UUIDs, phone-number-like digit runs, IPv4
 /// addresses and health values — and cuts the result to [maxLength].
 /// [replacement] is as in [redactCrashText].

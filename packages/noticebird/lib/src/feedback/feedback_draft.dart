@@ -52,10 +52,12 @@ final class FeedbackDraft {
   /// hold, before it is redacted and cut.
   ///
   /// [userContext] is checked for its shape only and sent as the host gave
-  /// it: the platform drops what it may not keep. [trail] is the newest
-  /// breadcrumbs, oldest first and each already sanitized; one the report
-  /// refuses ([FeedbackReport.checkTrailItem]) is left out, and [report]
-  /// keeps as many of the newest as fit.
+  /// it. [trail] is the newest breadcrumbs, oldest first and each already
+  /// sanitized ([sanitizeBreadcrumb] left out one the protocol refuses); one
+  /// stamped later than the report allows, or with U+0000 in a data value,
+  /// which a report refuses and an event does not
+  /// ([FeedbackReport.checkTrailItem]), is left out, and [report] keeps as
+  /// many of the newest as fit.
   factory FeedbackDraft({
     required String reportId,
     required DateTime createdAt,
@@ -159,8 +161,9 @@ final class FeedbackDraft {
       }
     }
 
-    // A breadcrumb the report refuses goes alone (a timestamp later than
-    // the report allows, an action outside the wire's pattern).
+    // A breadcrumb stamped later than the report allows, or with U+0000 in a
+    // data value, goes alone; sanitizeBreadcrumb left out the rest the
+    // protocol refuses.
     return FeedbackDraft._(
       build,
       List.unmodifiable(

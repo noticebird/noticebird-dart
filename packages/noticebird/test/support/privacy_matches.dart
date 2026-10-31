@@ -7,13 +7,14 @@ import 'package:noticebird/noticebird.dart';
 /// match, and each `extra` key that is a [PrivacyViolation] on its own.
 /// Empty for an event the client redacted as it should.
 ///
-/// The fields are read as the platform's privacy firewall reads them, one
-/// text, a value a line, with `extra` encoded as JSON after it, so a value
-/// ending in a credential word takes the next one as its secret. The
-/// identity (`user`) is sent as the host set it, and not read.
-///
-/// The client's approximation of the firewall, for these tests only: the
-/// platform holds the authoritative check, and the SDK ships none.
+/// The client's own redaction contract: the fields it redacts — the
+/// message, the stack trace, the route template, tag values, the grouping
+/// key, breadcrumb actions and data, native image names and frame symbols,
+/// and `extra` — hold no such match. They are read together, a value a
+/// line, with `extra` encoded as JSON after them, so that no two values
+/// form a match either: a value ending in a credential word does not take
+/// the next one as its secret. The identity (`user`) is sent as the host
+/// set it, and not read.
 List<String> privacyMatches(Map<String, dynamic> event) {
   final exception = event['exception'] as Map<String, dynamic>;
   final native = event['native'] as Map<String, dynamic>?;
