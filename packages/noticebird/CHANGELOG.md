@@ -1,18 +1,45 @@
-## Unreleased
+## 0.6.0
+
+Moves with `noticebird_protocol` 0.6.0.
 
 Breaking changes:
 
-- The removals of `noticebird_protocol`, which this package exports:
+- The removals of `noticebird_protocol` 0.6.0, which this package exports:
   `CrashEvent.maxTags`, `TypedBreadcrumb.maxDataTags`, `CrashEvent.userId`
-  and `CrashEvent.userIdPattern`. The client never set a `userId`.
+  (with the `userId` parameter of `CrashEvent`'s constructor) and
+  `CrashEvent.userIdPattern`, and the rule that an event never carries both
+  `user` and `userId`. The client never set a `userId`; `setUserId` still
+  sets the id of the event's `user`.
+- The feedback report's conformance kit leaves `noticebird_protocol`: its
+  JSON Schema, its README with the platform's table of answers, and the
+  fixtures of valid reports and HTTP answers. A test's fake
+  `FeedbackTransport` decodes the report as `FeedbackReport.toJsonString`
+  wrote it.
+
+Changes:
+
+- The consumer docs (this README, `docs/integration.md`, the `noticebird`
+  skill and its privacy and limits reference) describe what an integrator
+  needs: every limit an app's own input or config can hit, what each
+  outcome means and the `CrashTransport.send` contract of a custom
+  transport. They no longer describe how the platform groups, redacts or
+  refuses on its side, the wire format's internals, or limits an app cannot
+  hit; they now say that a refused breadcrumb is left out alone, that a
+  host's invalid feedback input is `FeedbackRejected` with its `path`, and
+  that the platform refuses an invalid crash event.
+- `NoticebirdRecorder`'s doc says what it records: each event built,
+  sanitized and encoded by the real client, as in the app, and not what the
+  platform would accept.
 
 Fixes:
 
 - A breadcrumb the protocol refuses, such as one whose action is outside
   `TypedBreadcrumb.actionPattern` (`Route.Push`) or longer than
-  `TypedBreadcrumb.maxActionLength`, is left out of a crash event alone, as
-  a feedback report's trail leaves it out. Before, it dropped the whole
-  event. A native crash event leaves it out the same way.
+  `TypedBreadcrumb.maxActionLength`, or whose data holds a NaN or infinite
+  number, is left out of a crash event alone, as a feedback report's trail
+  leaves it out. Before, it dropped the whole event (`dropped`). A native
+  crash event leaves it out the same way, and so does the run state handed
+  to a `NativeCrashCollector`.
 
 ## 0.5.0
 

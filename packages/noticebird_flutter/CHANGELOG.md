@@ -1,3 +1,20 @@
+## 0.6.0
+
+Moves with `noticebird` 0.6.0 and `noticebird_protocol` 0.6.0.
+
+Breaking changes:
+
+- The removals of `noticebird_protocol` 0.6.0, which this package
+  re-exports: `CrashEvent.maxTags`, `TypedBreadcrumb.maxDataTags`,
+  `CrashEvent.userId` and `CrashEvent.userIdPattern`. `setUserId` is
+  unchanged.
+
+Fixes:
+
+- Through `noticebird` 0.6.0: a breadcrumb the protocol refuses, such as a
+  manual one whose action is `Route.Push`, is left out of a crash event
+  alone instead of dropping the event.
+
 ## 0.5.0
 
 Breaking changes:

@@ -26,8 +26,9 @@ final class RecordingCrashTransport implements CrashTransport {
 /// host's tests: its [client] goes wherever the host's code takes one — a
 /// `NoticebirdBlocObserver(client: …)`, the host's own adapter, the
 /// `Noticebird` facade ([attach]) — and [events] are the reports as the
-/// platform would receive them, built, sanitized and checked by the real
-/// client.
+/// client would post them: built, sanitized and encoded by the real client,
+/// as in the app. It does not stand in for the platform, which checks every
+/// event again when it arrives.
 ///
 /// It does not deduplicate: an error reported twice is two events, so a
 /// test sees a report made twice. Its app and platform are fixed

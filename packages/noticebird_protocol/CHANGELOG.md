@@ -1,6 +1,7 @@
-## Unreleased
+## 0.6.0
 
-Moves with `noticebird`. The crash event's schema (5) and the feedback
+Moves with `noticebird` 0.6.0, `noticebird_flutter` 0.6.0 and
+`noticebird_native` 0.6.0. The crash event's schema (5) and the feedback
 report's (1) are unchanged.
 
 Breaking changes:
@@ -12,10 +13,16 @@ Breaking changes:
   - `CrashEvent.userId`, `CrashEvent.userIdPattern` and the rule that `user`
     and `userId` are never both set. `toJson` no longer writes a `userId`;
     no client set one. An event names its user with `user` (`CrashUser`).
-- The feedback report's JSON Schema and its README (`schema/`) and the
-  fixtures of its valid reports and HTTP answers (`test/fixtures/feedback/`)
-  leave the package, and with them its dev dependency on `json_schema`. The
-  report's rules are its writer's, `toJson` and `toJsonString`.
+- The feedback conformance kit leaves the package: the report's JSON Schema
+  and its README (`schema/`), with the platform's table of answers, and the
+  fixtures of its valid reports and HTTP answers (`test/fixtures/feedback/`),
+  and with them the dev dependency on `json_schema`. The report's rules are
+  its writer's, `toJson` and `toJsonString`.
+
+Changes:
+
+- The README says what a client builds with the package, and no longer how
+  the platform reads, groups or judges an event.
 
 ## 0.5.0
 

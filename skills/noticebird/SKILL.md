@@ -36,9 +36,9 @@ user-invocable: true
 
 # Noticebird SDK
 
-Privacy-safe crash reporting and user feedback for Flutter apps. The client builds a
-validated, versioned event and posts it as a canonical-JSON envelope over plain HTTP. It
-has no dependency beyond the pub packages its pubspec lists.
+Privacy-safe crash reporting and user feedback for Flutter apps. The client builds each
+event by the protocol's rules and posts it over plain HTTP. It has no dependency beyond
+the pub packages its pubspec lists.
 
 ## The prime directive
 
@@ -179,9 +179,14 @@ leaves it. Pass it as a feedback report's `relatedEventId`.
 | `sent` | Delivered to the transport. Its breadcrumbs count as sent: the next event starts after them. |
 | `deduplicated` | The same error already captured inside the deduplication window (default 1 minute): the same `groupingKey`, or without one the same exception type and top app frames, line numbers aside. |
 | `queued` | Transport failed; the event sits in the retry queue for the next flush. |
-| `dropped` | Could not be captured at all — protocol violation in config metadata, `maxPendingEvents: 0`, or the platform refused the event for good (see `CrashTransport.send`; a flush drops it too). |
+| `dropped` | Could not be captured at all — app or platform metadata or a session id the protocol refuses, a NaN or infinite tag number, an event over 64 KiB, `maxPendingEvents: 0` — or the platform refused the event for good (see `CrashTransport.send`; a flush drops it too). |
 | `ignored` | The host's `shouldCapture` declined the error. |
 | `discarded` | Crash uploads are off (`uploadCrashes: false`, a key that cannot work, or a client built without a `transport`): no event was made. |
+
+The platform checks every crash event again when it arrives and refuses one that is
+invalid. The client writes each event by the protocol's rules, the limits in
+`reference/privacy-and-limits.md`: what it can repair it repairs (a value cut, a breadcrumb
+or an `extra` key left out), and an event it cannot write is `dropped` on the device.
 
 ### One report per failure: one filter, one bypass
 
@@ -230,15 +235,17 @@ Noticebird.addBreadcrumb(TypedBreadcrumb(
   occurredAt: DateTime.now().toUtc(),
   category: BreadcrumbCategory.ui,           // fixed enum, never a free-form string
   action: 'checkout.confirm',                // must match ^[a-z][a-z0-9_.-]*$
-  data: {AllowedTag.component: 'CheckoutPage'}, // AllowedTag keys, scalar values, max 8
+  data: {AllowedTag.component: 'CheckoutPage'}, // AllowedTag keys, scalar values
 ));
 ```
 
-Categories are `bloc`, `navigation`, `http`, `ui`, `auth`, `lifecycle`, `system`. There is
-no escape hatch — an arbitrary category or a non-allowlisted tag key is rejected by the
-protocol, which means the event is dropped, not truncated. Navigation and bloc
-breadcrumbs come from the observers (*Route context*, *Bloc integration*); do not add
-them by hand on top.
+Categories are `bloc`, `navigation`, `http`, `ui`, `auth`, `lifecycle`, `system`; the
+category and the data keys are enums, so there is no free-form one. A breadcrumb the
+protocol refuses — an action outside `^[a-z][a-z0-9_.-]*$` (`Route.Push`) or over 100
+characters, a NaN or infinite number in its data — is left out alone: the event, a
+feedback report's trail and a native crash's trail go without it, never the whole event.
+Navigation and bloc breadcrumbs come from the observers (*Route context*, *Bloc
+integration*); do not add them by hand on top.
 
 Call `clearBreadcrumbs()` on logout: the trail leading to the next event should not carry
 the previous user's session.
@@ -250,12 +257,13 @@ event or a report redacts and shortens them. Reading it sends nothing.
 
 ## Identity
 
-Two ways in, and they are mutually exclusive per event:
+Two ways in; the last call wins:
 
 - `setUserId(String?)` — the account id, sent as given in the protocol's shape: characters
   outside `[A-Za-z0-9_-]` are stripped and the result is cut to 100. A UUID or numeric id
   stays intact.
-- `setUser(CrashUser?)` — explicit identity (`id`, `email`, `name`, `ipAddress`).
+- `setUser(CrashUser?)` — explicit identity (`id`, `email`, `name`, `ipAddress`, of 1–100,
+  1–254, 1–200 and 1–45 characters); a user outside those limits is left out.
 
 Sending identity is the host's choice, made once: `pii` (`CrashPiiConfig`) decides which
 fields leave the device (`allowedFields`, or `enabled: false` for none), for both calls
@@ -264,7 +272,7 @@ altogether. Who may *see* it is the platform's access control, not the SDK's. Th
 set here is also whose reporter assertion the client holds (*Feedback*).
 
 **Medical data and credentials never belong here** — not in identity, not in tags, not in
-`extra`. The ingestion privacy firewall rejects them for every profile.
+`extra` — in any profile.
 
 ## Route context
 
@@ -302,8 +310,9 @@ is a word (`/users/jdoe`) passes.
 ## Tags and extra
 
 `tags` keys come from the fixed `AllowedTag` enum (`feature`, `operation`, `component`,
-`connectivity`, `foreground`, `retryCount`) with scalar values only. Anything else is a
-protocol violation.
+`connectivity`, `foreground`, `retryCount`) with scalar values only: a string (redacted
+and cut to 100 characters), a finite number or a boolean. A NaN or infinite number drops
+the event.
 
 `extra` is free-form but heavily policed — forbidden key substrings, a key pattern, a
 depth limit and per-value caps, all applied silently before send. See
@@ -325,9 +334,8 @@ depth limit and per-value caps, all applied silently before send. See
 
 Sanitization is regex-based redaction of emails, JWTs, `bearer`/`token`/`secret`/
 `password`/`api_key`/`authorization` assignments, UUIDs, phone numbers, IPv4 addresses and
-a set of health terms — built from the protocol's `PrivacyPatterns`, so it covers every
-pattern the platform's firewall rejects an event over. It runs on messages, tag strings,
-breadcrumb data and `extra` values in every profile, when an event is built.
+a set of health terms, built from the protocol's `PrivacyPatterns`. It runs on messages,
+tag strings, breadcrumb data and `extra` values in every profile, when an event is built.
 
 ## Offline queues and flush
 
@@ -341,7 +349,7 @@ encrypted one under `regulatedStrict`).
 The queue is capped at 50 events and drops **oldest first**. A flush merges the store into
 the in-memory queue, de-duplicates by `eventId`, and sends from the front, stopping at the
 first failure that may still succeed, so ordering is preserved (an event the platform
-refuses for good is dropped and the flush goes on: `CrashTransport.send`).
+refuses for good is dropped and the flush goes on).
 
 **You do not flush.** The start flushes at start, on resume and when the connection
 returns, and the client drains a kept feedback report by itself when it is due. A flush
@@ -419,7 +427,8 @@ diagnostics group `noticebird` (`dropped_values`, `screenshot_dropped`, and
 prints it. Do not name a group `noticebird`, or after a context group (`blocs`): it is left
 out. An enum goes as its name, a `DateTime` in UTC. What *is* refused — an empty message, a
 contact address, a user context, a related event id — throws `ArgumentError` in a **debug
-build only**, and is `FeedbackRejected(invalidInput, path)` in release. Check a form's
+build only**, and is `FeedbackRejected(invalidInput, path)` in release, `path` naming the
+value at fault (`$.contact.email`, say). Check a form's
 input first with `FeedbackContact.isValid(email)` and `FeedbackUserContext.check(values)`.
 
 **The reporter assertion** is a signed token from your backend that lets the platform show
@@ -439,8 +448,8 @@ itself. Each kept report's end goes to `onFeedbackSettled` as a
 **Privacy.**
 
 - The message is redacted on the device like an exception message.
-- `userContext` is checked for its shape only and sent as given: the platform drops the
-  credential and health values it may not keep. Still send only what you mean to.
+- `userContext` is checked for its shape only and sent as given, unredacted: send only
+  what you mean to.
 - Under `regulatedStrict` no `user`, no `userContext` and no locale are sent; the reporter
   assertion, when one is configured, is the one identity such a report carries.
 - `contactEmail` is the user's consent to be contacted: pass it only when they gave it.
@@ -547,8 +556,8 @@ await NoticebirdFlutter.start(
 
 Test support is in `package:noticebird_flutter/testing.dart` (`package:noticebird/testing.dart`
 outside Flutter). `NoticebirdRecorder` is a real client whose events are recorded instead
-of sent: built, sanitized and checked as in the app, without a network, and without
-deduplication, so a report made twice shows as two. Hand its `client` to what the test
+of sent: built, sanitized and encoded as the app's client does, without a network, and
+without deduplication, so a report made twice shows as two. Hand its `client` to what the test
 pumps — `NoticebirdBlocObserver(client: …)` (or the app's subclass) as `Bloc.observer`,
 `NoticebirdNavigatorObserver(client: …)` in the navigator, the app's own adapter — or
 `attach()` it to the facade, so code that calls `Noticebird.*` reports to it.
@@ -564,7 +573,7 @@ Bloc.observer = NoticebirdBlocObserver(client: recorder.client);
 final error = StateError('boom');
 final cubit = ListCubit(load: () => throw error);
 await cubit.load();                          // catches into a state, calls addError
-expect(recorder.events.single['handled'], isTrue); // the event as the platform receives it
+expect(recorder.events.single['handled'], isTrue); // the event as the client posts it
 expect(await recorder.eventOf(error), isNotNull);  // by eventIdOf
 ```
 
@@ -605,7 +614,7 @@ Native capture: implement `NativeCrashCollector` with a fake that emits
 | Stack trace is `<no-app-frames>` | Only app frames are kept — `package:` frames and, on the web, the frames of the compiled `<name>.dart.js` and its parts — and the trace held none, such as one from the engine or `canvaskit.js` alone. |
 | A tag or `extra` key vanished | Not in `AllowedTag`, or caught by the forbidden-key list. |
 | `setRouteTemplate` throws | A raw route with an id, a query or a fragment in it — pass the template. |
-| Breadcrumbs missing from an event | A previous event carried them, or a chatty bloc pushed them out (make it an `UntracedBloc`). |
+| Breadcrumbs missing from an event | A previous event carried them, a chatty bloc pushed them out (make it an `UntracedBloc`), or the protocol refused one (an action such as `Route.Push`): it is left out alone. |
 | The start throws | Deliberate: an unencrypted store under `regulatedStrict`, an `appName` the protocol refuses, or a cap outside its range. |
 | A report's diagnostics or screenshot are missing | Left out by the sanitising; its `noticebird` group says what (`dropped_values`, `screenshot_dropped`). |
 | `FeedbackConfig` or `FeedbackKind` is not found | They are in `package:noticebird_flutter/feedback.dart`, not the main library. |

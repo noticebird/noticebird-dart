@@ -10,7 +10,7 @@ final _stack = StackTrace.fromString('#0 A.b (package:app/a.dart:1:1)');
 void main() {
   tearDown(Noticebird.detach);
 
-  test('records each report as the platform would receive it, while the '
+  test('records each report as the client would post it, while the '
       'capture runs', () {
     final recorder = NoticebirdRecorder();
 

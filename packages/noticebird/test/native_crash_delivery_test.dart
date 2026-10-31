@@ -1100,6 +1100,20 @@ void main() {
       );
     });
 
+    test('a breadcrumb the protocol refuses is left out of the run state '
+        'alone', () async {
+      final collector = _FakeCollector();
+      final reporter = client(collector);
+      await Future<void>.delayed(Duration.zero);
+      reporter
+        ..addBreadcrumb(_crumb('Route.Push'))
+        ..addBreadcrumb(_crumb('route.push'));
+
+      expect(collector.updates.last.breadcrumbs.map((crumb) => crumb.action), [
+        'route.push',
+      ]);
+    });
+
     test('regulatedStrict hands over no trail', () async {
       final collector = _FakeCollector();
       client(collector, profile: CrashPrivacyProfile.regulatedStrict)

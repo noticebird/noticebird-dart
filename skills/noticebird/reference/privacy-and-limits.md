@@ -1,7 +1,12 @@
-# Privacy rules and hard limits
+# Privacy rules and limits
 
-Every number here is enforced. A violation drops the event (`CaptureOutcome.dropped`)
-rather than truncating it, except where this file says the value is silently stripped.
+Every limit here is one an app's own input or config can hit. The client repairs what
+it can: a value it can shorten is shortened, a value it can do without is left out and
+the rest still goes. What it cannot repair is said per row.
+
+The platform checks every crash event and every feedback report again when they arrive,
+and refuses one that is invalid. The client writes each by the protocol's rules, so the
+limits below are the ones to keep to.
 
 ## Configuration ranges
 
@@ -17,60 +22,65 @@ the trail of a feedback report) and keeps the other defaults.
 | `maxDeduplicationEntries` | 100 | 1–1000 |
 | `deduplicationWindow` | 1 minute | any non-negative `Duration` |
 
-## Field limits
+## Crash events
 
-| Field | Limit |
-|---|---|
-| `eventId` | `^[0-9a-fA-F-]{36}$` |
-| `sessionId` | `^[A-Za-z0-9_-]{16,64}$` |
-| `exception.type` | 160 chars (truncated by the client) |
-| `exception.sanitizedMessage` | 512 chars |
-| `exception.stackTrace` | 32768 chars, max 50 frames |
-| `routeTemplate` | starts with `/`, max 200 chars |
-| `app.name` / `version` / `build` / `release` | 100 / 50 / 50 / 160 |
-| `platform.osVersion` / `deviceClass` | 100 / 100 |
-| `userId` (legacy) | `^[A-Za-z0-9_-]{1,100}$` |
-| `user.id` / `email` / `name` / `ipAddress` | 100 / 254 / 200 / 45 |
-| `tags` | 20 entries, string values 100 chars, numbers must be finite |
-| breadcrumb `data` | 8 entries |
-| breadcrumb `action` | `^[a-z][a-z0-9_.-]*$`, 100 chars |
-| `breadcrumbs` | 50 entries |
-| `extra` | 20 fields, keys `^[A-Za-z][A-Za-z0-9_.-]{0,63}$` |
-| `extra` values | strings 1000 chars, lists/maps 20 entries, nesting under 2 levels, numbers must be finite |
-| whole envelope | 65536 bytes of canonical JSON |
+| Value | Limit | When it breaks the limit |
+|---|---|---|
+| `AppMetadata` `name` / `version` / `build` / `release` | 1–100 / 1–50 / 1–50 / 1–160 characters | every event is `dropped`; the start throws for an `appName` it refuses |
+| `PlatformMetadata` `osVersion` / `deviceClass` | 1–100 / 1–100 characters | every event is `dropped` |
+| `sessionIdFactory`'s id | `^[A-Za-z0-9_-]{16,64}$` | every event is `dropped`, every feedback report `FeedbackRejected(failed)` |
+| `eventIdFactory`'s id (`NoticebirdClient`) | `^[0-9a-fA-F-]{36}$`; a lowercase UUID (such as a UUIDv7) also serves as a feedback report's `relatedEventId` | every event is `dropped` |
+| route template (`setRouteTemplate`, `feedbackMoment(routeTemplate:)`) | starts with `/`, at most 200 characters, and passes `NoticebirdClient.isRouteTemplate`: no query or fragment, no id-like segment | throws in a debug build; left out in release |
+| `setUser` (`CrashUser`) | at least one field; `id` / `email` / `name` / `ipAddress` 1–100 / 1–254 / 1–200 / 1–45 characters | the user is left out |
+| `setUserId` | — | characters outside `[A-Za-z0-9_-]` are stripped, the rest cut to 100 |
+| `tags` | `AllowedTag` keys; a string, a finite number or a boolean | strings are redacted and cut to 100 characters (ellipsis included); a NaN or infinite number drops the event |
+| breadcrumb `action` | `^[a-z][a-z0-9_.-]*$`, at most 100 characters | the breadcrumb is left out alone: of the event, of a feedback report's trail and of a native crash's trail |
+| breadcrumb `data` | `AllowedTag` keys; a string, a finite number or a boolean | strings are redacted and cut to 100 characters; a NaN or infinite number leaves the breadcrumb out alone |
+| `groupingKey` | at most 8 parts of at most 100 characters | each part redacted and cut, empty parts left out, the first 8 kept; none left is no key |
+| `extra` | below | left out or cut, silently |
+| the whole event | 65,536 bytes (64 KiB) of canonical JSON | the event is `dropped`; a large `extra` is the usual cause |
 
-`user` and the legacy `userId` can never both be present.
+A breadcrumb that is left out costs only itself: before 0.6.0 one bad action
+(`Route.Push`) dropped the whole crash event.
+
+### `extra`
+
+`extra` is for small technical context. The client applies these rules before the event
+is built, and never drops the event over them:
+
+- at most 20 keys, each `^[A-Za-z][A-Za-z0-9_.-]{0,63}$`; a key that breaks it is left out;
+- a value is a string (redacted, cut to 1000 characters), a finite number, a boolean,
+  `null`, a list or a map; lists and maps hold at most 20 entries and nest at most two
+  levels; any other value, a NaN or infinite number, and anything deeper is left out;
+- a key is left out when the protocol's `PrivacyPatterns.extraKeyViolation` names it — it
+  is exactly `name` after normalization, or its normalized form contains a credential word,
+  a health measure or an identity — or when it contains `fitbit`, `google` or `patient`.
+  Normalization lowercases and removes everything outside `a-z0-9`, so `User_ID`,
+  `user-id` and `userId` are all caught. The lists live in the protocol (`privacy.dart`).
 
 ## Redaction
 
-Applied by the client to messages, the route template, tag strings, grouping key
-parts, breadcrumb data strings, `extra` string values and native image names in **every** privacy profile, when an event is built (the breadcrumb buffer
-behind `recentBreadcrumbs` keeps the values as recorded). Each match becomes `[REDACTED]`:
+Applied by the client to messages, the route template, tag strings, grouping key parts,
+breadcrumb data strings, `extra` string values and native image names in **every**
+privacy profile, when an event is built (the breadcrumb buffer behind `recentBreadcrumbs`
+keeps the values as recorded). Each match becomes `[REDACTED]`:
 
 - email addresses
 - JWTs (`eyJ…`.`…`.`…`)
 - `bearer` / `token` / `secret` / `password` / `api_key` / `authorization` followed by
-  `:`, `=` or whitespace
-- any of those keywords at the end of a value (the platform's firewall reads an event's
-  values as one text and would take the next value as its secret)
+  `:`, `=` or whitespace, and any of those words at the end of a value
 - UUID-shaped hex runs, phone-number-like digit runs, IPv4 addresses
 - `glucose`, `ecg`, `electrocardiogram`, `heart rate`, `blood pressure`, `spo2`,
   `diagnosis`, `observation` followed by `:` or `=`
 
-The patterns are built from the protocol's `PrivacyPatterns`, the ones the platform's
-privacy firewall scans an event with and rejects a whole event by; the
-client adds the wider forms above (any whitespace after a credential word, any UUID-shaped
-run, a health value up to the next separator). A breadcrumb `action` that matches one becomes
-`redacted`. A native image name, whose characters allow no `[REDACTED]`, has each match
-replaced by `redacted`. The route template is redacted when it is set (and again when a
-native report carries the one its run recorded), then cut to its 200 characters.
+The patterns are built from the protocol's `PrivacyPatterns`. A breadcrumb `action` that
+matches one becomes `redacted`. A native image name, whose characters allow no
+`[REDACTED]`, has each match replaced by `redacted`. The route template is redacted when
+it is set, then cut to its 200 characters.
 
-A frame symbol — a native frame's, or the function name of a Dart or web stack frame —
-is respelled, not redacted, so it keeps every word: a run of ten digits is cut to nine, a
-symbol that reads as a credential assignment (`auth::token::`) spells its namespaces with
-dots, a dotted IPv4- or JWT-shaped run its dots with underscores (`Codec.1_2_3_4`), and a
-symbol ending in a credential word gets an underscore after it (`AuthHeader.bearer_`),
-since the firewall would take the next value as its secret. A native symbol first loses
+A function name in a stack frame is respelled rather than redacted, so it keeps its
+words: a long digit run is cut, and a name that would read as a secret or an address
+changes a separator (`AuthHeader.bearer_`, `Codec.1_2_3_4`). A native symbol also loses
 its compiler hash suffixes (`.__uniq.…`, `.llvm.…`), which change with every build.
 
 Redaction is a safety net, not a design. Do not rely on it to scrub a value you chose to
@@ -93,14 +103,10 @@ pass — pass a safe value instead.
   can lead them back to the Dart source. A function whose name is not identifiers and
   `<anonymous>` joined by dots is written `<anonymous>`.
 
-Every kept frame, whatever its shape, has its function name respelled as a frame symbol
-(see Redaction): `#0 AuthHeader.bearer (package:app/a.dart:1:2)` would have the firewall
-take the location as a bearer token, so it is sent as
-`#0 AuthHeader.bearer_ (package:app/a.dart:1:2)`. A frame the redaction patterns still
-match (a name holding an e-mail address, a file named like a phone number) is left out.
-
-Every other frame — the SDK's, the engine's, `canvaskit.js`, `flutter.js`, a browser
-extension's, another origin's library — is left out.
+A frame the redaction patterns still match (a name holding an e-mail address, a file
+named like a phone number) is left out. Every other frame — the SDK's, the engine's,
+`canvaskit.js`, `flutter.js`, a browser extension's, another origin's library — is left
+out too. The client cuts the message and the stack trace to the protocol's lengths.
 
 A web (dart2js) event without `package:` frames is deduplicated by its type alone; to
 group such events yourself, pass a `groupingKey` (`SKILL.md`, Capturing).
@@ -108,19 +114,6 @@ group such events yourself, pass a `groupingKey` (`SKILL.md`, Capturing).
 In a minified dart2js build every type is named `minified:<id>`; a Dart core error
 (`StateError`, `ArgumentError`, `IndexError`, `TimeoutException`, …) is sent under its core
 type's name instead, and any other type keeps its minified name.
-
-## Dropped `extra` keys
-
-A key is dropped **silently** (the rest of the event is still sent) when the protocol's
-`PrivacyPatterns.extraKeyViolation` names it — it is exactly `name` after normalization, or
-its normalized form contains a credential word, a health measure or an identity — or when it
-contains `fitbit`, `google` or `patient`, which the client drops on top. The lists live
-in the protocol (`privacy.dart`); read them there rather than from a copy here.
-
-Normalization lowercases and removes everything outside `a-z0-9`, so `User_ID`, `user-id`
-and `userId` are all caught. Values that are not `String`, `num`, `bool`, `null`, `List`
-or `Map` are dropped the same way, as are non-finite numbers and anything nested deeper
-than two levels.
 
 ## What `regulatedStrict` changes
 
@@ -133,39 +126,44 @@ than two levels.
 | `groupingKey` | each part redacted and cut to 100 chars, empty parts left out, the first 8 kept; none left is no key | the same |
 | offline store | any | must report `isEncrypted: true` or the config throws |
 
-## Server-side invariants
+## Keys
 
-The project, environment and privacy profile are derived from the ingest key on the
-server and are **never** read from the payload. Clients authenticate with a publishable
-key, `<prefix>_pk_<token>` (`noticebird_pk_…`; older `crash_pk_…` keys stay valid); `CrashHttpTransport` checks that shape
-rather than a fixed prefix and refuses anything else, a secret `…_sk_…` key included,
-in its constructor. It sends the key as `Authorization: Bearer <key>`. A
-secret key in a shipped client is a security incident, not a configuration mistake.
+Clients authenticate with a publishable key, `<prefix>_pk_<token>` (`noticebird_pk_…`;
+older `crash_pk_…` keys stay valid); `CrashHttpTransport` checks that shape rather than a
+fixed prefix and refuses anything else, a secret `…_sk_…` key included, in its
+constructor. It sends the key as `Authorization: Bearer <key>`. The project, environment
+and privacy profile come from the key, never from the payload. A secret key in a shipped
+client is a security incident, not a configuration mistake.
 
 ## Feedback reports (`captureFeedback`)
 
 A report is not an event, and its limits are its own. The message, the contact address,
 the user context and the related event id are refused: one that breaks its limit throws
-`ArgumentError` in a debug build and is `FeedbackRejected(invalidInput, path)` in release.
-The screenshot and the diagnostics are sanitised instead: what breaks a limit is left out,
-the report is sent, and the client's note group says what went.
+`ArgumentError` in a debug build and is `FeedbackRejected(invalidInput, path)` in release,
+`path` naming the value at fault. The screenshot and the diagnostics are sanitised
+instead: what breaks a limit is left out, the report is sent, and the client's note group
+says what went. A value the client fills in itself and the report refuses (a locale, a
+route template, a user field, a trail item) is left out.
 
 | Field | Limit |
 |---|---|
 | `message` | 1–4000 characters after redaction; U+0000 removed, then redacted as an exception message is and cut to 4000 |
+| `contactEmail` | 3–254 characters, `^[^@\s]+@[^@\s]+$` (`FeedbackContact.isValid`) |
+| `userContext` | 1–32 keys `^[A-Za-z][A-Za-z0-9_-]{0,63}$`; a value is a string of 1–256 characters, a finite number, a boolean, an array of 1–16 of those, or an object of 1–32 keys holding those (one nested level, never an object in an array); at most 8 KiB (8,192 bytes) in compact UTF-8 JSON (`FeedbackUserContext.check`) |
+| `relatedEventId` | a lowercase UUID: a `CaptureResult.eventId` |
 | screenshot | one, PNG, JPEG or WebP by its bytes' file signature, at most 5 MiB (5,242,880 bytes); bytes of another type, or more, are left out (`noticebird.screenshot_dropped`) |
-| trail | the newest 100 breadcrumbs of the buffer, redacted as in an event; the oldest left out first until the report fits |
 | `diagnostics` | at most 16 groups of at most 32 values, keys `^[a-z][a-zA-Z0-9_]{0,63}$`, at most 16 KiB (16,384 bytes) encoded; a value is a boolean, a finite number, a UTC timestamp, a lowercase UUID v4 or a token of 1–64 characters `[A-Za-z0-9_.:+/-]`; an enum is sent as its name, a `DateTime` in UTC. The context groups (the `blocs` group of `noticebird_flutter`) come first, then the host's (the moment's `diagnostics`), whose groups of a context group's name are left out; one group's room is kept for the note. A group or value that breaks a rule is left out and counted (`noticebird.dropped_values`), and the last groups go until the whole fits; a value is never shortened |
 | the note group `noticebird` | the client's own: `dropped_values` (how many diagnostics values were left out), `screenshot_dropped`, `moment_taken_at` (when a moment passed in was taken, if before the capture); a host's group of that name is left out |
-| `userContext` | 1–32 keys `^[A-Za-z][A-Za-z0-9_-]{0,63}$`; a value is a string of 1–256 characters, a finite number, a boolean, an array of 1–16 of those, or an object of 1–32 keys holding those (one nested level, never an object in an array); at most 8 KiB (8,192 bytes) in compact UTF-8 JSON |
-| `contactEmail` | 3–254 characters, an address the report accepts (`FeedbackContact.isValid`) |
+| locale (`NoticebirdConfig.locale`) | at most 35 characters, a language tag `^[A-Za-z]{2,3}([_-][A-Za-z0-9]{2,8}){0,3}$` (`nl-NL`); another is left out |
+| trail | the newest 100 breadcrumbs of the buffer, redacted as in an event; a breadcrumb the report refuses is left out alone, and the oldest go first until the report fits |
 | whole report | 65,536 bytes (64 KiB) encoded |
-| reporter assertion | the provider is given 5 seconds; an assertion is held per user (`setUser` / `setUserId`) until 5 minutes before its `exp`, and reports captured at once share one call; without a user, or for a token without a readable `exp`, it is asked for every report; a refusal is not retried |
+| reporter assertion | a compact JWS (three base64url parts joined by dots) of 16–4096 characters; another is left out and the report goes unverified. The provider is given 5 seconds; an assertion is held per user (`setUser` / `setUserId`) until 5 minutes before its `exp`, and reports captured at once share one call; without a user, or for a token without a readable `exp`, it is asked for every report; a refusal is not retried |
+| submission window | the platform takes a report up to 7 days after it was captured, and none whose capture time is more than 5 minutes ahead of its clock: `FeedbackRejected(clock)`. A kept report older than 7 days is removed unsent (`FeedbackRejection.expired`) |
 
 `userContext` is checked for its shape only and sent as the host gave it: the platform
-drops the credential and health values it may not keep, before it stores the report.
-Under `regulatedStrict` the client sends no `user`, no `userContext` and no locale; the
-reporter assertion, when one is configured, is the one identity such a report carries.
+may drop values it does not keep. Under `regulatedStrict` the client sends no `user`, no
+`userContext` and no locale; the reporter assertion, when one is configured, is the one
+identity such a report carries.
 
 ### Feedback offline queue
 
@@ -190,10 +188,9 @@ start keeps none there; on the web their calls throw, so the start keeps none th
 | Per referenced image: file name (basename), debug id, architecture, in-app flag | Full paths, images no frame references |
 | Exception class and its sanitized message; an Android abort message (not in `regulatedStrict`) | Tombstone log buffers, process arguments |
 | Hang duration, disk-write bytes | Region format, device model beyond `deviceClass`, pid (used on device only), bundle path, TestFlight cohort |
-| The crashed run's app/platform metadata, session id, route template, trail (trail not in `regulatedStrict`) | Identity of any kind; `user`, `userId`, `extra` |
+| The crashed run's app/platform metadata, session id, route template, trail (trail not in `regulatedStrict`) | Identity of any kind; `user`, `extra` |
 
 On device: an inbox (≤ 20 reports, ≤ 30 days, deleted on delivery) and a run ledger
 (≤ 5 runs, ≤ 16 KB per engine file), app-private and excluded from backups; purged after
-three launches without native capture configured. Per record: ≤ 64 frames, ≤ 32 images,
-≤ 10 delivered per launch.
-
+three launches without native capture configured. At most 10 reports are delivered per
+launch.

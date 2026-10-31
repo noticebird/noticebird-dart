@@ -3,10 +3,10 @@
 Privacy-safe crash reporting and user feedback for Dart: the client of
 Noticebird.
 
-The client builds typed events of the protocol's schema 5, applies the
-configured privacy profile, keeps bounded breadcrumbs and retries, and sends
-events to a Noticebird API's ingestion route, and a user's feedback report to
-its feedback routes. It is pure Dart: no Flutter, no database or backend SDK.
+The client builds typed crash events, applies the configured privacy
+profile, keeps bounded breadcrumbs and retries, and sends events to a
+Noticebird API's ingestion route, and a user's feedback report to its
+feedback routes. It is pure Dart: no Flutter, no database or backend SDK.
 
 **A Flutter app depends on [`noticebird_flutter`](../noticebird_flutter)
 instead**, whose `NoticebirdFlutter.start` makes this client and wires the
@@ -40,8 +40,7 @@ Noticebird.attach(client); // the static facade, from anywhere
 ```
 
 Consumers use only publishable ingest keys. The project, environment and
-privacy profile are derived by the service from the key and are never
-accepted as security claims in an event payload. The transport takes the
+privacy profile come from the key, never from an event payload. The transport takes the
 API's base URL (`CrashHttpTransport.hostedApiUrl`, `https://api.noticebird.com`,
 or a staging, self-hosted or proxied one, a path prefix included) and adds the
 routes itself; it never picks an API by itself. A client without a `transport`
@@ -126,8 +125,9 @@ contact address, diagnostics, user context and reporter assertion.
 - Identity is only sent when the consumer calls `setUser` or `setUserId`;
   `CrashPiiConfig` filters it or opts out.
 - Medical data and secrets are never allowed, including in `custom` mode.
-- Breadcrumbs are typed and bounded to 50 per event; retries are bounded by
-  `maxPendingEvents`.
+- Breadcrumbs are typed and bounded to 50 per event; one the protocol
+  refuses (an action such as `Route.Push`) is left out alone. Retries are
+  bounded by `maxPendingEvents`.
 - The client catches its own failures and never propagates them into the
   host application.
 - Route values must be templates, never raw identifiers.
@@ -138,7 +138,7 @@ The protocol package is exported as `noticebird_protocol`.
 
 `package:noticebird/testing.dart` holds `NoticebirdRecorder`: a real client
 whose events are recorded instead of sent, with no network and no
-deduplication, so a test sees what the platform would receive and a report
+deduplication, so a test sees what the client would send and a report
 made twice:
 
 ```dart

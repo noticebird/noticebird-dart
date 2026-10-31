@@ -19,24 +19,24 @@ dependencies:
   noticebird_flutter:
     git:
       url: https://github.com/noticebird/noticebird-dart.git
-      ref: v0.5.0
+      ref: v0.6.0
       path: packages/noticebird_flutter
   noticebird_native: # only for native crashes, §11
     git:
       url: https://github.com/noticebird/noticebird-dart.git
-      ref: v0.5.0
+      ref: v0.6.0
       path: packages/noticebird_native
 
 dependency_overrides:
   noticebird:
     git:
       url: https://github.com/noticebird/noticebird-dart.git
-      ref: v0.5.0
+      ref: v0.6.0
       path: packages/noticebird
   noticebird_protocol:
     git:
       url: https://github.com/noticebird/noticebird-dart.git
-      ref: v0.5.0
+      ref: v0.6.0
       path: packages/noticebird_protocol
 ```
 
@@ -272,8 +272,13 @@ operation, and component. Pass `groupingKey` (up to 8 short technical parts,
 such as an error code and an operation) when the app knows better than the
 stack which failures are one issue: Noticebird then groups every event of
 the app with that key together, whatever its type or stack. Put bounded
-diagnostic JSON in `extra`; sensitive keys and values are removed client-side
-and rejected again server-side.
+diagnostic JSON in `extra`; sensitive keys and values are removed on the
+device.
+
+A breadcrumb the protocol refuses — an action outside `^[a-z][a-z0-9_.-]*$`
+(`Route.Push`) or over 100 characters, a NaN or infinite number in its
+data — is left out alone: the event, a feedback report's trail and a native
+crash's trail go without it.
 
 `captureException` returns a `CaptureResult`: its `outcome` describes what
 happened — `sent`, `deduplicated`, `queued` (transport failed, retained for
@@ -286,6 +291,14 @@ answers the same id later from the error alone, also for an error a global
 handler captured. A capture the filter ignores is no capture: an error the
 host reported at its own report point and rethrew keeps the id of that
 report when a global channel sees it again.
+
+The platform checks every crash event again when it arrives and refuses one
+that is invalid. The client writes each event by the protocol's rules (the
+limits are in the skill's
+[privacy and limits reference](../skills/noticebird/reference/privacy-and-limits.md)):
+what it can repair it repairs — a value cut, a breadcrumb or an `extra` key
+left out — and an event it cannot write, such as one with app metadata the
+protocol refuses or over 64 KiB, is `dropped` on the device.
 
 ### One report per failure
 
@@ -328,10 +341,8 @@ fields. `regulatedStrict` always removes identity, because selecting that
 profile is the consumer's explicit no-PII policy choice.
 
 Allowed PII fields are `userId`, `email`, `name`, and `ipAddress`. Identity must
-never be placed in `extra`. User data does not affect how events are grouped,
-so the same crash across different users still groups into one issue. Medical data
-and credentials remain forbidden in every profile; there is intentionally no
-`sendMedicalData` option.
+never be placed in `extra`. Medical data and credentials remain forbidden in
+every profile; there is intentionally no `sendMedicalData` option.
 
 ## 6. User feedback
 
@@ -398,8 +409,8 @@ client's own, `noticebird` (`dropped_values`, `screenshot_dropped`, and
 host's group of that name is
 left out, and a debug build prints what went. `userContext` is what the app
 tells about its user on purpose; the client checks its shape
-(`FeedbackUserContext.check`) and sends it as given, and the platform drops
-what it may not keep. Under `regulatedStrict` no user, user context or locale
+(`FeedbackUserContext.check`) and sends it as given, unredacted: send only
+what you mean to. Under `regulatedStrict` no user, user context or locale
 is sent; the reporter assertion, when one is configured, is the one identity
 such a report carries. The exact limits are in the skill's
 [privacy and limits reference](../skills/noticebird/reference/privacy-and-limits.md).
@@ -420,8 +431,10 @@ The outcome is sealed:
 `captureFeedback` never throws in a release build. A value the app passed that the report
 refuses (an empty message, a contact address, a user context, a related event
 id) throws an `ArgumentError` in a debug build, to show the mistake, and is
-`FeedbackRejected(FeedbackRejection.invalidInput)` in a release build. A form
-can check a contact address first with `FeedbackContact.isValid`.
+`FeedbackRejected(FeedbackRejection.invalidInput)` in a release build, its
+`path` naming the value at fault (`$.contact.email`, say). A form can check a
+contact address first with `FeedbackContact.isValid`, and a user context with
+`FeedbackUserContext.check`.
 
 ### Verified reporters
 
@@ -537,16 +550,15 @@ in between loses nothing. `regulatedStrict` refuses an unencrypted store.
   medical data or secrets. Use `CrashPiiConfig` to filter or disable explicitly
   supplied identity fields on the client.
 
-The service enforces the same versioned privacy contract independently — its
-privacy firewall rejects every event that holds what these patterns match — so
-a client bug cannot persist restricted data.
+Redaction on the device is the first line, not the only one: the platform
+checks every event again when it arrives.
 
 ## 10. Testing
 
 `package:noticebird_flutter/testing.dart` (`package:noticebird/testing.dart`
 outside Flutter) holds `NoticebirdRecorder`: a real client whose events are
 recorded instead of sent, without a network. Its client builds, sanitizes and
-checks each event as the app's does, and does not deduplicate, so a test sees
+encodes each event as the app's does, and does not deduplicate, so a test sees
 a report made twice. The SDK's observers report to it as they do in the app:
 
 ```dart
@@ -561,7 +573,7 @@ Bloc.observer = NoticebirdBlocObserver(client: recorder.client); // or the app's
 final error = StateError('boom');
 final cubit = ListCubit(load: () => throw error);
 await cubit.load(); // catches the error into a state, and calls addError
-final event = recorder.events.single; // the event as the platform receives it
+final event = recorder.events.single; // the event as the client posts it
 expect(event['handled'], isTrue);
 expect((await recorder.eventOf(error))?['eventId'], event['eventId']);
 ```
@@ -594,7 +606,7 @@ crash in the engine, a plugin, Dart AOT code or a system library; an uncaught
 Objective-C or JVM exception; a watchdog or ANR kill; a foreground
 low-memory kill — never reaches a Dart handler. The operating system keeps a
 report of it; `noticebird_native` reads that report on a later launch and
-the client delivers it as a schema-5 event with a `native` block.
+the client delivers it as a crash event with a `native` block.
 
 ### Opt in: one argument
 
@@ -648,8 +660,7 @@ is dropped even when a later release run delivers it.
 - `native`: kind, source, Mach exception, signal, codes, and the crashed
   thread's frames as image offsets with each image's file name, debug id,
   architecture and in-app flag. No absolute addresses, registers, other
-  threads, log buffers, full paths or identity — ever. No `user`, `userId` or
-  `extra`.
+  threads, log buffers, full paths or identity — ever. No `user` or `extra`.
 - A deterministic event id derived from the report, so a resend is a replay for
   Noticebird: one crash, one event. Native reports bypass the deduplication
   window, are capped at 10 per launch, and `shouldCapture` is asked with the
