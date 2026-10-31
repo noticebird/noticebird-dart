@@ -298,8 +298,8 @@ that is invalid. The client writes each event by the protocol's rules (the
 limits are in the skill's
 [privacy and limits reference](../skills/noticebird/reference/privacy-and-limits.md)):
 what it can repair it repairs — a value cut, a tag, a breadcrumb or an
-`extra` key left out — and an event it cannot write, such as one with a session id the
-protocol refuses or over 64 KiB, is `dropped` on the device.
+`extra` key left out — and an event it cannot write, such as one with a
+session id the protocol refuses or over 64 KiB, is `dropped` on the device.
 
 ### One report per failure
 

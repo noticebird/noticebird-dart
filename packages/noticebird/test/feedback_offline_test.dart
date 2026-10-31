@@ -560,7 +560,7 @@ void main() {
         const FeedbackDelivered(ticket: fakeTicket, verified: false),
       ),
       (
-        'report_conflict, as once retention deleted its attachment: '
+        'report_conflict again after a slot conflict: '
             'delivered without a ticket',
         const FeedbackFinalRefusal(code: 'report_conflict'),
         const FeedbackDelivered(verified: false),

@@ -29,6 +29,13 @@ Changes:
 - `NoticebirdRecorder`'s doc says what it records: each event built,
   sanitized and encoded by the real client, as in the app, and not what the
   platform would accept.
+- The consumer docs list what a host's backend must mint as a reporter
+  assertion: only the header fields `alg` (`EdDSA`), `kid` and `typ`
+  (`JWT`), only the claims `sub`, `aud`, `iat`, `exp`, `email`, `name` and
+  `role`, the role's pattern, the e-mail and name rules, at most 24 hours
+  from `iat` to `exp`, and `iat` at most 5 minutes ahead of the platform's
+  clock. An assertion with any other claim (`iss`, `jti`, `nbf`) leaves
+  every report unverified.
 - `setUserId`'s doc and the consumer docs say that stripping an id to
   `[A-Za-z0-9_-]` and cutting it to 100 characters is this client's own
   stable normalisation, not a rule of the protocol. It is unchanged, so an
