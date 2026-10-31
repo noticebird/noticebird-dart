@@ -49,7 +49,6 @@ CrashEvent v5Event({
   PlatformMetadata platform = v5Platform,
   String? routeTemplate = '/lists/:listId',
   String sessionId = 'random_session_123456',
-  String? userId,
   CrashUser? user = const CrashUser(id: 'user_abc123'),
   Map<AllowedTag, TagScalar> tags = const {
     AllowedTag.feature: 'lists',
@@ -69,7 +68,6 @@ CrashEvent v5Event({
   platform: platform,
   routeTemplate: routeTemplate,
   sessionId: sessionId,
-  userId: userId,
   user: user,
   tags: tags,
   extra: extra,

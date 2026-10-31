@@ -127,20 +127,30 @@ List<String>? sanitizeGroupingKey(List<String> groupingKey) {
 
 /// [breadcrumb] as an event carries it: every data value through
 /// [sanitizeTagValue], and an action the firewall would reject (it names an
-/// id or a credential) replaced by `redacted`.
-TypedBreadcrumb sanitizeBreadcrumb(TypedBreadcrumb breadcrumb) =>
-    TypedBreadcrumb(
-      occurredAt: breadcrumb.occurredAt,
-      category: breadcrumb.category,
-      action: redactCrashText(breadcrumb.action) == breadcrumb.action
-          ? breadcrumb.action
-          : 'redacted',
-      level: breadcrumb.level,
-      data: {
-        for (final entry in breadcrumb.data.entries)
-          entry.key: sanitizeTagValue(entry.value),
-      },
-    );
+/// id or a credential) replaced by `redacted`; `null` when the protocol
+/// still refuses it ([TypedBreadcrumb.check]), such as an action outside its
+/// pattern. A bad breadcrumb costs only itself, never the event or the
+/// report that carries the trail.
+TypedBreadcrumb? sanitizeBreadcrumb(TypedBreadcrumb breadcrumb) {
+  final sanitized = TypedBreadcrumb(
+    occurredAt: breadcrumb.occurredAt,
+    category: breadcrumb.category,
+    action: redactCrashText(breadcrumb.action) == breadcrumb.action
+        ? breadcrumb.action
+        : 'redacted',
+    level: breadcrumb.level,
+    data: {
+      for (final entry in breadcrumb.data.entries)
+        entry.key: sanitizeTagValue(entry.value),
+    },
+  );
+  try {
+    sanitized.check();
+    return sanitized;
+  } on ProtocolException {
+    return null;
+  }
+}
 
 /// Every round that changes the text turns a match into the replacement,
 /// which no pattern matches, so the fixed point comes within a few rounds; the

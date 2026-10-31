@@ -25,7 +25,6 @@ final class CrashEvent {
     required this.platform,
     required this.routeTemplate,
     required this.sessionId,
-    this.userId,
     this.user,
     this.tags = const {},
     this.extra = const {},
@@ -45,13 +44,6 @@ final class CrashEvent {
 
   /// A route template starts with `/`.
   static const maxRouteTemplateLength = 200;
-
-  /// The legacy [userId]: 1 to 100 of `A-Z`, `a-z`, `0-9`, `_` and `-`.
-  static final userIdPattern = RegExp(r'^[A-Za-z0-9_-]{1,100}$');
-
-  /// The tags one event carries at most on the wire, more than there are
-  /// [AllowedTag]s.
-  static const maxTags = 20;
 
   /// The fields an [extra] object, or the items a list in it, holds at most,
   /// at every level.
@@ -83,10 +75,6 @@ final class CrashEvent {
   final String? routeTemplate;
   final String sessionId;
 
-  /// Opaque, bounded account identifier for support triage ([userIdPattern]),
-  /// the legacy form of [user]: never both. Never an email or other free-form
-  /// context — see `AllowedTag` and the protocol's allowlist-only design.
-  final String? userId;
   final CrashUser? user;
   final Map<AllowedTag, TagScalar> tags;
 
@@ -127,7 +115,6 @@ final class CrashEvent {
       'platform': platform.toJson(),
       if (routeTemplate != null) 'routeTemplate': routeTemplate,
       'sessionId': sessionId,
-      if (userId != null) 'userId': userId,
       if (user != null) 'user': user!.toJson(),
       if (tags.isNotEmpty)
         'tags': {for (final entry in tags.entries) entry.key.name: entry.value},
@@ -194,21 +181,7 @@ final class CrashEvent {
         'Invalid route template',
       );
     }
-    if (userId case final userId? when !userIdPattern.hasMatch(userId)) {
-      throw const ProtocolException(
-        ProtocolViolation.invalidValue,
-        r'$.userId',
-        'Invalid user id',
-      );
-    }
     user?.check();
-    if (user != null && userId != null) {
-      throw const ProtocolException(
-        ProtocolViolation.invalidValue,
-        r'$.user',
-        'user and legacy userId cannot both be present',
-      );
-    }
     checkTags(tags, r'$.tags');
     _checkExtra(extra, r'$.extra', depth: 0);
     if (breadcrumbs.length > maxBreadcrumbs) {

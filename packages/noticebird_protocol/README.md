@@ -29,8 +29,3 @@ it (`toJson`, `toJsonString`, at most 64 KiB), the checks of a single value
 `checkTrailItem`), and the checks of a host's own values,
 `FeedbackUserContext.check` and `FeedbackDiagnostics.build`. Reading a report
 is the platform's.
-
-The report's contract for any language is the conformance kit next to it:
-the JSON Schema in `schema/`, the valid fixtures and the HTTP pairs of its
-three requests in `test/fixtures/feedback/v1/`. `schema/README.md` says how an
-SDK in another language uses it.

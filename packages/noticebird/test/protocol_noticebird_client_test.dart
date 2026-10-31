@@ -199,6 +199,42 @@ void main() {
     expect(component, endsWith('…'));
   });
 
+  test('a breadcrumb the protocol refuses is left out alone, not the event '
+      'lost', () async {
+    // The rule the feedback trail follows: an action outside the wire's
+    // pattern used to fail validation at capture time and drop the whole
+    // event.
+    reporter
+      ..addBreadcrumb(
+        TypedBreadcrumb(
+          occurredAt: DateTime.utc(2026, 7, 11),
+          category: BreadcrumbCategory.navigation,
+          action: 'Route.Push',
+        ),
+      )
+      ..addBreadcrumb(
+        TypedBreadcrumb(
+          occurredAt: DateTime.utc(2026, 7, 11),
+          category: BreadcrumbCategory.navigation,
+          action: 'route.push',
+        ),
+      );
+
+    final result = await reporter.captureException(
+      StateError('boom'),
+      StackTrace.fromString('#0 A.b (package:app/a.dart:1:1)'),
+    );
+
+    expect(result.outcome, CaptureOutcome.sent);
+    expect(
+      [
+        for (final breadcrumb in transport.events.single['breadcrumbs'])
+          breadcrumb['action'],
+      ],
+      ['route.push'],
+    );
+  });
+
   test('invalid or excessive free context cannot poison crash capture', () async {
     reporter = NoticebirdClient(
       config: config(profile: CrashPrivacyProfile.custom),

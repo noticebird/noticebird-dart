@@ -1,11 +1,9 @@
-// FeedbackHttpTransport against a fake HTTP client: the error table of the
-// feedback protocol row by row, the upload rules, the lenient reading of an
-// answer, the routes below the crash transport's API URL, and the conformance
-// kit's HTTP pairs replayed against it.
+// FeedbackHttpTransport against a fake HTTP client: the API's answers row by
+// row, the upload rules, the lenient reading of an answer, and the routes
+// below the crash transport's API URL.
 
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:fake_async/fake_async.dart';
@@ -15,10 +13,7 @@ import 'package:http/testing.dart';
 import 'package:noticebird/feedback.dart';
 import 'package:noticebird/noticebird.dart';
 
-/// The kit of `noticebird_protocol`, read in place from this workspace.
-const _kit = '../noticebird_protocol/test/fixtures/feedback/v1';
-
-const _key = 'noticebird_pk_conformance_kit_example_key';
+const _key = 'noticebird_pk_feedback_transport_example_key';
 const _reportId = '3b0c6f2e-8d41-4a77-9c5e-1f2a3b4c5d6e';
 const _api = 'https://api.noticebird.com';
 const _screenshot = FeedbackAttachmentRef(
@@ -76,8 +71,100 @@ void main() {
 
   setUp(() => sent = null);
 
-  group('the error table', () {
+  group('the answers', () {
     final rows = <(String, _Request, http.Response, FeedbackDelivery)>[
+      (
+        '200 with an upload URL is a pending slot, its URL resolved against '
+            "the slot request's",
+        _Request.slot,
+        json(200, {
+          'uploaded': false,
+          'uploadUrl': '0',
+          'uploadMethod': 'PUT',
+          'uploadHeaders': {'content-type': 'image/png'},
+          'expiresAt': '2026-10-30T12:05:00.000Z',
+        }),
+        FeedbackSlotPending(apiSlot),
+      ),
+      (
+        '200 with an upload URL keeps the headers the API names',
+        _Request.slot,
+        json(200, {
+          'uploaded': false,
+          'uploadUrl': '0',
+          'uploadMethod': 'PUT',
+          'uploadHeaders': {'content-type': 'image/webp'},
+          'expiresAt': '2026-10-30T12:05:00.000Z',
+        }),
+        FeedbackSlotPending(
+          FeedbackUploadSlot(
+            uploadUrl: apiSlot.uploadUrl,
+            uploadMethod: 'PUT',
+            uploadHeaders: const {'content-type': 'image/webp'},
+          ),
+        ),
+      ),
+      (
+        '200 uploaded at the slot is the bytes stored',
+        _Request.slot,
+        json(200, {'uploaded': true}),
+        const FeedbackAttachmentStored(),
+      ),
+      (
+        '204 to the upload is the bytes stored',
+        _Request.upload,
+        http.Response('', 204),
+        const FeedbackAttachmentStored(),
+      ),
+      (
+        '202 accepted is the report accepted, with its ticket',
+        _Request.submit,
+        json(202, {
+          'status': 'accepted',
+          'reportId': _reportId,
+          'ticket': {'number': 1, 'display': 'FB-1'},
+          'verified': false,
+          'redactions': {
+            'message': <String, Object?>{},
+            'trail': {'dropped': 0},
+            'diagnostics': {'dropped': 0},
+            'userContext': {'dropped': 0},
+          },
+        }),
+        const FeedbackAccepted(
+          ticket: FeedbackTicket(number: 1, display: 'FB-1'),
+          verified: false,
+        ),
+      ),
+      (
+        '200 replay is the acceptance it repeats',
+        _Request.submit,
+        json(200, {
+          'status': 'replay',
+          'reportId': _reportId,
+          'ticket': {'number': 1, 'display': 'FB-1'},
+          'verified': false,
+        }),
+        const FeedbackAccepted(
+          ticket: FeedbackTicket(number: 1, display: 'FB-1'),
+          verified: false,
+        ),
+      ),
+      (
+        '400 invalid_report at the slot is final, with its violation and '
+            'path',
+        _Request.slot,
+        json(400, {
+          'error': 'invalid_report',
+          'violation': 'invalidValue',
+          'path': r'$.contentType',
+        }),
+        const FeedbackFinalRefusal(
+          code: 'invalid_report',
+          violation: ProtocolViolation.invalidValue,
+          path: r'$.contentType',
+        ),
+      ),
       (
         '400 invalid_report with its violation and path is final',
         _Request.submit,
@@ -132,6 +219,12 @@ void main() {
       (
         '409 report_conflict is final',
         _Request.submit,
+        json(409, {'error': 'report_conflict'}),
+        const FeedbackFinalRefusal(code: 'report_conflict'),
+      ),
+      (
+        '409 report_conflict at the slot is final',
+        _Request.slot,
         json(409, {'error': 'report_conflict'}),
         const FeedbackFinalRefusal(code: 'report_conflict'),
       ),
@@ -449,15 +542,6 @@ void main() {
       }
     });
 
-    test('reads stored bytes', () async {
-      expect(
-        await transport(
-          (_) => json(200, {'uploaded': true}),
-        ).requestSlot(_reportId, _screenshot),
-        const FeedbackAttachmentStored(),
-      );
-    });
-
     test(
       'a 200 that is neither stored nor a usable slot is transient',
       () async {
@@ -681,23 +765,6 @@ void main() {
       );
     });
 
-    test('reads a replay as the acceptance it is', () async {
-      expect(
-        await transport(
-          (_) => json(200, {
-            'status': 'replay',
-            'reportId': _reportId,
-            'ticket': {'number': 12, 'display': 'FB-12'},
-            'verified': false,
-          }),
-        ).submit('{}'),
-        const FeedbackAccepted(
-          ticket: FeedbackTicket(number: 12, display: 'FB-12'),
-          verified: false,
-        ),
-      );
-    });
-
     test('a malformed 2xx is accepted without a ticket', () async {
       for (final response in [
         http.Response('OK', 202),
@@ -751,244 +818,7 @@ void main() {
       }
     });
   });
-
-  group("the kit's HTTP pairs", () {
-    Map<String, Object?> pair(String name) =>
-        jsonDecode(File('$_kit/http/$name').readAsStringSync())
-            as Map<String, Object?>;
-
-    final slotPending = FeedbackUploadSlot(
-      uploadUrl: apiSlot.uploadUrl,
-      uploadMethod: 'PUT',
-      uploadHeaders: const {'content-type': 'image/png'},
-    );
-    // A first acceptance and a replay are one answer to the client.
-    const accepted = FeedbackAccepted(
-      ticket: FeedbackTicket(number: 1, display: 'FB-1'),
-      verified: false,
-    );
-
-    // What each pair's answer comes to. `null`: the model has no such
-    // request, so no client can send it.
-    final expected = <String, FeedbackDelivery?>{
-      'slot_attachment_conflict.json': const FeedbackFinalRefusal(
-        code: 'attachment_conflict',
-      ),
-      'slot_attachments_disabled.json': const FeedbackFinalRefusal(
-        code: 'attachments_disabled',
-      ),
-      'slot_attachments_unavailable.json': const FeedbackTransient(),
-      'slot_invalid_index.json': const FeedbackFinalRefusal(
-        code: 'invalid_report',
-        violation: ProtocolViolation.invalidValue,
-        path: r'$.index',
-      ),
-      'slot_invalid_report.json': null,
-      'slot_not_found_index.json': const FeedbackFinalRefusal(),
-      'slot_not_found_report_id.json': const FeedbackFinalRefusal(),
-      'slot_pending.json': FeedbackSlotPending(slotPending),
-      'slot_pending_mismatch.json': FeedbackSlotPending(
-        FeedbackUploadSlot(
-          uploadUrl: Uri.parse(
-            '$_api/v1/feedback/e3b0c442-98fc-4c14-9afb-f4c8996fb924'
-            '/attachments/0',
-          ),
-          uploadMethod: 'PUT',
-          uploadHeaders: const {'content-type': 'image/webp'},
-        ),
-      ),
-      'slot_report_conflict.json': const FeedbackFinalRefusal(
-        code: 'report_conflict',
-      ),
-      'slot_uploaded.json': const FeedbackAttachmentStored(),
-      'submit_accepted.json': accepted,
-      'submit_attachment_missing.json': const FeedbackBackToSlot(),
-      'submit_feedback_disabled.json': const FeedbackFinalRefusal(
-        code: 'feedback_disabled',
-      ),
-      'submit_invalid_key.json': const FeedbackFinalRefusal(
-        code: 'invalid_key',
-      ),
-      'submit_invalid_report.json': const FeedbackFinalRefusal(
-        code: 'invalid_report',
-        violation: ProtocolViolation.invalidValue,
-        path: r'$.userContext.name',
-      ),
-      'submit_invalid_reporter_assertion.json':
-          const FeedbackAssertionRefused(),
-      'submit_origin_not_allowed.json': const FeedbackFinalRefusal(
-        code: 'origin_not_allowed',
-      ),
-      'submit_payload_too_large.json': const FeedbackFinalRefusal(
-        code: 'payload_too_large',
-      ),
-      'submit_rate_limited.json': const FeedbackRetryAfter(
-        Duration(seconds: 60),
-      ),
-      'submit_replay.json': accepted,
-      'submit_replay_context_numbers.json': accepted,
-      'submit_report_conflict.json': const FeedbackFinalRefusal(
-        code: 'report_conflict',
-      ),
-      'upload_attachment_conflict.json': const FeedbackFinalRefusal(
-        code: 'attachment_conflict',
-      ),
-      'upload_length_required.json': const FeedbackFinalRefusal(
-        code: 'length_required',
-      ),
-      'upload_stored.json': const FeedbackAttachmentStored(),
-      'upload_unsupported_attachment.json': const FeedbackFinalRefusal(
-        code: 'unsupported_attachment',
-      ),
-    };
-
-    /// The pairs whose request the transport refuses itself, with the
-    /// answer the API would give, before it sends anything.
-    const refusedBeforeSending = {'slot_invalid_index.json'};
-
-    test('every pair has its expected delivery here', () {
-      final names = Directory('$_kit/http')
-          .listSync()
-          .map((file) => file.uri.pathSegments.last)
-          .where((name) => name.endsWith('.json'))
-          .toSet();
-      expect(names, expected.keys.toSet());
-    });
-
-    for (final MapEntry(key: name, value: delivery) in expected.entries) {
-      test('$name: the transport sends its request and reads its '
-          'answer', () async {
-        final json = pair(name);
-        final request = json['request']! as Map<String, Object?>;
-        final response = json['response']! as Map<String, Object?>;
-        final headers = (request['headers']! as Map).cast<String, String>();
-        final path = request['path']! as String;
-        final body = switch (request) {
-          {'bodyFile': final String file} => File(
-            '$_kit/$file',
-          ).readAsBytesSync(),
-          {'body': final Object inline} => utf8.encode(jsonEncode(inline)),
-          _ => Uint8List(0),
-        };
-
-        http.Response answerOf(Map<String, Object?> answer) => http.Response(
-          switch (answer['body']) {
-            final Object body => jsonEncode(body),
-            null => '',
-          },
-          answer['status']! as int,
-          headers: (answer['headers'] as Map?)?.cast<String, String>() ?? {},
-        );
-
-        final replayed = transport(
-          (_) => answerOf(response),
-          key: headers['authorization']!.substring('Bearer '.length),
-        );
-
-        final FeedbackDelivery actual;
-        var pathSent = true;
-        switch (request['method']) {
-          case 'POST' when path == '/v1/feedback':
-            actual = await replayed.submit(utf8.decode(body));
-          case 'POST':
-            final [_, _, _, reportId, _, index] = path.split('/');
-            // An int index is always canonical: `00` cannot be sent, but its
-            // answer is still read.
-            pathSent = '${int.parse(index)}' == index;
-            final slot = jsonDecode(utf8.decode(body)) as Map<String, Object?>;
-            final contentType = _contentType(slot['contentType']);
-            if (contentType == null) {
-              // The model has no such content type, so no client can ask for
-              // its slot; the API refuses it at the slot body's field.
-              expect(delivery, isNull);
-              expect(
-                (response['body']! as Map<String, Object?>)['path'],
-                r'$.contentType',
-              );
-              return;
-            }
-            actual = await replayed.requestSlot(
-              reportId,
-              FeedbackAttachmentRef(
-                index: int.parse(index),
-                contentType: contentType,
-                byteLength: slot['byteLength']! as int,
-                sha256: slot['sha256']! as String,
-              ),
-            );
-          case 'PUT':
-            // The slot the upload follows, requested as its pair requests
-            // it, so a relative uploadUrl resolves against that URL.
-            final given = pair((json['given']! as List).cast<String>().last);
-            final givenRequest = given['request']! as Map<String, Object?>;
-            final [_, _, _, reportId, _, index] =
-                (givenRequest['path']! as String).split('/');
-            final givenBody = givenRequest['body']! as Map<String, Object?>;
-            final givenSlot =
-                await transport(
-                  (_) => answerOf(given['response']! as Map<String, Object?>),
-                ).requestSlot(
-                  reportId,
-                  FeedbackAttachmentRef(
-                    index: int.parse(index),
-                    contentType: _contentType(givenBody['contentType'])!,
-                    byteLength: givenBody['byteLength']! as int,
-                    sha256: givenBody['sha256']! as String,
-                  ),
-                );
-            sent = null;
-            actual = await replayed.upload(
-              (givenSlot as FeedbackSlotPending).slot,
-              body,
-            );
-          default:
-            fail('unknown request ${request['method']} $path');
-        }
-
-        expect(actual, delivery);
-        if (refusedBeforeSending.contains(name)) {
-          // Refused before sending, with the API's own answer.
-          expect(sent, isNull);
-          final refusal = delivery! as FeedbackFinalRefusal;
-          final answer = response['body']! as Map<String, Object?>;
-          expect(response['status'], 400);
-          expect(answer['error'], refusal.code);
-          expect(answer['violation'], refusal.violation!.name);
-          expect(answer['path'], refusal.path);
-          return;
-        }
-
-        // Not compared: the headers no request of this transport sends, a
-        // browser's `origin` and the chunked `transfer-encoding` of an upload
-        // without a length.
-        final actualRequest = sent!;
-        expect(actualRequest.method, request['method']);
-        if (pathSent) expect(actualRequest.url, Uri.parse('$_api$path'));
-        expect(
-          actualRequest.headers['authorization'],
-          headers['authorization'],
-        );
-        expect(actualRequest.headers['content-type'], headers['content-type']);
-        if (headers['content-length'] case final String length) {
-          expect(actualRequest.contentLength, int.parse(length));
-        }
-        if (headers['content-type'] == 'application/json') {
-          expect(
-            jsonDecode(utf8.decode(actualRequest.bodyBytes)),
-            jsonDecode(utf8.decode(body)),
-          );
-        } else {
-          expect(actualRequest.bodyBytes, body);
-        }
-      });
-    }
-  });
 }
-
-FeedbackContentType? _contentType(Object? mimeType) => FeedbackContentType
-    .values
-    .where((type) => type.mimeType == mimeType)
-    .firstOrNull;
 
 /// A client that keeps the request as the transport made it, before any
 /// copy, and answers `204`.

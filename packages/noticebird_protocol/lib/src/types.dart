@@ -207,10 +207,6 @@ final class TypedBreadcrumb {
   /// An action: lowercase, starting with a letter.
   static final actionPattern = RegExp(r'^[a-z][a-z0-9_.-]*$');
 
-  /// The tags `data` holds at most on the wire, more than there are
-  /// [AllowedTag]s.
-  static const maxDataTags = 8;
-
   /// The same breadcrumb with every tag value longer than [maxLength] (by
   /// default the wire's [maxTagValueLength]) shortened.
   ///

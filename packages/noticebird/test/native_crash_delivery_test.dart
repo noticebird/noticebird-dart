@@ -398,7 +398,6 @@ void main() {
       expect(event.exception.sanitizedMessage, event.exception.type);
       expect(event.breadcrumbs, isEmpty);
       expect(event.user, isNull);
-      expect(event.userId, isNull);
       expect(event.extra, isEmpty);
     });
 
@@ -442,6 +441,17 @@ void main() {
       event.breadcrumbs.single.data[AllowedTag.component],
       '/lists/[REDACTED]',
     );
+  });
+
+  test('a breadcrumb the protocol refuses is left out alone, not the '
+      'event', () {
+    final event = _build(
+      _record(),
+      _ledger(uiTrail: [_crumb('Route.Push'), _crumb('list.open')]),
+      privacyProfile: CrashPrivacyProfile.privacyDefault,
+    )!;
+
+    expect(event.breadcrumbs.map((crumb) => crumb.action), ['list.open']);
   });
 
   group('attribution', () {

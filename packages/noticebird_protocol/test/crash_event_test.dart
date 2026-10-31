@@ -46,13 +46,6 @@ void main() {
       expect(json.keys, isNot(contains('breadcrumbs')));
       expect(json.keys, isNot(contains('groupingKey')));
     });
-
-    test('a legacy user id is written as given', () {
-      expect(
-        v5Event(user: null, userId: 'user_abc123').toJson()['userId'],
-        'user_abc123',
-      );
-    });
   });
 
   test('canonical JSON recursively sorts object keys', () {
@@ -171,24 +164,6 @@ void main() {
           r'$.routeTemplate',
         );
       }
-    });
-
-    test('a legacy user id matches its pattern', () {
-      for (final userId in ['has spaces', 'u' * 101, '']) {
-        expectRefused(
-          v5Event(user: null, userId: userId),
-          ProtocolViolation.invalidValue,
-          r'$.userId',
-        );
-      }
-    });
-
-    test('the user and the legacy user id never come both', () {
-      expectRefused(
-        v5Event(userId: 'legacy-user'),
-        ProtocolViolation.invalidValue,
-        r'$.user',
-      );
     });
 
     test('a user has a field, each bounded', () {

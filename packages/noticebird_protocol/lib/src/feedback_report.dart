@@ -299,16 +299,15 @@ abstract final class FeedbackDiagnostics {
   };
 }
 
-/// A feedback report, schema version 1: the model of the package's
-/// `schema/feedback-report.v1.schema.json`, written by [toJson] and
+/// A feedback report, schema version 1, written by [toJson] and
 /// [toJsonString].
 ///
-/// Fail-closed as the schema is: [toJson] checks every field by its rules
-/// and the limits, which are literals, and a refusal is a
-/// [ProtocolException] whose path names the offending value. The checks of
-/// a single value a client fills in itself are public: [checkContactEmail],
-/// [checkLocale], [checkRouteTemplate] and [checkTrailItem]. The rules that
-/// need the moment of submission or the project are the platform's.
+/// Fail-closed: [toJson] checks every field by its rules and the limits,
+/// which are literals, and a refusal is a [ProtocolException] whose path
+/// names the offending value. The checks of a single value a client fills in
+/// itself are public: [checkContactEmail], [checkLocale],
+/// [checkRouteTemplate] and [checkTrailItem]. The rules that need the moment
+/// of submission or the project are the platform's.
 final class FeedbackReport {
   const FeedbackReport({
     required this.reportId,

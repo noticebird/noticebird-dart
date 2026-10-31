@@ -1,5 +1,4 @@
-// Reports built as a client builds them, for the model's tests and the
-// conformance kit's: every one of them must validate against the schema.
+// Reports built as a client builds them, for the model's tests.
 
 import 'dart:convert';
 import 'dart:math';

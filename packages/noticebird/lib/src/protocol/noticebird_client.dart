@@ -395,7 +395,7 @@ final class NoticebirdClient {
           for (final breadcrumb in _breadcrumbs.skip(
             max(0, _breadcrumbs.length - FeedbackReport.maxTrailItems),
           ))
-            _sanitized[breadcrumb] ??= sanitizeBreadcrumb(breadcrumb),
+            ?_sanitizedBreadcrumb(breadcrumb),
         ],
         dropped: (count) {
           if (count > 0) {
@@ -1119,20 +1119,25 @@ final class NoticebirdClient {
 
   /// The breadcrumbs the next event carries: the newest of those no sent
   /// event carried yet, [NoticebirdConfig.maxBreadcrumbs] at most, each
-  /// redacted and shortened to the protocol's limits ([sanitizeBreadcrumb]).
-  /// The buffer keeps them as recorded, for [recentBreadcrumbs].
+  /// redacted and shortened to the protocol's limits, and one the protocol
+  /// refuses even so left out ([sanitizeBreadcrumb]). The buffer keeps them
+  /// as recorded, for [recentBreadcrumbs].
   List<TypedBreadcrumb> _eventBreadcrumbs() {
     final unsent = min(_recorded - _sentThrough, _breadcrumbs.length);
     final count = min(unsent, _config.maxBreadcrumbs);
     return List.unmodifiable([
       for (final breadcrumb in _breadcrumbs.skip(_breadcrumbs.length - count))
-        _sanitized[breadcrumb] ??= sanitizeBreadcrumb(breadcrumb),
+        ?_sanitizedBreadcrumb(breadcrumb),
     ]);
   }
 
-  /// Each buffered breadcrumb's [sanitizeBreadcrumb], made once: the native
-  /// run state takes the event's breadcrumbs on every [addBreadcrumb].
-  final _sanitized = Expando<TypedBreadcrumb>();
+  /// [breadcrumb]'s [sanitizeBreadcrumb], made once, a refused one's `null`
+  /// included: the native run state takes the event's breadcrumbs on every
+  /// [addBreadcrumb].
+  TypedBreadcrumb? _sanitizedBreadcrumb(TypedBreadcrumb breadcrumb) =>
+      (_sanitized[breadcrumb] ??= (sanitizeBreadcrumb(breadcrumb),)).$1;
+
+  final _sanitized = Expando<(TypedBreadcrumb?,)>();
 
   Future<CaptureResult> _enqueue(_WrittenEvent event) async {
     if (_config.maxPendingEvents == 0) {

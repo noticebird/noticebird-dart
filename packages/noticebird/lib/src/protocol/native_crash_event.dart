@@ -54,7 +54,8 @@ CrashEvent? buildNativeCrashEvent(
         : List.unmodifiable(
             engine.breadcrumbs
                 .take(CrashEvent.maxBreadcrumbs)
-                .map(sanitizeBreadcrumb),
+                .map(sanitizeBreadcrumb)
+                .nonNulls,
           ),
     nativeCrash: NativeCrashInfo(
       kind: kind,

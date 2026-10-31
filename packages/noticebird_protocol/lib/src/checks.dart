@@ -25,8 +25,7 @@ void checkText(
 
 /// Refuses [tags] at [path] unless each is a scalar: a string of at most
 /// [maxTagValueLength] characters, a finite number or a boolean. Their
-/// number needs no check: there are fewer [AllowedTag]s than a map of tags
-/// may hold.
+/// number needs no check: a map holds each [AllowedTag] once at most.
 void checkTags(Map<AllowedTag, TagScalar> tags, String path) {
   for (final MapEntry(:key, :value) in tags.entries) {
     if (value is! String && value is! num && value is! bool) {

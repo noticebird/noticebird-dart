@@ -1,3 +1,22 @@
+## Unreleased
+
+Moves with `noticebird`. The crash event's schema (5) and the feedback
+report's (1) are unchanged.
+
+Breaking changes:
+
+- Removed the rules no client needs, neither to repair a value, for privacy
+  nor to bound a payload:
+  - `CrashEvent.maxTags` and `TypedBreadcrumb.maxDataTags`: a map of tags
+    holds each `AllowedTag` once at most, so no event reached them;
+  - `CrashEvent.userId`, `CrashEvent.userIdPattern` and the rule that `user`
+    and `userId` are never both set. `toJson` no longer writes a `userId`;
+    no client set one. An event names its user with `user` (`CrashUser`).
+- The feedback report's JSON Schema and its README (`schema/`) and the
+  fixtures of its valid reports and HTTP answers (`test/fixtures/feedback/`)
+  leave the package, and with them its dev dependency on `json_schema`. The
+  report's rules are its writer's, `toJson` and `toJsonString`.
+
 ## 0.5.0
 
 Moves with `noticebird` 0.5.0 and `noticebird_flutter` 0.5.0; no change of

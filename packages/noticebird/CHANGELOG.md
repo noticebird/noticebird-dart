@@ -1,3 +1,19 @@
+## Unreleased
+
+Breaking changes:
+
+- The removals of `noticebird_protocol`, which this package exports:
+  `CrashEvent.maxTags`, `TypedBreadcrumb.maxDataTags`, `CrashEvent.userId`
+  and `CrashEvent.userIdPattern`. The client never set a `userId`.
+
+Fixes:
+
+- A breadcrumb the protocol refuses, such as one whose action is outside
+  `TypedBreadcrumb.actionPattern` (`Route.Push`) or longer than
+  `TypedBreadcrumb.maxActionLength`, is left out of a crash event alone, as
+  a feedback report's trail leaves it out. Before, it dropped the whole
+  event. A native crash event leaves it out the same way.
+
 ## 0.5.0
 
 Breaking changes:
