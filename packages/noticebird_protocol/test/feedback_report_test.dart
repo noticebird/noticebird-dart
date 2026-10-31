@@ -1,5 +1,5 @@
 // The FeedbackReport model as a client builds it: its validating writer
-// against the rules of the feedback report v1 schema and the rules the schema
+// against the rules of the feedback report schema 2 and the rules the schema
 // cannot express, the checks of a single value, and the checks of a host's
 // user context and diagnostics.
 
