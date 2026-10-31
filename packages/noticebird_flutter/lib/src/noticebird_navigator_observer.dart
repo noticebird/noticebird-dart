@@ -17,9 +17,9 @@ import 'package:noticebird/noticebird.dart';
 ///   segment of digits or of a long hex id. A router that names its pages
 ///   by their path pattern (`/lists/:listId`) passes; so does a raw path
 ///   whose segments are words, such as `/users/jdoe`: an app that pushes
-///   such names gives a [describe]. What the platform's firewall rejects in
-///   a name (an e-mail address) is redacted before a breadcrumb leaves the
-///   device, as in every breadcrumb;
+///   such names gives a [describe]. What must not leave the device in a name
+///   (an e-mail address) is redacted before a breadcrumb is sent, as in every
+///   breadcrumb;
 /// - else by its kind (`MaterialPageRoute`).
 ///
 /// With [tracksRouteTemplate], it also keeps the client's route template

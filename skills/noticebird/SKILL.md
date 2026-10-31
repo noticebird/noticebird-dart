@@ -113,8 +113,9 @@ the old `client` after `close()`: a later start makes its own, on the same store
 
 `apiUrl` is the API's base (`CrashHttpTransport.hostedApiUrl`, or a staging,
 self-hosted or proxied one with its path prefix), never a route: the SDK adds
-`/v1/envelope` and the feedback routes itself, and refuses a URL that ends in a route
-(`/v1`, `/v1/envelope`, `/v1/feedback`) or carries credentials. Without both an `apiUrl` and a `publishableKey` (absent, empty — a missing
+`/v1/envelope` and the feedback routes itself, and refuses a URL that is not `http` or
+`https` with a host, that has a query, a fragment or credentials, or that ends in a route
+(`/v1`, `/v1/envelope`, `/v1/feedback`). Without both an `apiUrl` and a `publishableKey` (absent, empty — a missing
 `--dart-define` — or one that cannot work) the client uploads nothing and sends no
 feedback; the SDK never picks an API by itself.
 
@@ -179,7 +180,7 @@ leaves it. Pass it as a feedback report's `relatedEventId`.
 | `sent` | Delivered to the transport. Its breadcrumbs count as sent: the next event starts after them. |
 | `deduplicated` | The same error already captured inside the deduplication window (default 1 minute): the same `groupingKey`, or without one the same exception type and top app frames, line numbers aside. |
 | `queued` | Transport failed; the event sits in the retry queue for the next flush. |
-| `dropped` | Could not be captured at all — app or platform metadata or a session id the protocol refuses, a NaN or infinite tag number, an event over 64 KiB, `maxPendingEvents: 0` — or the platform refused the event for good (see `CrashTransport.send`; a flush drops it too). |
+| `dropped` | Could not be captured at all — a session id the protocol refuses, a NaN or infinite tag number, an event over 64 KiB, `maxPendingEvents: 0` — or the platform refused the event for good (see `CrashTransport.send`; a flush drops it too). |
 | `ignored` | The host's `shouldCapture` declined the error. |
 | `discarded` | Crash uploads are off (`uploadCrashes: false`, a key that cannot work, or a client built without a `transport`): no event was made. |
 
@@ -414,7 +415,7 @@ API URL, with one it cannot send to, or without a usable key, a client without a
 
 | `FeedbackOutcome` | Meaning |
 |---|---|
-| `FeedbackDelivered(ticket, verified)` | The platform has it. Show `ticket.display` (such as `FB-12`) as it is; `ticket` is `null` when the answer named none, such as for a resent report the platform stored already but can no longer compare. |
+| `FeedbackDelivered(ticket, verified)` | The platform has it. Show `ticket.display` (such as `FB-12`) as it is; `ticket` is `null` when the answer named none. |
 | `FeedbackQueued(reportId)` | Not through yet; kept in the store and sent when due. |
 | `FeedbackDisabled` | No client attached, no feedback config, or one without a transport (no API URL, one it cannot send to, or no usable key). |
 | `FeedbackRejected(reason, path, code)` | Never delivered. `reason` is a `FeedbackRejection`: `invalidInput`, `unverified`, `strictProject`, `clock`, `notAccepted`, `noStore`, `evicted`, `expired`, `refused`, `failed`. |
@@ -437,7 +438,8 @@ user (`setUser` / `setUserId`) until 5 minutes before its `exp`, and reports cap
 once share one call; it asks again for another user, after `setUser(null)`, and after the
 platform refused the one it held. Without a user it asks for every report. A provider that
 throws, answers `null` or is late (5 seconds) leaves the report unverified; with
-`requireVerified` such a report is `FeedbackRejected(unverified)`.
+`requireVerified` such a report is `FeedbackRejected(unverified)`. What your backend must
+mint is in `reference/privacy-and-limits.md` (*Feedback reports*, reporter assertion).
 
 **The queue.** A report that does not get through is `FeedbackQueued` and sent when due —
 after the platform's `Retry-After` or a backoff, kept across restarts — by the client
@@ -603,10 +605,10 @@ Native capture: implement `NativeCrashCollector` with a fake that emits
 
 | Symptom | Cause |
 |---|---|
-| Every capture is `discarded`, and feedback is `FeedbackDisabled` | The start got no `apiUrl`, one it cannot send to, or no usable key — a missing `--dart-define`, a secret `_sk_` key, or an `apiUrl` that names a route (`/v1/envelope`) or carries credentials. A debug build printed why. |
+| Every capture is `discarded`, and feedback is `FeedbackDisabled` | The start got no `apiUrl`, one it cannot send to, or no usable key — a missing `--dart-define`, a secret `_sk_` key, or an `apiUrl` that names a route (`/v1/envelope`), has a query or fragment, or carries credentials. A debug build printed why. |
 | A capture comes back `ignored` | `shouldCapture` declined it — the error is reported at the host's own report point, which captures with `filtered: false`. |
 | The same failure arrives twice | No `shouldCapture` declines the type the host reports elsewhere, so a channel (observer, handler, explicit capture) reports it again. |
-| Every event is `dropped` | `app`/`platform` metadata violates the protocol, or a client's `sessionIdFactory` returns something outside `^[A-Za-z0-9_-]{16,64}$`. |
+| Every event is `dropped` | A `sessionIdFactory` or `eventIdFactory` whose id the protocol refuses. |
 | Nothing sends, no error | No client attached to the facade — every `Noticebird.*` call is a silent no-op until the start. |
 | My own `Bloc.observer` lost the breadcrumbs | It replaced the start's: compose with `MultiBlocObserver(observers: [noticebird.blocObserver, mine])`. |
 | A route shows as `MaterialPageRoute` | Its name is a raw path or none: give the observer a `describe`, or name routes by their template. |

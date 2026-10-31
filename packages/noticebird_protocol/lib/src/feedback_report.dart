@@ -841,8 +841,7 @@ DiagnosticValue? _stringDiagnostic(String value) {
 
 const _nul = '\u0000';
 
-/// What no string of a report, value or key, holds: U+0000 (no text of a
-/// report carries it, and a server's text columns cannot store it).
+/// What no string of a report, value or key, holds: U+0000.
 void _checkText(String value, String path) {
   if (value.contains(_nul)) {
     throw ProtocolException(

@@ -36,9 +36,9 @@ enum CaptureOutcome {
   /// [NoticebirdClient.flush].
   queued,
 
-  /// The event could not be captured, for example because config-supplied
-  /// metadata violates the protocol, the retry queue is disabled, or the
-  /// platform refused the event for good (see `CrashTransport.send`).
+  /// The event could not be captured, for example because a session id
+  /// violates the protocol, the retry queue is disabled, or the platform
+  /// refused the event for good (see `CrashTransport.send`).
   dropped,
 
   /// The host's [NoticebirdConfig.shouldCapture] declined the error.
@@ -562,9 +562,9 @@ final class NoticebirdClient {
   /// Only templates such as `/lists/:listId` are accepted. A raw route throws
   /// in debug builds to surface the integration mistake; release builds drop
   /// the value instead, because the reporter must never crash the host app.
-  /// What a template still holds that the platform's privacy firewall rejects
-  /// (an e-mail address, an IPv4 address) is redacted, so it never reaches an
-  /// event or the native run state.
+  /// What a template still holds that must not leave the device (an e-mail
+  /// address, an IPv4 address) is redacted, so it never reaches an event or
+  /// the native run state.
   void setRouteTemplate(String? routeTemplate) {
     if (routeTemplate != null && !isRouteTemplate(routeTemplate)) {
       if (hostMistakesThrow) throw _rawRoute(routeTemplate);
@@ -585,9 +585,9 @@ final class NoticebirdClient {
   /// [CrashEvent.maxRouteTemplateLength] characters, has no query or
   /// fragment, and no segment that looks like an id (16 or more hex
   /// characters, or 2 or more digits). A rule of shape, not of meaning: a
-  /// segment that is a word of letters passes, whatever it names; what the
-  /// platform's firewall rejects in one (an e-mail address) is redacted
-  /// before it leaves the device.
+  /// segment that is a word of letters passes, whatever it names; what must
+  /// not leave the device in one (an e-mail address) is redacted before it
+  /// is sent.
   static bool isRouteTemplate(String route) =>
       route.startsWith('/') &&
       route.length <= CrashEvent.maxRouteTemplateLength &&
@@ -609,12 +609,12 @@ final class NoticebirdClient {
   /// point of the errors that filter declines — the one place such an error is
   /// meant to be captured.
   ///
-  /// [groupingKey] is the host's own grouping of this error: the platform
-  /// groups every event of this app with the same key into one issue,
-  /// whatever its type or stack, and deduplicates by it here. Its parts are
-  /// technical text like tag values, redacted and shortened the same way
-  /// ([sanitizeGroupingKey]); without one, the event is grouped by its type
-  /// and stack.
+  /// [groupingKey] is the host's own grouping of this error: every event of
+  /// this app with the same key is one issue, whatever its type or stack,
+  /// and the client deduplicates by it. Its parts are technical text like
+  /// tag values, redacted and shortened the same way
+  /// ([sanitizeGroupingKey]); without one, Noticebird groups the event
+  /// itself.
   ///
   /// The [CaptureResult] carries the event's id
   /// ([CaptureResult.eventId]), for a feedback report about this error;
@@ -1079,8 +1079,7 @@ final class NoticebirdClient {
     );
     // Redacted and shortened rather than rejected, as breadcrumbs are: an
     // over-long tag value would fail validation when the event is written,
-    // and an id or an address in one would have the platform reject the
-    // whole event.
+    // and an id or an address in one must not leave the device.
     final safeTags = Map<AllowedTag, TagScalar>.unmodifiable({
       for (final entry in tags.entries)
         entry.key: sanitizeTagValue(entry.value),
@@ -1256,9 +1255,9 @@ final class NoticebirdClient {
   static bool _isSafeExtraKey(String key) =>
       CrashEvent.extraKeyPattern.hasMatch(key);
 
-  /// Whether [key] goes from `extra`: a key the firewall rejects an event
-  /// over ([PrivacyPatterns.extraKeyViolation]), or one that names a patient
-  /// or a health-data source, which the client drops on top of those.
+  /// Whether [key] goes from `extra`: a key that names a credential, a
+  /// health measure or an identity ([PrivacyPatterns.extraKeyViolation]), or
+  /// one that names a patient or a health-data source.
   static bool _isForbiddenExtraKey(String key) =>
       PrivacyPatterns.extraKeyViolation(key) != null ||
       const [
@@ -1343,8 +1342,8 @@ final class NoticebirdClient {
   /// would take the location after it as its token, is sent as
   /// `AuthHeader.bearer_`. A frame without a name is written `<anonymous>`.
   /// A frame the redaction patterns still match (a name holding an e-mail
-  /// address, a script or file named like a phone number) is left out, as the
-  /// platform's privacy firewall would reject the whole event over it.
+  /// address, a script or file named like a phone number) is left out: it
+  /// cannot be redacted and stay a frame.
   static String? _renderFrame(_Frame frame) {
     final function = switch (frame.function) {
       final name? => respellSymbol(name),

@@ -26,10 +26,10 @@ the trail of a feedback report) and keeps the other defaults.
 
 | Value | Limit | When it breaks the limit |
 |---|---|---|
-| `AppMetadata` `name` / `version` / `build` / `release` | 1–100 / 1–50 / 1–50 / 1–160 characters | every event is `dropped`; the start throws for an `appName` it refuses |
-| `PlatformMetadata` `osVersion` / `deviceClass` | 1–100 / 1–100 characters | every event is `dropped` |
+| `AppMetadata` `name` / `version` / `build` / `release` | 1–100 / 1–50 / 1–50 / 1–160 characters | `NoticebirdConfig` and the start throw `ArgumentError`; the start reports `unknown` for a version or build the platform gives that the protocol refuses |
+| `PlatformMetadata` `osVersion` / `deviceClass` | 1–100 / 1–100 characters | `NoticebirdConfig` throws `ArgumentError` |
 | `sessionIdFactory`'s id | `^[A-Za-z0-9_-]{16,64}$` | every event is `dropped`, every feedback report `FeedbackRejected(failed)` |
-| `eventIdFactory`'s id (`NoticebirdClient`) | `^[0-9a-fA-F-]{36}$`; a lowercase UUID (such as a UUIDv7) also serves as a feedback report's `relatedEventId` | every event is `dropped` |
+| `eventIdFactory`'s id (`NoticebirdClient`) | `^[0-9a-fA-F-]{36}$`; a UUID in the 8-4-4-4-12 shape (such as a UUIDv7) also serves as a feedback report's `relatedEventId` | every event is `dropped` |
 | route template (`setRouteTemplate`, `feedbackMoment(routeTemplate:)`) | starts with `/`, at most 200 characters, and passes `NoticebirdClient.isRouteTemplate`: no query or fragment, no id-like segment | throws in a debug build; left out in release |
 | `setUser` (`CrashUser`) | at least one field; `id` / `email` / `name` / `ipAddress` 1–100 / 1–254 / 1–200 / 1–45 characters | the user is left out |
 | `setUserId` | — | characters outside `[A-Za-z0-9_-]` are stripped, the rest cut to 100 |
@@ -148,16 +148,16 @@ route template, a user field, a trail item) is left out.
 | Field | Limit |
 |---|---|
 | `message` | 1–4000 characters after redaction; U+0000 removed, then redacted as an exception message is and cut to 4000 |
-| `contactEmail` | 3–254 characters, `^[^@\s]+@[^@\s]+$` (`FeedbackContact.isValid`) |
-| `userContext` | 1–32 keys `^[A-Za-z][A-Za-z0-9_-]{0,63}$`; a value is a string of 1–256 characters, a finite number, a boolean, an array of 1–16 of those, or an object of 1–32 keys holding those (one nested level, never an object in an array); at most 8 KiB (8,192 bytes) in compact UTF-8 JSON (`FeedbackUserContext.check`) |
-| `relatedEventId` | a lowercase UUID: a `CaptureResult.eventId` |
+| `contactEmail` | 3–254 characters, `^[^@\s]+@[^@\s]+$`, no U+0000 (`FeedbackContact.isValid`) |
+| `userContext` | 1–32 keys `^[A-Za-z][A-Za-z0-9_-]{0,63}$`; a value is a string of 1–256 characters, a finite number, a boolean, an array of 1–16 of those, or an object of 1–32 keys holding those (one nested level, never an object in an array); no U+0000 in a key or a string; at most 8 KiB (8,192 bytes) in compact UTF-8 JSON (`FeedbackUserContext.check`) |
+| `relatedEventId` | a UUID of any version in the 8-4-4-4-12 hex shape, such as a `CaptureResult.eventId`; the client lowercases it |
 | screenshot | one, PNG, JPEG or WebP by its bytes' file signature, at most 5 MiB (5,242,880 bytes); bytes of another type, or more, are left out (`noticebird.screenshot_dropped`) |
 | `diagnostics` | at most 16 groups of at most 32 values, keys `^[a-z][a-zA-Z0-9_]{0,63}$`, at most 16 KiB (16,384 bytes) encoded; a value is a boolean, a finite number, a UTC timestamp, a lowercase UUID v4 or a token of 1–64 characters `[A-Za-z0-9_.:+/-]`; an enum is sent as its name, a `DateTime` in UTC. The context groups (the `blocs` group of `noticebird_flutter`) come first, then the host's (the moment's `diagnostics`), whose groups of a context group's name are left out; one group's room is kept for the note. A group or value that breaks a rule is left out and counted (`noticebird.dropped_values`), and the last groups go until the whole fits; a value is never shortened |
 | the note group `noticebird` | the client's own: `dropped_values` (how many diagnostics values were left out), `screenshot_dropped`, `moment_taken_at` (when a moment passed in was taken, if before the capture); a host's group of that name is left out |
 | locale (`NoticebirdConfig.locale`) | at most 35 characters, a language tag `^[A-Za-z]{2,3}([_-][A-Za-z0-9]{2,8}){0,3}$` (`nl-NL`); another is left out |
 | trail | the newest 100 breadcrumbs of the buffer, redacted as in an event; a breadcrumb the report refuses is left out alone, and the oldest go first until the report fits |
 | whole report | 65,536 bytes (64 KiB) encoded |
-| reporter assertion | a compact JWS (three base64url parts joined by dots) of 16–4096 characters; another is left out and the report goes unverified. The provider is given 5 seconds; an assertion is held per user (`setUser` / `setUserId`) until 5 minutes before its `exp`, and reports captured at once share one call; without a user, or for a token without a readable `exp`, it is asked for every report; a refusal is not retried |
+| reporter assertion | what the host's backend mints: a compact JWS (three base64url parts joined by dots) of 16–4096 characters, `alg` `EdDSA` (Ed25519), its `kid` naming a signing key the project knows; `aud` the project's id; `sub` 1–100 characters, optionally `email` (at most 254) and `name` (at most 200); `iat` and `exp` in seconds, `exp − iat` at most 24 hours; valid at the report's capture time (`iat` at most 5 minutes after it, the capture before `exp`). Another is left out or refused, and the report goes unverified, or is `FeedbackRejected(unverified)` under `requireVerified`. The provider is given 5 seconds; an assertion is held per user (`setUser` / `setUserId`) until 5 minutes before its `exp`, and reports captured at once share one call; without a user, or for a token without a readable `exp`, it is asked for every report; a refusal is not retried |
 | submission window | the platform takes a report up to 7 days after it was captured, and none whose capture time is more than 5 minutes ahead of its clock: `FeedbackRejected(clock)`. A kept report older than 7 days is removed unsent (`FeedbackRejection.expired`) |
 
 `userContext` is checked for its shape only and sent as the host gave it: the platform

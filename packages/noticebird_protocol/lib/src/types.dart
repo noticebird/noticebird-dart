@@ -23,8 +23,7 @@ enum CrashPiiField { userId, email, name, ipAddress }
 
 /// Explicit user identity attached to a crash by the SDK consumer.
 ///
-/// Medical data and credentials never belong here. They remain prohibited by
-/// the ingestion privacy firewall for every privacy profile.
+/// Medical data and credentials never belong here, in any privacy profile.
 final class CrashUser {
   const CrashUser({this.id, this.email, this.name, this.ipAddress});
 

@@ -10,14 +10,13 @@ Breaking changes:
   `CrashEvent.userIdPattern`, and the rule that an event never carries both
   `user` and `userId`. The client never set a `userId`; `setUserId` still
   sets the id of the event's `user`.
-- The feedback report's conformance kit leaves `noticebird_protocol`: its
-  JSON Schema, its README with the platform's table of answers, and the
-  fixtures of valid reports and HTTP answers. A test's fake
-  `FeedbackTransport` decodes the report as `FeedbackReport.toJsonString`
-  wrote it.
 
 Changes:
 
+- The feedback report's conformance kit leaves, through
+  `noticebird_protocol` 0.6.0.
+- The `json_schema` dev dependency is dropped: no test validates against
+  the kit's schema any more.
 - The consumer docs (this README, `docs/integration.md`, the `noticebird`
   skill and its privacy and limits reference) describe what an integrator
   needs: every limit an app's own input or config can hit, what each

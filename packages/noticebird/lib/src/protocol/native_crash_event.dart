@@ -169,12 +169,12 @@ String _message(NativeCrashRecord record, String type) {
         );
 }
 
-/// [frame] with a symbol the platform's firewall will not mistake for
-/// personal data, spelled so that it keeps every word ([respellSymbol]).
+/// [frame] with a symbol that reads as no personal data, spelled so that it
+/// keeps every word ([respellSymbol]).
 ///
 /// Compilers first suffix local symbols with hashes (`.__uniq.1124354180…`,
-/// `.llvm.1592601173…`): digit runs the firewall reads as phone numbers, which
-/// change with every build and would only split groups, so they go.
+/// `.llvm.1592601173…`): digit runs that read as phone numbers, which change
+/// with every build and would only split groups, so they go.
 NativeFrame _platformSafeFrame(NativeFrame frame) {
   final symbol = frame.symbol;
   if (symbol == null) return frame;
@@ -186,8 +186,8 @@ NativeFrame _platformSafeFrame(NativeFrame frame) {
       : NativeFrame.inImage(image, frame.offset!, symbol: safe);
 }
 
-/// [image] with a name the platform's firewall will not reject: a run of ten
-/// digits is cut to nine, as in a symbol, and whatever the name still holds
+/// [image] with a name that reads as no personal data: a run of ten digits
+/// is cut to nine, as in a symbol, and whatever the name still holds
 /// (an IPv4 address, a UUID, a phone number) is redacted to `redacted`, the
 /// name's characters allowing no `[REDACTED]`.
 NativeImage _platformSafeImage(NativeImage image) {

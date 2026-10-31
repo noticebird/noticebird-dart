@@ -119,9 +119,10 @@ contact address, diagnostics, user context and reporter assertion.
 
 ## Privacy and reliability
 
-- `regulatedStrict` rejects unencrypted offline stores, removes user identity
-  and all free-form `extra` context, and strips identifiers, secrets, and
-  health/provider values from the remaining fields.
+- Every profile redacts identifiers, secrets and health values from the text
+  an event carries and cuts tag and breadcrumb strings. `regulatedStrict`
+  changes only the message (the error type alone), `extra` (empty) and the
+  user (none), and rejects unencrypted offline stores.
 - Identity is only sent when the consumer calls `setUser` or `setUserId`;
   `CrashPiiConfig` filters it or opts out.
 - Medical data and secrets are never allowed, including in `custom` mode.

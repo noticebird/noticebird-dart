@@ -3,9 +3,9 @@ import 'protocol_exception.dart';
 /// The `exception.stackTrace` of an event that carries a [NativeCrashInfo].
 ///
 /// A native event's frames live structured in [NativeCrashInfo.frames], never
-/// as text: the platform's privacy firewall scans the stack trace text for
-/// identifiers, and raw native data (dashed image UUIDs, long decimal
-/// addresses) would trip it. The marker and the block require each other.
+/// as text: raw native data (dashed image UUIDs, long decimal addresses)
+/// would read as identifiers by [PrivacyPatterns] there. The marker and the
+/// block require each other.
 const String nativeStackTraceMarker = '<native>';
 
 /// What ended the process, or — for [hang] and [diskWriteException] — what

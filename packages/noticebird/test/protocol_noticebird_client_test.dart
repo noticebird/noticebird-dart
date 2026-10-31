@@ -199,41 +199,41 @@ void main() {
     expect(component, endsWith('…'));
   });
 
-  test('a breadcrumb the protocol refuses is left out alone, not the event '
-      'lost', () async {
-    // The rule the feedback trail follows: an action outside the wire's
-    // pattern used to fail validation at capture time and drop the whole
-    // event.
-    reporter
-      ..addBreadcrumb(
-        TypedBreadcrumb(
-          occurredAt: DateTime.utc(2026, 7, 11),
-          category: BreadcrumbCategory.navigation,
-          action: 'Route.Push',
-        ),
-      )
-      ..addBreadcrumb(
-        TypedBreadcrumb(
-          occurredAt: DateTime.utc(2026, 7, 11),
-          category: BreadcrumbCategory.navigation,
-          action: 'route.push',
-        ),
+  // The rule the feedback trail follows: a breadcrumb the protocol refuses
+  // used to fail validation at capture time and drop the whole event.
+  for (final (name, refused) in [
+    ('an action outside the pattern', _crumb('Route.Push')),
+    (
+      'an action over ${TypedBreadcrumb.maxActionLength} characters',
+      _crumb('a' * (TypedBreadcrumb.maxActionLength + 1)),
+    ),
+    (
+      'a NaN data value',
+      _crumb('list.load', data: const {AllowedTag.operation: double.nan}),
+    ),
+  ]) {
+    test('a breadcrumb the protocol refuses ($name) is left out alone, not '
+        'the event lost', () async {
+      reporter
+        ..addBreadcrumb(_crumb('route.push'))
+        ..addBreadcrumb(refused)
+        ..addBreadcrumb(_crumb('route.pop'));
+
+      final result = await reporter.captureException(
+        StateError('boom'),
+        StackTrace.fromString('#0 A.b (package:app/a.dart:1:1)'),
       );
 
-    final result = await reporter.captureException(
-      StateError('boom'),
-      StackTrace.fromString('#0 A.b (package:app/a.dart:1:1)'),
-    );
-
-    expect(result.outcome, CaptureOutcome.sent);
-    expect(
-      [
-        for (final breadcrumb in transport.events.single['breadcrumbs'])
-          breadcrumb['action'],
-      ],
-      ['route.push'],
-    );
-  });
+      expect(result.outcome, CaptureOutcome.sent);
+      expect(
+        [
+          for (final breadcrumb in transport.events.single['breadcrumbs'])
+            breadcrumb['action'],
+        ],
+        ['route.push', 'route.pop'],
+      );
+    });
+  }
 
   test('invalid or excessive free context cannot poison crash capture', () async {
     reporter = NoticebirdClient(
@@ -1493,3 +1493,11 @@ const _v5Entry =
     '"sessionId":"random_session_123456","severity":"error",'
     '"tags":{"feature":"lists","foreground":true},'
     '"user":{"id":"user_abc123"}}';
+
+TypedBreadcrumb _crumb(String action, {Map<AllowedTag, TagScalar>? data}) =>
+    TypedBreadcrumb(
+      occurredAt: DateTime.utc(2026, 7, 11),
+      category: BreadcrumbCategory.navigation,
+      action: action,
+      data: data ?? const {},
+    );

@@ -111,8 +111,9 @@ for (final failure in noticebird.platformReadFailures) {
   (`https://api.noticebird.com`), or a local, staging, self-hosted or proxied
   one, a path prefix included (`https://example.com/noticebird`). The SDK
   adds its routes itself — `/v1/envelope` for crash events, the feedback
-  routes for feedback — so the URL never names a route: one that ends in
-  `/v1`, `/v1/envelope` or `/v1/feedback`, or carries credentials, is
+  routes for feedback — so the URL never names a route. A URL that is not
+  `http` or `https` with a host, that has a query, a fragment or
+  credentials, or that ends in `/v1`, `/v1/envelope` or `/v1/feedback` is
   refused. The SDK never picks an API by itself.
 - `publishableKey` must be a publishable key, `<prefix>_pk_<token>`
   (Noticebird issues `noticebird_pk_…` keys); anything else, a secret
@@ -297,7 +298,7 @@ that is invalid. The client writes each event by the protocol's rules (the
 limits are in the skill's
 [privacy and limits reference](../skills/noticebird/reference/privacy-and-limits.md)):
 what it can repair it repairs — a value cut, a breadcrumb or an `extra` key
-left out — and an event it cannot write, such as one with app metadata the
+left out — and an event it cannot write, such as one with a session id the
 protocol refuses or over 64 KiB, is `dropped` on the device.
 
 ### One report per failure
@@ -423,7 +424,7 @@ The outcome is sealed:
 
 | `FeedbackOutcome` | Meaning |
 |---|---|
-| `FeedbackDelivered` | The platform has the report; `ticket.display` (such as `FB-12`) is for the reporter, `verified` says whether the reporter assertion was accepted. `ticket` is `null` when the answer named none, such as for a resent report the platform stored already but can no longer compare, its screenshot deleted by retention. |
+| `FeedbackDelivered` | The platform has the report; `ticket.display` (such as `FB-12`) is for the reporter, `verified` says whether the reporter assertion was accepted. `ticket` is `null` when the answer named none. |
 | `FeedbackQueued` | It did not get through yet and waits in the offline store, under `reportId`. |
 | `FeedbackDisabled` | No client is attached, or the client has no feedback config or no feedback transport (a start without an API URL, with one it cannot send to, or without a usable key). |
 | `FeedbackRejected` | Not delivered, and never will be: `reason` (a `FeedbackRejection`) says why, `path` names the value at fault. |
@@ -445,9 +446,23 @@ The client holds an assertion for the user set with `setUser` or `setUserId`
 until 5 minutes before its `exp`, and sends it with each report of that user
 meanwhile; reports captured at once share one call. It asks again for
 another user, after `setUser(null)`, and once the platform refused the one it
-held; without a user it asks for every report. When the platform refuses the
-assertion the report is sent unverified, or, with `requireVerified: true`,
-rejected as `FeedbackRejection.unverified`.
+held; without a user it asks for every report.
+
+What your backend mints for the signed-in user:
+
+- a compact JWS (three base64url parts joined by dots, at most 4096
+  characters), `alg` `EdDSA` (Ed25519), its `kid` naming a signing key the
+  project knows;
+- `aud`: the project's id;
+- `sub`: the user, 1–100 characters; optionally `email` (at most 254
+  characters) and `name` (at most 200 characters);
+- `iat` and `exp` in seconds, `exp − iat` at most 24 hours;
+- valid when the report is captured: `iat` at most 5 minutes after the
+  capture, and the capture before `exp`.
+
+An assertion that breaks any of these, or that the platform otherwise
+refuses, leaves the report unverified, or, with `requireVerified: true`,
+rejects it as `FeedbackRejection.unverified`.
 
 ### The feedback queue
 
@@ -537,15 +552,21 @@ in between loses nothing. `regulatedStrict` refuses an unencrypted store.
 
 ## 9. Privacy profiles
 
-- `privacyDefault` sanitizes messages, tags, breadcrumbs and stack frames: it
-  redacts emails, JWTs, bearer/token/secret/password/api-key/authorization
-  patterns, UUIDs, phone numbers, IPv4 addresses and health values (the
-  protocol's `PrivacyPatterns`), and keeps only the app's stack frames:
-  `package:` frames and, in a web build, the frames of the compiled dart2js
-  script with its file name alone, never its host or path.
-- `regulatedStrict` additionally replaces the exception message with the error
-  type only, removes user identity and all free-form `extra` context, and
-  truncates allowlisted scalar tags for regulated/medical apps.
+Every profile sanitizes on the device. Messages, tag strings, breadcrumbs,
+`extra` string values and the grouping key lose emails, JWTs,
+bearer/token/secret/password/api-key/authorization patterns, UUIDs, phone
+numbers, IPv4 addresses and health values (the protocol's
+`PrivacyPatterns`); tag and breadcrumb strings are cut to 100 characters;
+and only the app's stack frames are kept: `package:` frames and, in a web
+build, the frames of the compiled dart2js script with its file name alone,
+never its host or path.
+
+- `privacyDefault` is that.
+- `regulatedStrict` changes three things in an event, and only those: the
+  exception message is the error type alone, `extra` is empty, and no user
+  is sent. It also refuses an unencrypted store (§8), sends no user, user
+  context or locale with a feedback report (§6), and keeps no trail for a
+  native crash (§11).
 - `custom` supports project-specific privacy policies, but still never permits
   medical data or secrets. Use `CrashPiiConfig` to filter or disable explicitly
   supplied identity fields on the client.

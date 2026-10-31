@@ -1,31 +1,29 @@
-/// What the platform's privacy firewall rejects an event over, in every
-/// privacy profile: the categories [PrivacyPatterns] sorts its patterns and
-/// `extra` keys into ([PrivacyPatterns.extraKeyViolation]). The values name
-/// the firewall's rejection reasons without their `Detected` suffix.
+/// The kinds of data that must never leave the device, in any privacy
+/// profile: the categories [PrivacyPatterns] sorts its patterns and `extra`
+/// keys into ([PrivacyPatterns.extraKeyViolation]).
 enum PrivacyViolation {
   /// A credential — a bearer token, a JWT, or an assigned token, secret,
-  /// password, API key or authorization — anywhere in the event, or an
-  /// `extra` key that names one.
+  /// password, API key or authorization — or an `extra` key that names one.
   secret,
 
-  /// A health value (`glucose: 5.4`) in the message, the identity or an
-  /// `extra` value, or an `extra` key that names a health measure.
+  /// A health value (`glucose: 5.4`), or an `extra` key that names a health
+  /// measure.
   medicalData,
 
-  /// An e-mail address, a phone number, a UUID or an IPv4 address in the
-  /// event's technical text or `extra`, or an `extra` key that names an
-  /// identity.
+  /// An e-mail address, a phone number, a UUID or an IPv4 address, or an
+  /// `extra` key that names an identity.
   identifier,
 }
 
-/// The patterns the platform's privacy firewall scans an event with, as
-/// regular-expression sources a producer builds its redaction from, so that
-/// what it redacts and what the firewall rejects come from one definition.
+/// The patterns of data that must never leave the device, as
+/// regular-expression sources a client builds its redaction from, as the
+/// `noticebird` client does for an event's free text and a feedback
+/// report's message. A host must not pass such data in a value the client
+/// sends as it is, such as a feedback report's `userContext`.
 ///
 /// Each is matched case-insensitively and is open-ended: none needs a word
 /// boundary after its match, so a redaction built from them still removes a
-/// value that cutting a text leaves at its end. The firewall closes [uuid]
-/// and [ipv4] with a word boundary.
+/// value that cutting a text leaves at its end.
 abstract final class PrivacyPatterns {
   /// An e-mail address.
   static const email = r'[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}';

@@ -90,12 +90,11 @@ final class CrashEvent {
   /// [nativeStackTraceMarker] as `exception.stackTrace` require each other.
   final NativeCrashInfo? nativeCrash;
 
-  /// The app's own grouping of this event (schema 5): the platform groups
-  /// every event of the app with the same parts into one issue, whatever its
-  /// type or stack. One to
-  /// [maxGroupingKeyParts] non-empty parts of at most
+  /// The app's own grouping of this event (schema 5): every event of the
+  /// app with the same parts is one issue, whatever its type or stack. One
+  /// to [maxGroupingKeyParts] non-empty parts of at most
   /// [maxGroupingKeyPartLength] characters each, technical text like a tag
-  /// value: the platform's privacy firewall scans them.
+  /// value: never personal data or a credential.
   final List<String>? groupingKey;
 
   /// This event as the wire's JSON object at [schemaVersion], checked by

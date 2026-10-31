@@ -1100,19 +1100,34 @@ void main() {
       );
     });
 
-    test('a breadcrumb the protocol refuses is left out of the run state '
-        'alone', () async {
-      final collector = _FakeCollector();
-      final reporter = client(collector);
-      await Future<void>.delayed(Duration.zero);
-      reporter
-        ..addBreadcrumb(_crumb('Route.Push'))
-        ..addBreadcrumb(_crumb('route.push'));
+    for (final (name, refused) in [
+      ('an action outside the pattern', _crumb('Route.Push')),
+      (
+        'a NaN data value',
+        TypedBreadcrumb(
+          occurredAt: _t0,
+          category: BreadcrumbCategory.navigation,
+          action: 'list.load',
+          data: const {AllowedTag.operation: double.nan},
+        ),
+      ),
+    ]) {
+      test('a breadcrumb the protocol refuses ($name) is left out of the run '
+          'state alone', () async {
+        final collector = _FakeCollector();
+        final reporter = client(collector);
+        await Future<void>.delayed(Duration.zero);
+        reporter
+          ..addBreadcrumb(_crumb('route.push'))
+          ..addBreadcrumb(refused)
+          ..addBreadcrumb(_crumb('route.pop'));
 
-      expect(collector.updates.last.breadcrumbs.map((crumb) => crumb.action), [
-        'route.push',
-      ]);
-    });
+        expect(
+          collector.updates.last.breadcrumbs.map((crumb) => crumb.action),
+          ['route.push', 'route.pop'],
+        );
+      });
+    }
 
     test('regulatedStrict hands over no trail', () async {
       final collector = _FakeCollector();
