@@ -82,7 +82,7 @@ void main() {
       // Its listener runs after the start's own, before the reset's.
       NoticebirdFlutter.start(
         appName: 'example_app',
-        requireVerified: true,
+        breadcrumbBuffer: 0,
       ).then<void>((_) {}, onError: (Object _) => second = start());
 
       await NoticebirdFlutter.resetForTesting();

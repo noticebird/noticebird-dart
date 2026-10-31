@@ -67,7 +67,6 @@ FeedbackReport fullReport({
       'features': ['sharing', 'widgets'],
       'plan': {'seats': 5, 'tier': 'premium'},
     }),
-    reporterAssertion: 'eyJhbGciOiJFZERTQSJ9.eyJzdWIiOiJ1MSJ9.c2lnbmF0dXJl',
     trail:
         trail ??
         [
@@ -122,7 +121,6 @@ FeedbackReport replaced(
   String? sessionId,
   String? relatedEventId,
   FeedbackUser? user,
-  String? reporterAssertion,
   List<TypedBreadcrumb>? trail,
   Map<String, Map<String, DiagnosticValue>>? diagnostics,
   List<FeedbackAttachmentRef>? attachments,
@@ -141,7 +139,6 @@ FeedbackReport replaced(
   relatedEventId: relatedEventId ?? base.relatedEventId,
   user: user ?? base.user,
   userContext: base.userContext,
-  reporterAssertion: reporterAssertion ?? base.reporterAssertion,
   trail: trail ?? base.trail,
   diagnostics: diagnostics ?? base.diagnostics,
   attachments: attachments ?? base.attachments,
@@ -181,7 +178,6 @@ FeedbackReport worstReport({List<TypedBreadcrumb> trail = const []}) {
     userContext: FeedbackUserContext.check(
       contextOf(FeedbackUserContext.maxEncodedBytes),
     ),
-    reporterAssertion: 'a.b.${'c' * 4092}',
     diagnostics: FeedbackDiagnostics.build(
       diagnosticsOf(FeedbackReport.maxDiagnosticsBytes),
     ),

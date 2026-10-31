@@ -1,9 +1,9 @@
 // FileFeedbackOfflineStore in a temporary directory: a report the client
 // queued is read back whole by a new store on the same directory, and
-// delivered by a new client from it; a corrupt or half-written entry is
-// skipped and deleted, and a file the store did not name is left alone; a
-// screenshot is read only to be sent, and checked then; and an id that is no
-// report id names no file.
+// delivered by a new client from it; a corrupt or half-written entry, and
+// one an earlier SDK kept, is skipped and deleted, and a file the store did
+// not name is left alone; a screenshot is read only to be sent, and checked
+// then; and an id that is no report id names no file.
 
 import 'dart:convert';
 import 'dart:io';
@@ -147,6 +147,33 @@ void main() {
 
     expect(reports.map((report) => report.reportId), [good]);
     expect(files(), {'$good.json', 'notes.json'});
+  });
+
+  test('an entry an SDK before 0.7.0 kept, a report of feedback schema 1, is '
+      'deleted rather than sent', () async {
+    final reportId = await queued(screenshot: _png);
+    final file = File('${directory.path}/$reportId.json');
+    final entry = jsonDecode(file.readAsStringSync()) as Map<String, Object?>;
+    final report = jsonDecode(entry['report']! as String) as Map;
+    file.writeAsStringSync(
+      jsonEncode({
+        ...entry,
+        'format': 1,
+        'report': jsonEncode({
+          ...report,
+          'schemaVersion': 1,
+          'reporterAssertion': 'eyJhbGciOiJFZERTQSJ9.eyJzdWIiOiJ1MSJ9.c2ln',
+        }),
+      }),
+    );
+
+    final requests = [...transport.requests];
+
+    expect(await FileFeedbackOfflineStore(directory).pending(), isEmpty);
+    expect(files(), isEmpty);
+    now = _capturedAt.add(const Duration(days: 1));
+    await client().flush();
+    expect(transport.requests, requests);
   });
 
   test('a report whose file names another report is deleted', () async {

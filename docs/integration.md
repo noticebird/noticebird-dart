@@ -19,24 +19,24 @@ dependencies:
   noticebird_flutter:
     git:
       url: https://github.com/noticebird/noticebird-dart.git
-      ref: v0.6.0
+      ref: v0.7.0
       path: packages/noticebird_flutter
   noticebird_native: # only for native crashes, §11
     git:
       url: https://github.com/noticebird/noticebird-dart.git
-      ref: v0.6.0
+      ref: v0.7.0
       path: packages/noticebird_native
 
 dependency_overrides:
   noticebird:
     git:
       url: https://github.com/noticebird/noticebird-dart.git
-      ref: v0.6.0
+      ref: v0.7.0
       path: packages/noticebird
   noticebird_protocol:
     git:
       url: https://github.com/noticebird/noticebird-dart.git
-      ref: v0.6.0
+      ref: v0.7.0
       path: packages/noticebird_protocol
 ```
 
@@ -139,7 +139,7 @@ for (final failure in noticebird.platformReadFailures) {
 | `shouldCapture` | none (capture everything) | The capture filter every channel asks; §4. |
 | `breadcrumbBuffer` | 100 | The breadcrumbs kept in memory (50–200): the trail of a feedback report. |
 | `nativeCrashes` | none (off) | `NativeCrashCapture()` from `noticebird_native`; §11. |
-| `reporterAssertion`, `requireVerified`, `onFeedbackSettled` | none, `false`, none | §6. |
+| `onFeedbackSettled` | none | §6. |
 | `crashStore`, `feedbackStore` | in the support directory | The host's own stores; §8. |
 | `installErrorHandlers`, `observeBlocs`, `blocObserver` | `true`, `true`, a plain observer | §3. |
 | `background` | `false` | A headless engine's start; below. |
@@ -389,7 +389,9 @@ raw route throws in a debug build and is left out in a release build.
 attached.
 
 The client fills in the app, platform, locale, session, the user of `setUser`
-and the newest breadcrumbs, redacted as in an event. `Noticebird.reportedContext`
+and the newest breadcrumbs, redacted as in an event. The report's reporter is
+that user as the app gives it: nothing checks it, so it is the app's claim,
+not proof of who sent the report. `Noticebird.reportedContext`
 (`client.reportedContext`) answers the app, the platform and the locale as a
 report sent now carries them, for a sheet that shows the user what goes out
 with the report; the SDK sends no device model. The message is redacted
@@ -412,9 +414,8 @@ left out, and a debug build prints what went. `userContext` is what the app
 tells about its user on purpose; the client checks its shape
 (`FeedbackUserContext.check`) and sends it as given, unredacted: send only
 what you mean to. Under `regulatedStrict` no user, user context or locale
-is sent; the reporter assertion, when one is configured, is the one identity
-such a report carries. The exact limits are in the skill's
-[privacy and limits reference](../skills/noticebird/reference/privacy-and-limits.md).
+is sent, so such a report carries no identity. The exact limits are in the
+skill's [privacy and limits reference](../skills/noticebird/reference/privacy-and-limits.md).
 
 `relatedEventId` names the crash a report is about: a `CaptureResult`'s
 `eventId`, or `Noticebird.eventIdOf(error)` for the error an error
@@ -424,7 +425,7 @@ The outcome is sealed:
 
 | `FeedbackOutcome` | Meaning |
 |---|---|
-| `FeedbackDelivered` | The platform has the report; `ticket.display` (such as `FB-12`) is for the reporter, `verified` says whether the reporter assertion was accepted. `ticket` is `null` when the answer named none. |
+| `FeedbackDelivered` | The platform has the report; `ticket.display` (such as `FB-12`) is for the reporter. `ticket` is `null` when the answer named none. |
 | `FeedbackQueued` | It did not get through yet and waits in the offline store, under `reportId`. |
 | `FeedbackDisabled` | No client is attached, or the client has no feedback config or no feedback transport (a start without an API URL, with one it cannot send to, or without a usable key). |
 | `FeedbackRejected` | Not delivered, and never will be: `reason` (a `FeedbackRejection`) says why, `path` names the value at fault. |
@@ -436,43 +437,6 @@ id) throws an `ArgumentError` in a debug build, to show the mistake, and is
 `path` naming the value at fault (`$.contact.email`, say). A form can check a
 contact address first with `FeedbackContact.isValid`, and a user context with
 `FeedbackUserContext.check`.
-
-### Verified reporters
-
-To show a reporter as verified, pass `reporterAssertion`: a function that asks
-your backend for a signed assertion of the signed-in user, given 5 seconds;
-one that throws, answers `null` or takes longer leaves the report unverified.
-The client holds an assertion for the user set with `setUser` or `setUserId`
-until 5 minutes before its `exp`, and sends it with each report of that user
-meanwhile; reports captured at once share one call. It asks again for
-another user, after `setUser(null)`, and once the platform refused the one it
-held; without a user it asks for every report.
-
-What your backend mints for the signed-in user:
-
-- a compact JWS (three base64url parts joined by dots, at most 4096
-  characters);
-- a header of `alg` `EdDSA` (Ed25519) and `kid`, naming a signing key the
-  project knows, and optionally `typ`, which is then `"JWT"`; no other
-  header field;
-- `aud`: the project's id;
-- `sub`: the user, 1–100 characters; optionally `email` (at most 254
-  characters, holding an `@`), `name` (1–200 characters, so not empty) and
-  `role` (matching `^[a-z][a-z0-9_-]{0,31}$`);
-- `iat` and `exp` in whole seconds, `exp` after `iat` and at most 24 hours
-  after it;
-- no claim other than `sub`, `aud`, `iat`, `exp`, `email`, `name` and
-  `role`. Mint the claims yourself: an `iss`, `jti` or `nbf`, such as jose's
-  `setIssuer`/`setJti` or jsonwebtoken's `issuer`/`jwtid`/`notBefore`
-  options add, or one an identity provider's token carries, makes every
-  report unverified;
-- valid when the report is captured: `iat` at most 5 minutes after the
-  capture and at most 5 minutes ahead of the platform's clock, and the
-  capture before `exp`.
-
-An assertion that breaks any of these, or that the platform otherwise
-refuses, leaves the report unverified, or, with `requireVerified: true`,
-rejects it as `FeedbackRejection.unverified`.
 
 ### The feedback queue
 
@@ -779,4 +743,4 @@ knobs:
 | `deduplicationWindow` | 1 minute | A repeat inside the window (the same grouping key, or the same type and top app frames, line numbers aside) is `deduplicated`. |
 | `sessionIdFactory` | `NoticebirdConfig.processSessionId` | One id per app run; pass your own only when a session means something else. |
 | `locale` | none | The app's locale for each feedback report. |
-| `feedback` | none (off) | `FeedbackConfig` from `package:noticebird/feedback.dart`: transport, `reporterAssertion`, `requireVerified`, `offlineStore`, `onSettled`, `contextDiagnostics`. |
+| `feedback` | none (off) | `FeedbackConfig` from `package:noticebird/feedback.dart`: transport, `offlineStore`, `onSettled`, `contextDiagnostics`. |

@@ -1,3 +1,25 @@
+## 0.7.0
+
+Moves with `noticebird` 0.7.0, `noticebird_flutter` 0.7.0 and
+`noticebird_native` 0.7.0. The feedback report's schema moves to 2; the
+crash event's (5) is unchanged.
+
+Breaking changes:
+
+- A feedback report no longer carries a reporter assertion:
+  `FeedbackReport.reporterAssertion` is removed, with its constructor
+  parameter and `minReporterAssertionLength`, `maxReporterAssertionLength`
+  and `reporterAssertionPattern`. A report's reporter is who the app says
+  its user is (`user`), as the app gives it.
+- `FeedbackReport.schemaVersion` is 2, and `toJson` writes it. The platform
+  takes reports of schema 2 only: a client before 0.7.0 has its feedback
+  refused as `invalid_report`.
+
+Changes:
+
+- `FeedbackUser` and `FeedbackUserContext` say that each is as the app
+  gives it: nothing checks that it is true.
+
 ## 0.6.0
 
 Moves with `noticebird` 0.6.0, `noticebird_flutter` 0.6.0 and

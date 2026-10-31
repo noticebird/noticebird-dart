@@ -137,10 +137,7 @@ final class FeedbackQueue {
     switch (result) {
       case FeedbackSendAccepted(:final answer):
         await _locked(
-          () => _settle(
-            report,
-            FeedbackDelivered(ticket: answer.ticket, verified: answer.verified),
-          ),
+          () => _settle(report, FeedbackDelivered(ticket: answer.ticket)),
         );
       case FeedbackSendRejected(:final outcome):
         await _locked(() => _settle(report, outcome));

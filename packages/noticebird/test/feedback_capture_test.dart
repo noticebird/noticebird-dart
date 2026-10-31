@@ -1,36 +1,22 @@
 // NoticebirdClient.captureFeedback against a fake transport that decodes
 // every report it is given: the report the client builds from
 // the host's input and its own context, the delivery of a screenshot and a
-// report, the reporter assertion and its fallback, the outcome of each
-// final refusal, and input the report refuses, in a debug and a release
-// build.
+// report, the outcome of each final refusal, and input the report refuses,
+// in a debug and a release build.
 
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
-import 'package:fake_async/fake_async.dart';
 import 'package:test/test.dart';
 import 'package:noticebird/feedback.dart';
 import 'package:noticebird/noticebird.dart';
 import 'package:noticebird/src/protocol/host_mistakes.dart';
 
 import 'support/fake_feedback_transport.dart';
-
-const _assertionA = 'eyJhbGciOiJFUzI1NiJ9.eyJzdWIiOiJhIn0.c2lnbmF0dXJlLWE';
-const _assertionB = 'eyJhbGciOiJFUzI1NiJ9.eyJzdWIiOiJiIn0.c2lnbmF0dXJlLWI';
-
-/// A compact JWS whose claims hold [sub] and an `exp` of [expiresAt]; the
-/// client reads the claims only, never the signature.
-String _assertionUntil(DateTime expiresAt, {String sub = 'a'}) {
-  String part(Object json) =>
-      base64Url.encode(utf8.encode(jsonEncode(json))).replaceAll('=', '');
-  return '${part({'alg': 'EdDSA', 'kid': 'k1'})}.'
-      '${part({'sub': sub, 'exp': expiresAt.millisecondsSinceEpoch ~/ 1000})}.'
-      'c2lnbmF0dXJl';
-}
 
 const _app = AppMetadata(
   name: 'test-app',
@@ -54,29 +40,18 @@ final _png = Uint8List.fromList([
 void main() {
   late FakeFeedbackTransport transport;
   late DateTime now;
-  late List<String?> assertions;
-  late int assertionCalls;
 
   setUp(() {
     transport = FakeFeedbackTransport();
     now = _capturedAt;
-    assertions = [];
-    assertionCalls = 0;
   });
   tearDown(() => debugHostMistakesThrow = isDebugBuild);
-
-  Future<String?> provideAssertion() async {
-    assertionCalls++;
-    return assertions.isEmpty ? null : assertions.removeAt(0);
-  }
 
   /// A client, of a release build unless [debugBuild]: whether a mistake
   /// of the host throws.
   NoticebirdClient client({
     CrashPrivacyProfile profile = CrashPrivacyProfile.privacyDefault,
     bool feedback = true,
-    Future<String?> Function()? reporterAssertion,
-    bool requireVerified = false,
     bool debugBuild = false,
     String Function()? sessionIdFactory,
     AppMetadata app = _app,
@@ -97,8 +72,6 @@ void main() {
         feedback: feedback
             ? FeedbackConfig(
                 transport: transport,
-                reporterAssertion: reporterAssertion ?? provideAssertion,
-                requireVerified: requireVerified,
                 contextDiagnostics: contextDiagnostics,
               )
             : null,
@@ -134,7 +107,6 @@ void main() {
   test(
     'a report with every field is delivered as the client built it',
     () async {
-      assertions = [_assertionA];
       final reporter = client()
         ..setUser(
           const CrashUser(
@@ -178,15 +150,12 @@ void main() {
         relatedEventId: '0197F232-2BD8-7000-8000-000000000001',
       );
 
-      expect(
-        outcome,
-        const FeedbackDelivered(ticket: fakeTicket, verified: true),
-      );
+      expect(outcome, const FeedbackDelivered(ticket: fakeTicket));
       expect(transport.requests, ['slot', 'upload', 'submit']);
       expect(transport.uploaded.single, _png);
       final report = sent();
       expect(report, {
-        'schemaVersion': 1,
+        'schemaVersion': 2,
         'reportId': report['reportId'],
         'createdAt': '2026-10-30T12:00:00.000Z',
         'kind': 'bug',
@@ -204,7 +173,6 @@ void main() {
           'roles': ['admin', 'editor'],
           'org': {'tier': 2},
         },
-        'reporterAssertion': _assertionA,
         'trail': [
           {
             'occurredAt': '2026-10-30T11:59:00.000Z',
@@ -416,10 +384,7 @@ void main() {
       };
       final outcome = await capture(client(), userContext: context);
 
-      expect(
-        outcome,
-        const FeedbackDelivered(ticket: fakeTicket, verified: false),
-      );
+      expect(outcome, const FeedbackDelivered(ticket: fakeTicket));
       expect(sent()['userContext'], context);
     });
 
@@ -540,11 +505,7 @@ void main() {
     }
 
     for (final (name, queue, answer) in [
-      (
-        'an acceptance of the slot request',
-        'slot',
-        const FeedbackAccepted(verified: false),
-      ),
+      ('an acceptance of the slot request', 'slot', const FeedbackAccepted()),
       (
         'a slot for the submit',
         'submit',
@@ -715,237 +676,6 @@ void main() {
         ),
       );
       expect(transport.requests, ['slot']);
-    });
-  });
-
-  group('the reporter assertion', () {
-    test('a refused assertion resends the report at once without it, the '
-        'provider not asked again', () async {
-      assertions = [_assertionA, _assertionB];
-      transport.submitAnswers.add(const FeedbackAssertionRefused());
-
-      final outcome = await capture(client());
-
-      expect(
-        outcome,
-        const FeedbackDelivered(ticket: fakeTicket, verified: false),
-      );
-      expect(assertionCalls, 1);
-      final [first, second] = transport.submitted;
-      expect(first['reporterAssertion'], _assertionA);
-      expect(second, {...first}..remove('reporterAssertion'));
-    });
-
-    test('a report refused again without its assertion is '
-        'refused', () async {
-      assertions = [_assertionA];
-      transport.submitAnswers.addAll([
-        const FeedbackAssertionRefused(),
-        const FeedbackAssertionRefused(),
-      ]);
-
-      final outcome = await capture(client());
-
-      expect(
-        outcome,
-        const FeedbackRejected(
-          FeedbackRejection.refused,
-          code: 'invalid_reporter_assertion',
-        ),
-      );
-      expect(assertionCalls, 1);
-      expect(transport.submitted, hasLength(2));
-    });
-
-    test('requireVerified rejects a report whose assertion is refused, the '
-        'provider not asked again', () async {
-      assertions = [_assertionA];
-      transport.submitAnswers.add(const FeedbackAssertionRefused());
-
-      final outcome = await capture(client(requireVerified: true));
-
-      expect(
-        outcome,
-        const FeedbackRejected(
-          FeedbackRejection.unverified,
-          code: 'invalid_reporter_assertion',
-        ),
-      );
-      expect(assertionCalls, 1);
-      expect(transport.submitted, hasLength(1));
-    });
-
-    test('requireVerified sends nothing without an assertion', () async {
-      final outcome = await capture(client(requireVerified: true));
-      expect(outcome, const FeedbackRejected(FeedbackRejection.unverified));
-      expect(transport.requests, isEmpty);
-    });
-
-    test('requireVerified needs a provider', () {
-      expect(
-        () => FeedbackConfig(transport: transport, requireVerified: true),
-        throwsArgumentError,
-      );
-    });
-
-    test('a provider that throws leaves the report without one', () async {
-      final outcome = await capture(
-        client(reporterAssertion: () async => throw StateError('offline')),
-      );
-      expect(outcome, isA<FeedbackDelivered>());
-      expect(sent(), isNot(contains('reporterAssertion')));
-    });
-
-    test('an assertion the report refuses is left out', () async {
-      assertions = ['not a token'];
-      await capture(client());
-      expect(sent(), isNot(contains('reporterAssertion')));
-    });
-
-    test('a provider that hangs is given 5 seconds', () {
-      fakeAsync((async) {
-        FeedbackOutcome? outcome;
-        capture(
-          client(reporterAssertion: () => Completer<String?>().future),
-        ).then((value) => outcome = value);
-
-        async.elapse(const Duration(seconds: 4));
-        expect(outcome, isNull);
-        expect(transport.requests, isEmpty);
-
-        async.elapse(const Duration(seconds: 1));
-        expect(outcome, isA<FeedbackDelivered>());
-        expect(sent(), isNot(contains('reporterAssertion')));
-      });
-    });
-  });
-
-  group('the held reporter assertion', () {
-    const ada = CrashUser(id: 'user_1', email: 'ada@example.com');
-    late String fresh;
-    setUp(
-      () => fresh = _assertionUntil(_capturedAt.add(const Duration(hours: 1))),
-    );
-
-    test('a report of the same user within the token\'s life asks no '
-        'provider, and carries the same token', () async {
-      assertions = [fresh, _assertionB];
-      final reporter = client()..setUser(ada);
-
-      await capture(reporter);
-      now = _capturedAt.add(const Duration(minutes: 54));
-      await capture(reporter);
-
-      expect(assertionCalls, 1);
-      expect(transport.submitted.map((report) => report['reporterAssertion']), [
-        fresh,
-        fresh,
-      ]);
-    });
-
-    test('a token within 5 minutes of its exp is asked for anew', () async {
-      assertions = [fresh, _assertionB];
-      final reporter = client()..setUser(ada);
-
-      await capture(reporter);
-      now = _capturedAt.add(const Duration(minutes: 55));
-      await capture(reporter);
-
-      expect(assertionCalls, 2);
-      expect(transport.submitted.last['reporterAssertion'], _assertionB);
-    });
-
-    test('another user, and none, ask again', () async {
-      assertions = [fresh, _assertionB, _assertionA];
-      final reporter = client()..setUser(ada);
-
-      await capture(reporter);
-      reporter.setUser(const CrashUser(id: 'user_2'));
-      await capture(reporter);
-      reporter.setUser(null);
-      await capture(reporter);
-
-      expect(assertionCalls, 3);
-      expect(transport.submitted.map((report) => report['reporterAssertion']), [
-        fresh,
-        _assertionB,
-        _assertionA,
-      ]);
-    });
-
-    test('the same user with a new address asks again', () async {
-      assertions = [fresh, _assertionB];
-      final reporter = client()..setUser(ada);
-
-      await capture(reporter);
-      reporter.setUser(const CrashUser(id: 'user_1', email: 'ada@new.test'));
-      await capture(reporter);
-
-      expect(assertionCalls, 2);
-    });
-
-    test('setUserId holds a token for that id', () async {
-      assertions = [fresh, _assertionB];
-      final reporter = client()..setUserId('user_1');
-
-      await capture(reporter);
-      await capture(reporter);
-      reporter.setUserId(null);
-      await capture(reporter);
-
-      expect(assertionCalls, 2);
-    });
-
-    test('without a user every report asks', () async {
-      assertions = [fresh, fresh];
-      final reporter = client();
-
-      await capture(reporter);
-      await capture(reporter);
-
-      expect(assertionCalls, 2);
-    });
-
-    test('a token the platform refused is asked for anew', () async {
-      assertions = [fresh, _assertionB];
-      transport.submitAnswers.add(const FeedbackAssertionRefused());
-      final reporter = client()..setUser(ada);
-
-      await capture(reporter);
-      await capture(reporter);
-
-      expect(assertionCalls, 2);
-      expect(transport.submitted.last['reporterAssertion'], _assertionB);
-    });
-
-    test('a token without a readable exp is not held', () async {
-      assertions = [_assertionA, _assertionA];
-      final reporter = client()..setUser(ada);
-
-      await capture(reporter);
-      await capture(reporter);
-
-      expect(assertionCalls, 2);
-    });
-
-    test('reports captured at once share one provider call', () async {
-      final answer = Completer<String?>();
-      final reporter = client(
-        reporterAssertion: () {
-          assertionCalls++;
-          return answer.future;
-        },
-      )..setUser(ada);
-
-      final both = Future.wait([capture(reporter), capture(reporter)]);
-      answer.complete(fresh);
-      await both;
-
-      expect(assertionCalls, 1);
-      expect(transport.submitted.map((report) => report['reporterAssertion']), [
-        fresh,
-        fresh,
-      ]);
     });
   });
 
@@ -1205,14 +935,12 @@ void main() {
 
     for (final (name, call, path) in cases) {
       test('$name is rejected in a release build, with nothing sent', () async {
-        assertions = [_assertionA];
         final outcome = await call(client());
         expect(
           outcome,
           FeedbackRejected(FeedbackRejection.invalidInput, path: path),
         );
         expect(transport.requests, isEmpty);
-        expect(assertionCalls, 0);
       });
 
       test('$name throws in a debug build', () async {
@@ -1254,7 +982,17 @@ void main() {
       ),
     );
     expect(await capture(reporter), const FeedbackDisabled());
-    expect(() => FeedbackConfig(requireVerified: true), throwsArgumentError);
+    expect(
+      () => NoticebirdConfig(
+        privacyProfile: CrashPrivacyProfile.regulatedStrict,
+        app: _app,
+        platform: _platform,
+        feedback: FeedbackConfig(
+          offlineStore: FileFeedbackOfflineStore(Directory.systemTemp),
+        ),
+      ),
+      throwsArgumentError,
+    );
   });
 
   test('a moment taken before the report is noted with when', () async {

@@ -218,7 +218,6 @@ final class NoticebirdClient {
       if (userId == null) {
         _userId = null;
         _user = null;
-        _feedbackSender?.identity = null;
         return;
       }
       // The id is sent as given, in the client's own stable form: whether
@@ -233,7 +232,6 @@ final class NoticebirdClient {
       );
       _userId = sanitized.isEmpty ? null : sanitized;
       _user = _config.pii.filter(CrashUser(id: _userId));
-      _feedbackSender?.identity = _userId;
     } catch (_) {
       // Reporting must never affect the host application.
     }
@@ -245,9 +243,6 @@ final class NoticebirdClient {
   /// disable identity or restrict fields, while `regulatedStrict` never sends
   /// identity regardless of this setting.
   void setUser(CrashUser? user) {
-    _feedbackSender?.identity = user == null || user.isEmpty
-        ? null
-        : jsonEncode([user.id, user.email, user.name]);
     try {
       _userId = null;
       _user = _config.pii.filter(user);
@@ -409,19 +404,15 @@ final class NoticebirdClient {
           }
         },
       );
-      final report = draft.report(
-        reporterAssertion: await sender.reporterAssertion(),
-      );
       final result = await sender.send(
         FeedbackSendState(
-          reportJson: report.toJsonString(),
+          reportJson: draft.report().toJsonString(),
           attachment: draft.attachment,
         ),
       );
       return switch (result) {
         FeedbackSendAccepted(:final answer) => FeedbackDelivered(
           ticket: answer.ticket,
-          verified: answer.verified,
         ),
         FeedbackSendRejected(:final outcome) => outcome,
         FeedbackSendPostponed() => await _keep(result),
@@ -436,11 +427,7 @@ final class NoticebirdClient {
   }
 
   late final FeedbackSender? _feedbackSender = switch (_config.feedback) {
-    FeedbackConfig(:final transport?) && final feedback => FeedbackSender(
-      feedback,
-      transport,
-      clock: _clock,
-    ),
+    FeedbackConfig(:final transport?) => FeedbackSender(transport),
     _ => null,
   };
 

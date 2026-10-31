@@ -109,9 +109,8 @@ final class NoticebirdFlutter {
   ///   blocs per type, and its locale with the platform's.
   ///
   /// [privacyProfile], [pii], [shouldCapture] and [breadcrumbBuffer] are
-  /// the client's ([NoticebirdConfig]); [reporterAssertion],
-  /// [requireVerified] and [onFeedbackSettled] are its feedback's
-  /// ([FeedbackConfig]).
+  /// the client's ([NoticebirdConfig]); [onFeedbackSettled] is its
+  /// feedback's ([FeedbackConfig.onSettled]).
   ///
   /// [background] starts the client of a headless background engine: it
   /// reports, but delivers nothing of earlier runs, flushes nothing by
@@ -135,8 +134,6 @@ final class NoticebirdFlutter {
     bool Function(Object error)? shouldCapture,
     int breadcrumbBuffer = FeedbackReport.maxTrailItems,
     NativeCrashCollector? nativeCrashes,
-    Future<String?> Function()? reporterAssertion,
-    bool requireVerified = false,
     void Function(FeedbackSettled settled)? onFeedbackSettled,
     CrashOfflineStore? crashStore,
     FeedbackOfflineStore? feedbackStore,
@@ -158,8 +155,6 @@ final class NoticebirdFlutter {
       shouldCapture: shouldCapture,
       breadcrumbBuffer: breadcrumbBuffer,
       nativeCrashes: nativeCrashes,
-      reporterAssertion: reporterAssertion,
-      requireVerified: requireVerified,
       onFeedbackSettled: onFeedbackSettled,
       crashStore: crashStore,
       feedbackStore: feedbackStore,
@@ -190,8 +185,6 @@ final class NoticebirdFlutter {
     required bool Function(Object error)? shouldCapture,
     required int breadcrumbBuffer,
     required NativeCrashCollector? nativeCrashes,
-    required Future<String?> Function()? reporterAssertion,
-    required bool requireVerified,
     required void Function(FeedbackSettled settled)? onFeedbackSettled,
     required CrashOfflineStore? crashStore,
     required FeedbackOfflineStore? feedbackStore,
@@ -259,8 +252,6 @@ final class NoticebirdFlutter {
         // nothing, and its arguments are checked all the same.
         feedback: FeedbackConfig(
           transport: feedbackTransport,
-          reporterAssertion: reporterAssertion,
-          requireVerified: requireVerified,
           offlineStore:
               feedbackStore ??
               (defaultFeedbackStore == null

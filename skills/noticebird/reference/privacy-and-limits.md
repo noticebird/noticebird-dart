@@ -157,13 +157,12 @@ route template, a user field, a trail item) is left out.
 | locale (`NoticebirdConfig.locale`) | at most 35 characters, a language tag `^[A-Za-z]{2,3}([_-][A-Za-z0-9]{2,8}){0,3}$` (`nl-NL`); another is left out |
 | trail | the newest 100 breadcrumbs of the buffer, redacted as in an event; a breadcrumb the report refuses is left out alone, and the oldest go first until the report fits |
 | whole report | 65,536 bytes (64 KiB) encoded |
-| reporter assertion | what the host's backend mints: a compact JWS (three base64url parts joined by dots) of 16–4096 characters. Its header holds `alg` `EdDSA` (Ed25519) and `kid`, naming a signing key the project knows, optionally `typ` `"JWT"`, and no other field. Its claims are `aud`, the project's id; `sub`, 1–100 characters; `iat` and `exp`, whole seconds, `exp` after `iat` and at most 24 hours after it; optionally `email` (at most 254 characters, holding `@`), `name` (1–200 characters) and `role` (`^[a-z][a-z0-9_-]{0,31}$`); and no other claim: an `iss`, `jti` or `nbf`, such as jose's `setIssuer` or jsonwebtoken's `issuer` option adds or an identity provider's token carries, leaves every report unverified. Valid at the report's capture time: `iat` at most 5 minutes after the capture and at most 5 minutes ahead of the platform's clock, the capture before `exp`. Another is left out or refused, and the report goes unverified, or is `FeedbackRejected(unverified)` under `requireVerified`. The provider is given 5 seconds; an assertion is held per user (`setUser` / `setUserId`) until 5 minutes before its `exp`, and reports captured at once share one call; without a user, or for a token without a readable `exp`, it is asked for every report; a refusal is not retried |
 | submission window | the platform takes a report up to 7 days after it was captured, and none whose capture time is more than 5 minutes ahead of its clock: `FeedbackRejected(clock)`. A kept report older than 7 days is removed unsent (`FeedbackRejection.expired`) |
 
 `userContext` is checked for its shape only and sent as the host gave it: the platform
 may drop values it does not keep. Under `regulatedStrict` the client sends no `user`, no
-`userContext` and no locale; the reporter assertion, when one is configured, is the one
-identity such a report carries.
+`userContext` and no locale: such a report carries no identity. Elsewhere its `user` is
+the user of `setUser` / `setUserId` as the app gives it: nothing checks it.
 
 ### Feedback offline queue
 

@@ -28,9 +28,8 @@ final class _RecordingFeedbackTransport implements FeedbackTransport {
   @override
   Future<FeedbackDelivery> submit(String reportJson) async {
     reports.add(jsonDecode(reportJson) as Map<String, Object?>);
-    return FeedbackAccepted(
-      ticket: const FeedbackTicket(number: 1, display: 'FB-1'),
-      verified: false,
+    return const FeedbackAccepted(
+      ticket: FeedbackTicket(number: 1, display: 'FB-1'),
     );
   }
 }

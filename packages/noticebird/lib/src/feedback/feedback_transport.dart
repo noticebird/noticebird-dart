@@ -38,9 +38,8 @@ abstract interface class FeedbackTransport {
 /// The answers to go on with are [FeedbackSlotPending],
 /// [FeedbackAttachmentStored] and [FeedbackAccepted]. The others say what to
 /// do with the report instead: drop it ([FeedbackFinalRefusal]), keep it for
-/// later ([FeedbackRetryAfter], [FeedbackTransient]), ask for the slot again
-/// ([FeedbackBackToSlot]), or send it again without its reporter assertion
-/// ([FeedbackAssertionRefused]).
+/// later ([FeedbackRetryAfter], [FeedbackTransient]), or ask for the slot
+/// again ([FeedbackBackToSlot]).
 sealed class FeedbackDelivery {
   const FeedbackDelivery();
 }
@@ -51,26 +50,20 @@ sealed class FeedbackDelivery {
 /// Read leniently: a success answer without a readable ticket is still
 /// accepted, with [ticket] `null`.
 final class FeedbackAccepted extends FeedbackDelivery {
-  const FeedbackAccepted({this.ticket, required this.verified});
+  const FeedbackAccepted({this.ticket});
 
   /// The ticket the report was filed under, if the answer named one.
   final FeedbackTicket? ticket;
 
-  /// Whether the platform verified the report's reporter assertion; `false`
-  /// for a report without one, and when the answer does not say.
-  final bool verified;
-
   @override
   bool operator ==(Object other) =>
-      other is FeedbackAccepted &&
-      other.ticket == ticket &&
-      other.verified == verified;
+      other is FeedbackAccepted && other.ticket == ticket;
 
   @override
-  int get hashCode => Object.hash(ticket, verified);
+  int get hashCode => ticket.hashCode;
 
   @override
-  String toString() => 'FeedbackAccepted(ticket: $ticket, verified: $verified)';
+  String toString() => 'FeedbackAccepted(ticket: $ticket)';
 }
 
 /// The ticket a submitted report was filed under.
@@ -239,22 +232,6 @@ final class FeedbackBackToSlot extends FeedbackDelivery {
 
   @override
   String toString() => 'FeedbackBackToSlot()';
-}
-
-/// The platform did not verify the report's reporter assertion (`401
-/// invalid_reporter_assertion`): send the report again without it, or drop
-/// it when the host requires a verified report.
-final class FeedbackAssertionRefused extends FeedbackDelivery {
-  const FeedbackAssertionRefused();
-
-  @override
-  bool operator ==(Object other) => other is FeedbackAssertionRefused;
-
-  @override
-  int get hashCode => (FeedbackAssertionRefused).hashCode;
-
-  @override
-  String toString() => 'FeedbackAssertionRefused()';
 }
 
 /// The request did not get through for now: no answer in time, no network,

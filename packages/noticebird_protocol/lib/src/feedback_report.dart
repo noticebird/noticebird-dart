@@ -116,9 +116,9 @@ final class FeedbackAttachmentRef {
   }
 }
 
-/// The unverified identity the SDK holds (`user`): never shown as verified.
-/// At least one field, each a string of 1 to its maximum code points (the
-/// email at least [minEmailLength]).
+/// Who the app says its user is (`user`), as the app gives it: nothing
+/// checks it is true. At least one field, each a string of 1 to its maximum
+/// code points (the email at least [minEmailLength]).
 final class FeedbackUser {
   const FeedbackUser({this.id, this.email, this.name});
 
@@ -159,7 +159,7 @@ final class FeedbackUser {
 }
 
 /// The context the host gives about its user (`userContext`): identity it
-/// supplies on purpose, never verified, as the unverified [FeedbackUser] is.
+/// supplies on purpose, as the app gives it, like [FeedbackUser].
 ///
 /// An object of 1–[maxKeys] keys, each matching [keyPattern]. A value is a
 /// string (1–[maxStringLength] characters), a finite number, a boolean, an
@@ -299,7 +299,7 @@ abstract final class FeedbackDiagnostics {
   };
 }
 
-/// A feedback report, schema version 1, written by [toJson] and
+/// A feedback report, schema version [schemaVersion], written by [toJson] and
 /// [toJsonString].
 ///
 /// Fail-closed: [toJson] checks every field by its rules and the limits,
@@ -324,13 +324,12 @@ final class FeedbackReport {
     this.relatedEventId,
     this.user,
     this.userContext,
-    this.reporterAssertion,
     this.trail = const [],
     this.diagnostics = const {},
     this.attachments = const [],
   });
 
-  static const schemaVersion = 1;
+  static const schemaVersion = 2;
 
   /// The most bytes an encoded report may have, as an event.
   static const maxEncodedBytes = 65536;
@@ -358,13 +357,6 @@ final class FeedbackReport {
   static final routeTemplatePattern = RegExp('^/');
 
   static final sessionIdPattern = RegExp(r'^[A-Za-z0-9_-]{16,64}$');
-
-  /// A compact JWS: three base64url parts.
-  static const minReporterAssertionLength = 16;
-  static const maxReporterAssertionLength = 4096;
-  static final reporterAssertionPattern = RegExp(
-    r'^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$',
-  );
 
   /// A UUID of version 4 in lower case, as `reportId` and a diagnostics
   /// UUID are.
@@ -398,7 +390,6 @@ final class FeedbackReport {
   final String? relatedEventId;
   final FeedbackUser? user;
   final FeedbackUserContext? userContext;
-  final String? reporterAssertion;
   final List<TypedBreadcrumb> trail;
   final Map<String, Map<String, DiagnosticValue>> diagnostics;
   final List<FeedbackAttachmentRef> attachments;
@@ -502,7 +493,6 @@ final class FeedbackReport {
       'relatedEventId': ?relatedEventId,
       'user': ?user?.toJson(),
       'userContext': ?userContext?.toJson(),
-      'reporterAssertion': ?reporterAssertion,
       if (trail.isNotEmpty) 'trail': [for (final item in trail) item.toJson()],
       if (diagnostics.isNotEmpty) 'diagnostics': _diagnosticsJson(diagnostics),
       if (attachments.isNotEmpty)
@@ -544,15 +534,6 @@ final class FeedbackReport {
       _checkString(id, r'$.relatedEventId', pattern: uuid);
     }
     user?._check(r'$.user');
-    if (reporterAssertion case final assertion?) {
-      _checkString(
-        assertion,
-        r'$.reporterAssertion',
-        minLength: minReporterAssertionLength,
-        maxLength: maxReporterAssertionLength,
-        pattern: reporterAssertionPattern,
-      );
-    }
     if (trail.length > maxTrailItems) {
       throw const ProtocolException(
         ProtocolViolation.oversized,

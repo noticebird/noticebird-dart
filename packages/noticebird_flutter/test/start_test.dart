@@ -50,7 +50,6 @@ void main() {
           ? http.Response(
               jsonEncode({
                 'ticket': {'number': 1, 'display': 'FB-1'},
-                'verified': false,
               }),
               201,
             )
@@ -135,7 +134,7 @@ void main() {
           publishableKey: key,
           appName: 'example_app',
           httpClient: httpClient,
-          requireVerified: true,
+          breadcrumbBuffer: 0,
         ),
         throwsArgumentError,
       );

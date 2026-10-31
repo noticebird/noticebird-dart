@@ -1,3 +1,17 @@
+## 0.7.0
+
+Moves with `noticebird` 0.7.0 and `noticebird_protocol` 0.7.0.
+
+Breaking changes:
+
+- `NoticebirdFlutter.start` loses `reporterAssertion` and
+  `requireVerified`: a report's reporter is who the app says its user is,
+  as the app gives it.
+- Through `noticebird` 0.7.0: `FeedbackDelivered.verified`,
+  `FeedbackRejection.unverified` and `FeedbackAssertionRefused` are
+  removed, feedback reports are of schema 2, and a report a client before
+  0.7.0 kept offline is deleted on the device rather than sent.
+
 ## 0.6.0
 
 Moves with `noticebird` 0.6.0 and `noticebird_protocol` 0.6.0.

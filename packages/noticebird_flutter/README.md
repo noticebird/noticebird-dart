@@ -104,7 +104,7 @@ The SDK never picks an API by itself.
 |---|---|
 | Where it sends | `apiUrl` and `publishableKey` (above), `httpClient` (the host's HTTP stack), `uploadCrashes` (`false`: crash events are discarded, feedback is still sent) |
 | What an event carries | `privacyProfile`, `pii`, `shouldCapture`, `breadcrumbBuffer` |
-| Feedback | `reporterAssertion`, `requireVerified`, `onFeedbackSettled` |
+| Feedback | `onFeedbackSettled` |
 | Native crashes | `nativeCrashes`: `NativeCrashCapture()` of `noticebird_native` |
 | Storage | `crashStore`, `feedbackStore`: the host's own stores in place of the default ones |
 | What it installs | `installErrorHandlers`, `observeBlocs`, `blocObserver` |

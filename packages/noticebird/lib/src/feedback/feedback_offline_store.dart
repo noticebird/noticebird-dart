@@ -37,7 +37,10 @@ abstract interface class FeedbackOfflineStore {
   Future<void> put(PendingFeedback report);
 
   /// The reports kept, in any order, each read with
-  /// [PendingFeedback.fromJson], without its screenshot.
+  /// [PendingFeedback.fromJson], without its screenshot. A kept report
+  /// [PendingFeedback.fromJson] refuses, such as one an earlier version of
+  /// the client wrote in a form it no longer sends, is no pending report:
+  /// forget it, with its screenshot.
   Future<List<PendingFeedback>> pending();
 
   /// The screenshot [put] kept with the report [reportId], or `null` when
@@ -98,7 +101,9 @@ final class PendingFeedback {
     }
   }
 
-  static const _format = 1;
+  /// The form [toJson] writes. 2 since feedback schema 2: a report of
+  /// schema 1, which the platform refuses, is not read back to be sent.
+  static const _format = 2;
 
   final FeedbackSendState _state;
 
@@ -109,9 +114,7 @@ final class PendingFeedback {
   /// oldest first, and drops a report past [FeedbackReport.maxAge].
   final DateTime createdAt;
 
-  /// The report as it is submitted, `FeedbackReport.toJsonString`'s: with
-  /// the reporter assertion it was captured with, or without it once the
-  /// platform refused it.
+  /// The report as it is submitted, `FeedbackReport.toJsonString`'s.
   String get reportJson => _state.reportJson;
 
   /// The bytes of the report's screenshot, for [FeedbackOfflineStore.put]

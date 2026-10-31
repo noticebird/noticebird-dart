@@ -58,11 +58,11 @@ void main() {
         'relatedEventId',
         'user',
         'userContext',
-        'reporterAssertion',
         'trail',
         'diagnostics',
         'attachments',
       });
+      expect(json['schemaVersion'], 2);
       expect(json['contact'], {'email': 'reporter@example.com'});
       expect(json['platform'], {
         'name': 'android',
@@ -192,13 +192,6 @@ void main() {
       path: r'$.user.name',
     );
     limit(
-      'reporterAssertion',
-      report: (n) => replaced(full, reporterAssertion: 'a.b.${text(n - 4)}'),
-      max: FeedbackReport.maxReporterAssertionLength,
-      violation: ProtocolViolation.invalidValue,
-      path: r'$.reporterAssertion',
-    );
-    limit(
       'trail',
       report: (n) => replaced(full, trail: List.filled(n, _crumb())),
       max: FeedbackReport.maxTrailItems,
@@ -305,7 +298,6 @@ void main() {
     test('the worst case of every field at its maximum fits 64 KiB with an '
         'empty trail', () {
       final report = worstReport();
-      expect(report.reporterAssertion!.length, 4096);
       expect(report.message.runes.length, FeedbackReport.maxMessageLength);
       expect(
         utf8.encode(report.toJsonString()).length,
@@ -432,16 +424,6 @@ void main() {
         );
       });
     }
-
-    test('a reporterAssertion that is no compact JWS is refused', () {
-      for (final value in ['a' * 16, 'a.b.c.d${'e' * 16}', 'a.b.c']) {
-        _expectRefused(
-          replaced(full, reporterAssertion: value),
-          ProtocolViolation.invalidValue,
-          r'$.reporterAssertion',
-        );
-      }
-    });
 
     test('a trail action outside the pattern is refused at its item', () {
       _expectRefused(

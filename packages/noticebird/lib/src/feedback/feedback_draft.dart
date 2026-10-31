@@ -18,8 +18,8 @@ final class FeedbackInputException implements Exception {
   String toString() => 'Invalid feedback input at $path: $message';
 }
 
-/// A report built from the host's input and the client's context, waiting
-/// only for its reporter assertion ([report]).
+/// A report built from the host's input and the client's context, its trail
+/// cut to fit when it is written ([report]).
 ///
 /// Every rule is the report's own, applied by [FeedbackReport.toJson] and
 /// the report's checks of a single value: what the client fills in itself
@@ -113,40 +113,38 @@ final class FeedbackDraft {
       dropped: dropped,
     );
 
-    FeedbackReport build(List<TypedBreadcrumb> trail, String? assertion) =>
-        FeedbackReport(
-          reportId: reportId,
-          createdAt: createdAt,
-          kind: kind,
-          trigger: trigger,
-          message: safeMessage,
-          contactEmail: contactEmail,
-          app: app,
-          platform: platform,
-          locale: keptLocale,
-          routeTemplate: keptRoute,
-          sessionId: sessionId,
-          relatedEventId: relatedEventId,
-          user: userFields.isEmpty
-              ? null
-              : FeedbackUser(
-                  id: userFields['id'],
-                  email: userFields['email'],
-                  name: userFields['name'],
-                ),
-          userContext: context,
-          reporterAssertion: assertion,
-          trail: trail,
-          diagnostics: typedDiagnostics,
-          attachments: [?reference],
-        );
+    FeedbackReport build(List<TypedBreadcrumb> trail) => FeedbackReport(
+      reportId: reportId,
+      createdAt: createdAt,
+      kind: kind,
+      trigger: trigger,
+      message: safeMessage,
+      contactEmail: contactEmail,
+      app: app,
+      platform: platform,
+      locale: keptLocale,
+      routeTemplate: keptRoute,
+      sessionId: sessionId,
+      relatedEventId: relatedEventId,
+      user: userFields.isEmpty
+          ? null
+          : FeedbackUser(
+              id: userFields['id'],
+              email: userFields['email'],
+              name: userFields['name'],
+            ),
+      userContext: context,
+      trail: trail,
+      diagnostics: typedDiagnostics,
+      attachments: [?reference],
+    );
 
     // A user field the client holds goes when the report refuses it, or
     // fails the report when the report needs it; what the host passed is
     // the host's to fix.
     for (;;) {
       try {
-        build(const [], null).toJson();
+        build(const []).toJson();
         break;
       } on ProtocolException catch (error) {
         final path = error.path;
@@ -206,32 +204,24 @@ final class FeedbackDraft {
     return best;
   }
 
-  final FeedbackReport Function(List<TypedBreadcrumb>, String?) _build;
+  final FeedbackReport Function(List<TypedBreadcrumb>) _build;
   final List<TypedBreadcrumb> _trail;
 
   /// The screenshot's bytes, copied at capture; `null` without one.
   final Uint8List? attachment;
 
-  /// The report with [reporterAssertion], left out when the report refuses
-  /// it, and as many of the newest breadcrumbs as fit
+  /// The report with as many of the newest breadcrumbs as fit
   /// [FeedbackReport.maxEncodedBytes]: the oldest go first.
-  FeedbackReport report({String? reporterAssertion}) {
-    FeedbackReport? fitting(List<TypedBreadcrumb> trail, String? assertion) {
+  FeedbackReport report() {
+    FeedbackReport? fitting(List<TypedBreadcrumb> trail) {
       try {
-        return _build(trail, assertion)..toJson();
+        return _build(trail)..toJson();
       } on ProtocolException {
         return null;
       }
     }
 
-    return (reporterAssertion == null
-            ? null
-            : _fitTrail(
-                _trail,
-                (trail) => fitting(trail, reporterAssertion),
-              )) ??
-        _fitTrail(_trail, (trail) => fitting(trail, null)) ??
-        _build(const [], null);
+    return _fitTrail(_trail, fitting) ?? _build(const []);
   }
 
   /// Whether [path] names a value of the host's input rather than of the

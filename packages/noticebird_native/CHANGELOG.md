@@ -1,3 +1,10 @@
+## 0.7.0
+
+- Moves with `noticebird` 0.7.0 and `noticebird_protocol` 0.7.0, whose
+  removals (the reporter assertion of a feedback report) this package
+  never used; no change of its own. The podspec and the Android library
+  read 0.7.0 from the pubspec.
+
 ## 0.6.0
 
 - Moves with `noticebird` 0.6.0 and `noticebird_protocol` 0.6.0, whose

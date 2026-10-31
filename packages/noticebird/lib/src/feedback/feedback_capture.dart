@@ -57,29 +57,22 @@ sealed class FeedbackOutcome {
 
 /// The platform has the report.
 final class FeedbackDelivered extends FeedbackOutcome {
-  const FeedbackDelivered({this.ticket, required this.verified});
+  const FeedbackDelivered({this.ticket});
 
   /// The ticket the report was filed under, to show the reporter; `null`
   /// when the answer named none, as when a `report_conflict` after a slot
   /// conflict delivers the report without a ticket.
   final FeedbackTicket? ticket;
 
-  /// Whether the platform verified the report's reporter assertion; `false`
-  /// where the answer does not say.
-  final bool verified;
-
   @override
   bool operator ==(Object other) =>
-      other is FeedbackDelivered &&
-      other.ticket == ticket &&
-      other.verified == verified;
+      other is FeedbackDelivered && other.ticket == ticket;
 
   @override
-  int get hashCode => Object.hash(ticket, verified);
+  int get hashCode => ticket.hashCode;
 
   @override
-  String toString() =>
-      'FeedbackDelivered(ticket: $ticket, verified: $verified)';
+  String toString() => 'FeedbackDelivered(ticket: $ticket)';
 }
 
 /// The report did not get through yet and is kept in the offline store, to
@@ -177,10 +170,6 @@ enum FeedbackRejection {
   /// client fills in itself is never this: it is left out, or the report
   /// [failed].
   invalidInput,
-
-  /// `FeedbackConfig.requireVerified` is set, and the report has no reporter
-  /// assertion or the platform refused it.
-  unverified,
 
   /// The project is `regulatedStrict` and refused the report's `user` or
   /// `userContext`: the client's config is not `regulatedStrict`, and

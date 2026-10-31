@@ -58,10 +58,7 @@ final class FakeFeedbackTransport implements FeedbackTransport {
     final json = jsonDecode(reportJson) as Map<String, Object?>;
     submitted.add(json);
     return submitAnswers.isEmpty
-        ? FeedbackAccepted(
-            ticket: fakeTicket,
-            verified: json.containsKey('reporterAssertion'),
-          )
+        ? const FeedbackAccepted(ticket: fakeTicket)
         : submitAnswers.removeAt(0);
   }
 }

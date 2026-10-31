@@ -10,7 +10,7 @@ description: >
   dropped", "how do I add a breadcrumb", "attach the user to crashes", "Noticebird
   sends nothing", "capture a handled error", "test code that reports crashes", "send
   user feedback", "add a report-a-bug button", "attach a screenshot to feedback",
-  "verified reporter", "my own zone", "my own bloc observer", "show what a report
+  "who sent this report", "my own zone", "my own bloc observer", "show what a report
   sends", "my own untraced marker", "reset Noticebird between tests".
   Triggers on: noticebird_flutter, NoticebirdFlutter, NoticebirdFlutter.start,
   reportZoneError, installErrorHandlers, observeBlocs, background start,
@@ -22,7 +22,7 @@ description: >
   feedbackMoment, FeedbackMoment, feedback.dart, FeedbackConfig, FeedbackHttpTransport,
   FeedbackKind, FeedbackOutcome, FeedbackDelivered, FeedbackQueued, FeedbackRejected,
   FeedbackRejection, FeedbackContact, FeedbackUserContext, FeedbackDiagnostics,
-  contextDiagnostics, reporterAssertion, requireVerified, onSettled, onFeedbackSettled,
+  contextDiagnostics, onSettled, onFeedbackSettled,
   FeedbackSettled, FeedbackOfflineStore, FileFeedbackOfflineStore, pendingFeedbackCount,
   shouldCapture, filtered, hostPlatformMetadata, processSessionId,
   uploadCrashes, platformReadFailures, PlatformReadFailure, tracksRouteTemplate, addBreadcrumb, TypedBreadcrumb,
@@ -121,7 +121,7 @@ feedback; the SDK never picks an API by itself.
 
 The other options: `httpClient` (the host's HTTP stack),
 `uploadCrashes: false` (crash events `discarded`, feedback still sent), `privacyProfile`,
-`pii`, `breadcrumbBuffer`, `reporterAssertion`, `requireVerified`, `onFeedbackSettled`,
+`pii`, `breadcrumbBuffer`, `onFeedbackSettled`,
 `crashStore` and `feedbackStore` (your own stores), `installErrorHandlers`, `observeBlocs`,
 `blocObserver` (a subclass of your own), `background`.
 
@@ -271,7 +271,7 @@ Sending identity is the host's choice, made once: `pii` (`CrashPiiConfig`) decid
 fields leave the device (`allowedFields`, or `enabled: false` for none), for both calls
 alike — the SDK does not judge an id by its content. `regulatedStrict` drops identity
 altogether. Who may *see* it is the platform's access control, not the SDK's. The user
-set here is also whose reporter assertion the client holds (*Feedback*).
+set here is also a feedback report's reporter, as the app gives it (*Feedback*).
 
 **Medical data and credentials never belong here** — not in identity, not in tags, not in
 `extra` — in any profile.
@@ -416,10 +416,10 @@ API URL, with one it cannot send to, or without a usable key, a client without a
 
 | `FeedbackOutcome` | Meaning |
 |---|---|
-| `FeedbackDelivered(ticket, verified)` | The platform has it. Show `ticket.display` (such as `FB-12`) as it is; `ticket` is `null` when the answer named none. |
+| `FeedbackDelivered(ticket)` | The platform has it. Show `ticket.display` (such as `FB-12`) as it is; `ticket` is `null` when the answer named none. |
 | `FeedbackQueued(reportId)` | Not through yet; kept in the store and sent when due. |
 | `FeedbackDisabled` | No client attached, no feedback config, or one without a transport (no API URL, one it cannot send to, or no usable key). |
-| `FeedbackRejected(reason, path, code)` | Never delivered. `reason` is a `FeedbackRejection`: `invalidInput`, `unverified`, `strictProject`, `clock`, `notAccepted`, `noStore`, `evicted`, `expired`, `refused`, `failed`. |
+| `FeedbackRejected(reason, path, code)` | Never delivered. `reason` is a `FeedbackRejection`: `invalidInput`, `strictProject`, `clock`, `notAccepted`, `noStore`, `evicted`, `expired`, `refused`, `failed`. |
 
 **Sanitised, never refused.** The `screenshot` and the moment's `diagnostics` never cost
 the report: a screenshot of no known type or too large, and a diagnostics key, value, group
@@ -433,14 +433,9 @@ build only**, and is `FeedbackRejected(invalidInput, path)` in release, `path` n
 value at fault (`$.contact.email`, say). Check a form's
 input first with `FeedbackContact.isValid(email)` and `FeedbackUserContext.check(values)`.
 
-**The reporter assertion** is a signed token from your backend that lets the platform show
-the reporter as verified: pass `reporterAssertion` to the start. The client holds one per
-user (`setUser` / `setUserId`) until 5 minutes before its `exp`, and reports captured at
-once share one call; it asks again for another user, after `setUser(null)`, and after the
-platform refused the one it held. Without a user it asks for every report. A provider that
-throws, answers `null` or is late (5 seconds) leaves the report unverified; with
-`requireVerified` such a report is `FeedbackRejected(unverified)`. What your backend must
-mint is in `reference/privacy-and-limits.md` (*Feedback reports*, reporter assertion).
+**The reporter** is the user of `setUser` / `setUserId` as the app gives it: nothing
+checks it, so it is the app's claim, not proof of who sent the report. A support flow
+never changes an account because a report names it.
 
 **The queue.** A report that does not get through is `FeedbackQueued` and sent when due —
 after the platform's `Retry-After` or a backoff, kept across restarts — by the client
@@ -453,8 +448,8 @@ itself. Each kept report's end goes to `onFeedbackSettled` as a
 - The message is redacted on the device like an exception message.
 - `userContext` is checked for its shape only and sent as given, unredacted: send only
   what you mean to.
-- Under `regulatedStrict` no `user`, no `userContext` and no locale are sent; the reporter
-  assertion, when one is configured, is the one identity such a report carries.
+- Under `regulatedStrict` no `user`, no `userContext` and no locale are sent: such a report
+  carries no identity.
 - `contactEmail` is the user's consent to be contacted: pass it only when they gave it.
 - `diagnostics` are content-free: booleans, numbers, timestamps, UUIDs and short tokens,
   never free text.
@@ -595,7 +590,7 @@ included) so the next one starts anew; `Noticebird.detach()` resets the facade.
 
 Feedback: implement `FeedbackTransport` (`requestSlot`, `upload`, `submit`). `submit` gets
 the report as `FeedbackReport.toJsonString` wrote it, validated already; `jsonDecode` it to
-assert on its fields, and answer `FeedbackAccepted(verified: false, …)`, or a
+assert on its fields, and answer `FeedbackAccepted(…)`, or a
 `FeedbackTransient` to see a report queued.
 
 Native capture: implement `NativeCrashCollector` with a fake that emits

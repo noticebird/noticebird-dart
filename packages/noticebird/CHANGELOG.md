@@ -1,3 +1,36 @@
+## 0.7.0
+
+Moves with `noticebird_protocol` 0.7.0: feedback reports are of schema 2.
+The crash event's schema (5) is unchanged.
+
+Breaking changes:
+
+- Verified reporters are gone: a report's reporter is who the app says its
+  user is (`setUser`, `setUserId`), as the app gives it. Removed with them:
+  - `FeedbackConfig.reporterAssertion` and `FeedbackConfig.requireVerified`;
+    `FeedbackConfig`'s constructor is `const` and no longer throws;
+  - `FeedbackDelivered.verified`, `FeedbackAccepted.verified` and
+    `FeedbackRejection.unverified`;
+  - `FeedbackAssertionRefused`: a `FeedbackTransport` of the host's own no
+    longer answers it, and `FeedbackHttpTransport` no longer reads a `401
+    invalid_reporter_assertion` or the submit answer's `verified`.
+- The removals of `noticebird_protocol` 0.7.0, which this package exports:
+  `FeedbackReport.reporterAssertion` and its limits and pattern.
+- `PendingFeedback.toJson` writes format 2, and `PendingFeedback.fromJson`
+  refuses any other. A report that a client before 0.7.0 kept offline, of
+  feedback schema 1, which the platform refuses, is no pending report:
+  `FileFeedbackOfflineStore` deletes it on the device rather than send it,
+  and a store of the host's own forgets what `fromJson` refuses
+  (`FeedbackOfflineStore.pending`). It is not told to
+  `FeedbackConfig.onSettled`.
+
+Changes:
+
+- The consumer docs (this README, `docs/integration.md`, the `noticebird`
+  skill and its privacy and limits reference) drop the section on verified
+  reporters, and say that a report's `user` and `userContext` are as the
+  app gives them: nothing checks them.
+
 ## 0.6.0
 
 Moves with `noticebird_protocol` 0.6.0.

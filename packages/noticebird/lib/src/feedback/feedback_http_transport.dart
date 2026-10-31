@@ -38,8 +38,7 @@ import 'feedback_transport.dart';
 ///
 /// The final answers are these, by status and `error` code:
 /// - `400` `invalid_report`;
-/// - `401` `invalid_key` or `origin_not_allowed`, and `401`
-///   `invalid_reporter_assertion` ([FeedbackAssertionRefused]);
+/// - `401` `invalid_key` or `origin_not_allowed`;
 /// - `403` `feedback_disabled` or `attachments_disabled`;
 /// - `409` `report_conflict` or `attachment_conflict`, and `409`
 ///   `attachment_missing` ([FeedbackBackToSlot]);
@@ -207,7 +206,6 @@ final class FeedbackHttpTransport implements FeedbackTransport {
     if (status >= 200 && status < 300) return success(body);
     final code = _string(body, 'error');
     return switch ((status, code)) {
-      (401, 'invalid_reporter_assertion') => const FeedbackAssertionRefused(),
       (409, 'attachment_missing') => const FeedbackBackToSlot(),
       (429, _) => FeedbackRetryAfter(
         _retryAfterOf(response.headers['retry-after']),
@@ -255,8 +253,8 @@ final class FeedbackHttpTransport implements FeedbackTransport {
     );
   }
 
-  /// A submit's answer, read leniently: only the ticket and `verified`,
-  /// each where it is readable.
+  /// A submit's answer, read leniently: only the ticket, where it is
+  /// readable.
   static FeedbackDelivery _acceptedOf(Map<String, Object?>? body) =>
       FeedbackAccepted(
         ticket: switch (body?['ticket']) {
@@ -265,7 +263,6 @@ final class FeedbackHttpTransport implements FeedbackTransport {
             FeedbackTicket(number: number, display: display),
           _ => null,
         },
-        verified: body?['verified'] == true,
       );
 
   /// `Retry-After` in seconds, at most the age at which the report would be

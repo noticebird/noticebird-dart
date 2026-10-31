@@ -15,7 +15,6 @@ import 'package:noticebird/noticebird.dart';
 
 import 'support/fake_feedback_transport.dart';
 
-const _assertionA = 'eyJhbGciOiJFUzI1NiJ9.eyJzdWIiOiJhIn0.c2lnbmF0dXJlLWE';
 const _app = AppMetadata(
   name: 'test-app',
   version: '1.0.0',
@@ -49,8 +48,6 @@ void main() {
 
   NoticebirdClient client({
     FeedbackOfflineStore? offlineStore,
-    Future<String?> Function()? reporterAssertion,
-    bool requireVerified = false,
     CrashTransport? crashTransport,
   }) => NoticebirdClient(
     config: NoticebirdConfig(
@@ -60,8 +57,6 @@ void main() {
       sessionIdFactory: () => 'random_session_123456',
       feedback: FeedbackConfig(
         transport: transport,
-        reporterAssertion: reporterAssertion,
-        requireVerified: requireVerified,
         offlineStore: offlineStore ?? store,
         onSettled: settled.add,
       ),
@@ -116,7 +111,7 @@ void main() {
         expect(settled, [
           FeedbackSettled(
             reportId,
-            const FeedbackDelivered(ticket: fakeTicket, verified: false),
+            const FeedbackDelivered(ticket: fakeTicket),
           ),
         ]);
         expect(transport.requests, [
@@ -345,64 +340,6 @@ void main() {
   });
 
   group('the delivery state survives a new client', () {
-    test('a queued report whose assertion was refused is resent as '
-        'rewritten, without it, the provider not asked', () async {
-      var asked = 0;
-      Future<String?> provider() async {
-        asked++;
-        return _assertionA;
-      }
-
-      transport.submitAnswers.addAll(const [
-        FeedbackAssertionRefused(),
-        FeedbackTransient(),
-      ]);
-      await queued(client(reporterAssertion: provider));
-      final [first, rewritten] = transport.submitted;
-      expect(first['reporterAssertion'], _assertionA);
-      expect(rewritten, {...first}..remove('reporterAssertion'));
-      expect((await kept()).reportJson, isNot(contains('reporterAssertion')));
-      expect(asked, 1);
-
-      final restarted = client(reporterAssertion: provider);
-      final settled = settledOf(restarted);
-      now = (await kept()).nextAttemptAt;
-      await restarted.flush();
-      await pumpEventQueue();
-
-      expect(transport.submitted, hasLength(3));
-      expect(transport.submitted[2], rewritten);
-      expect(asked, 1);
-      expect(
-        settled.single.outcome,
-        const FeedbackDelivered(ticket: fakeTicket, verified: false),
-      );
-    });
-
-    test('requireVerified rejects a queued report without an assertion at '
-        'the flush', () async {
-      transport.submitAnswers.add(const FeedbackTransient());
-      final reportId = await queued(client());
-
-      final restarted = client(
-        reporterAssertion: () async => _assertionA,
-        requireVerified: true,
-      );
-      final settled = settledOf(restarted);
-      now = (await kept()).nextAttemptAt;
-      await restarted.flush();
-      await pumpEventQueue();
-
-      expect(settled, [
-        FeedbackSettled(
-          reportId,
-          const FeedbackRejected(FeedbackRejection.unverified),
-        ),
-      ]);
-      expect(transport.submitted, hasLength(1));
-      expect(await restarted.pendingFeedbackCount, 0);
-    });
-
     test('a screenshot the store lost fails the report at the flush, '
         'before any request', () async {
       transport.slotAnswers.add(const FeedbackTransient());
@@ -429,7 +366,7 @@ void main() {
       for (final report in ['{"not": "a report"}', '[]', 'not JSON']) {
         expect(
           () => PendingFeedback.fromJson({
-            'format': 1,
+            'format': 2,
             'report': report,
             'next': 'submit',
             'attempts': 0,
@@ -556,14 +493,14 @@ void main() {
     for (final (name, submitAnswer, delivered) in [
       (
         'a replay, delivered with its ticket',
-        const FeedbackAccepted(ticket: fakeTicket, verified: false),
-        const FeedbackDelivered(ticket: fakeTicket, verified: false),
+        const FeedbackAccepted(ticket: fakeTicket),
+        const FeedbackDelivered(ticket: fakeTicket),
       ),
       (
         'report_conflict again after a slot conflict: '
             'delivered without a ticket',
         const FeedbackFinalRefusal(code: 'report_conflict'),
-        const FeedbackDelivered(verified: false),
+        const FeedbackDelivered(),
       ),
     ]) {
       test('report_conflict at the slot submits the report, which answers '
@@ -611,9 +548,7 @@ void main() {
       await pumpEventQueue();
 
       expect(transport.requests, ['slot', 'slot', 'submit', 'submit']);
-      expect(settled, [
-        FeedbackSettled(reportId, const FeedbackDelivered(verified: false)),
-      ]);
+      expect(settled, [FeedbackSettled(reportId, const FeedbackDelivered())]);
       expect(await store.pending(), isEmpty);
     });
   });

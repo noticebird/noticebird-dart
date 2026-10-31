@@ -123,7 +123,6 @@ void main() {
           'status': 'accepted',
           'reportId': _reportId,
           'ticket': {'number': 1, 'display': 'FB-1'},
-          'verified': false,
           'redactions': {
             'message': <String, Object?>{},
             'trail': {'dropped': 0},
@@ -133,7 +132,6 @@ void main() {
         }),
         const FeedbackAccepted(
           ticket: FeedbackTicket(number: 1, display: 'FB-1'),
-          verified: false,
         ),
       ),
       (
@@ -143,11 +141,9 @@ void main() {
           'status': 'replay',
           'reportId': _reportId,
           'ticket': {'number': 1, 'display': 'FB-1'},
-          'verified': false,
         }),
         const FeedbackAccepted(
           ticket: FeedbackTicket(number: 1, display: 'FB-1'),
-          verified: false,
         ),
       ),
       (
@@ -190,13 +186,6 @@ void main() {
         _Request.submit,
         json(401, {'error': 'origin_not_allowed'}),
         const FeedbackFinalRefusal(code: 'origin_not_allowed'),
-      ),
-      (
-        '401 invalid_reporter_assertion is the assertion refused, with its '
-            'reason',
-        _Request.submit,
-        json(401, {'error': 'invalid_reporter_assertion', 'reason': 'time'}),
-        const FeedbackAssertionRefused(),
       ),
       (
         '403 feedback_disabled is final',
@@ -753,14 +742,12 @@ void main() {
             'status': 'accepted',
             'reportId': _reportId,
             'ticket': {'number': 12, 'display': 'FB-12', 'url': 'later'},
-            'verified': true,
             'redactions': {'message': {}},
             'futureKey': [1, 2],
           }),
         ).submit('{}'),
         const FeedbackAccepted(
           ticket: FeedbackTicket(number: 12, display: 'FB-12'),
-          verified: true,
         ),
       );
     });
@@ -774,7 +761,6 @@ void main() {
           'status': 7,
           'reportId': 12,
           'ticket': {'number': '12', 'display': 'FB-12'},
-          'verified': 'yes',
         }),
         json(202, {
           'ticket': {'number': 0, 'display': 'FB-0'},
@@ -785,7 +771,7 @@ void main() {
       ]) {
         expect(
           await transport((_) => response).submit('{}'),
-          const FeedbackAccepted(verified: false),
+          const FeedbackAccepted(),
           reason: response.body,
         );
       }

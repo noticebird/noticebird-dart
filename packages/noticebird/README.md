@@ -112,10 +112,11 @@ switch (outcome) {
 The moment is what the report is about — the route template, the context
 diagnostics and the app's own diagnostics when the form opened; the client adds the app, platform,
 session, user and the breadcrumb trail, and redacts the message on the
-device. `captureFeedback` never throws in a release build (a debug build
-throws an `ArgumentError` for input the report refuses, to show it). See
+device. The user is the reporter as the app gives it: nothing checks it.
+`captureFeedback` never throws in a release build (a debug build throws an
+`ArgumentError` for input the report refuses, to show it). See
 [`docs/integration.md`](../../docs/integration.md) §6 for the screenshot,
-contact address, diagnostics, user context and reporter assertion.
+contact address, diagnostics and user context.
 
 ## Privacy and reliability
 
