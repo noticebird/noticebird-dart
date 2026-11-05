@@ -214,11 +214,32 @@ each block as the report's analysis, so the console, the feedback mail and
 
 ```
 set_feedback_analysis(project, ticket_number,
-  summary:  what went wrong, from Reported, Seen and Cause/place (at most 1000 characters),
-  severity: low | medium | high (the block's Severity),
-  route:    fix | design | roadmap | reject (Fix now, Design request, Roadmap, Decline),
-  reason:   the proposal's why, one sentence (at most 300 characters))
+  summary:    what went wrong, from Reported, Seen and Cause/place (at most 1000 characters),
+  severity:   low | medium | high (the block's Severity),
+  route:      fix | design | roadmap | reject (Fix now, Design request, Roadmap, Decline),
+  reason:     the proposal's why, one sentence (at most 300 characters),
+  sections:   the block's other lines, each as {title, text}, in the block's order:
+              Reported, Seen, Cause/place, one per Point N, Known — titles in the
+              output language, each line that says nothing ("no", "unknown") left out
+              (at most 12; a title at most 80 characters, a text at most 4000, all
+              texts together at most 16000),
+  references: the places of Cause/place and the Points as {path, startLine, endLine,
+              note}: the path from the repository root, 1-based lines, a note of at
+              most 120 characters saying what the place is (at most 20),
+  revision:   the commit of the code you read, 40 hex characters — required with
+              references,
+  runId:      the GitHub Actions run, only from a workflow)
 ```
+
+Sections, notes and the summary are **plain text, no Markdown**: Noticebird shows them
+as they are, line breaks kept, never as markup or links. It builds the links itself: a
+reference becomes a link to that line at that commit in the project's linked
+repository, and the run a link to its log. Give a reference only for code you read,
+and a revision only when the files you cite are committed as you read them
+(`git rev-parse HEAD`, no local change to them): otherwise leave `references` and
+`revision` out and name the place in the Cause/place section's text. An app whose
+binding adds lines to the block (its own registers, a size) adds them as sections of
+their own.
 
 It becomes the newest analysis; it changes no status or note, and starts no work —
 the owner's route still does. The same rules hold as in the block: no secrets, keys,
@@ -244,7 +265,8 @@ report it was given, and nothing else:
   crashes are not there; say so in `Seen` only where a crash would decide the route.
   Step 4 (known work) only where the repository records it.
 - **Exactly one** `set_feedback_analysis` call, the block's fields as in "Writing the
-  block back" above. A report that does not exist or cannot be read: no call; say so
+  block back" above, with the `revision` and the `runId` the prompt gives (the
+  checkout is that commit, unchanged). A report that does not exist or cannot be read: no call; say so
   in the run's answer.
 - Nothing else: no status, no notes, no file, no commit, no comment. The analysis is
   advice for the project's members; their route starts work.
