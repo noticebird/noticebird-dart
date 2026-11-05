@@ -219,8 +219,10 @@ set_feedback_analysis(project, ticket_number,
   route:      fix | design | roadmap | reject (Fix now, Design request, Roadmap, Decline),
   reason:     the proposal's why, one sentence (at most 300 characters),
   sections:   the block's other lines, each as {title, text}, in the block's order:
-              Reported, Seen, Cause/place, one per Point N, Known — titles in the
-              output language, each line that says nothing ("no", "unknown") left out
+              Reported, Seen, Cause/place, one per Point N, Known — each title in
+              the language of its text (a Dutch text under "Gemeld", "Gezien",
+              "Oorzaak/plek", "Punt N", "Bekend"), each line that says nothing
+              ("no", "unknown") left out
               (at most 12; a title at most 80 characters, a text at most 4000, all
               texts together at most 16000),
   references: the places of Cause/place and the Points as {path, start_line, end_line,
