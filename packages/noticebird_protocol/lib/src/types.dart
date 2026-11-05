@@ -259,14 +259,16 @@ final class TypedBreadcrumb {
 
   /// A character a message never holds, the one list of them: a C0 or C1
   /// control (every line break among them), a line or paragraph separator
-  /// (U+2028, U+2029), an invisible character (zero-width U+200B–U+200F,
-  /// U+2060–U+2064, the byte order mark U+FEFF) or a bidirectional mark,
-  /// override or isolate (U+061C, U+202A–U+202E, U+2066–U+2069), which hide
-  /// or reorder what a reader sees. The client turns each into a space,
+  /// (U+2028, U+2029), an invisible character (the zero-width space
+  /// U+200B, U+2060–U+2064, the byte order mark U+FEFF) or a bidirectional
+  /// mark, override or isolate (U+061C, U+200E, U+200F, U+202A–U+202E,
+  /// U+2066–U+2069), which hide or reorder what a reader sees. The
+  /// zero-width non-joiner and joiner (U+200C, U+200D) are not in it: an
+  /// emoji sequence (👨‍👩‍👧) and Persian and Indic words need them. The client turns each into a space,
   /// U+0000 excepted, which it leaves out; a reader of text that is shown
   /// (a mail) uses the same list.
   static final controlPattern = RegExp(
-    r'[\u0000-\u001F\u007F-\u009F\u061C\u200B-\u200F\u2028\u2029'
+    r'[\u0000-\u001F\u007F-\u009F\u061C\u200B\u200E\u200F\u2028\u2029'
     r'\u202A-\u202E\u2060-\u2064\u2066-\u2069\uFEFF]',
   );
 

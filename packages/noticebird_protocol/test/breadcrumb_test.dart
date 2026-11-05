@@ -52,6 +52,17 @@ void main() {
       String path,
     ) => expect(step.check, refusedWith(violation, path), reason: path);
 
+    test('a zero-width joiner and non-joiner are text: an emoji sequence and '
+        'a Persian word pass', () {
+      for (final message in [
+        'Shared with 👨\u200D👩\u200D👧',
+        'می\u200Cخواهم',
+      ]) {
+        expect(TypedBreadcrumb.controlPattern.hasMatch(message), isFalse);
+        v6Breadcrumb(message: message).check();
+      }
+    });
+
     test('a message of 1 to 200 characters, on one line', () {
       v6Breadcrumb(message: 'm' * TypedBreadcrumb.maxMessageLength).check();
       for (final message in [
@@ -67,6 +78,8 @@ void main() {
         'del\u007F',
         'c1\u0090',
         'zero\u200Bwidth',
+        'ltr\u200Emark',
+        'rtl\u200Fmark',
         'bidi\u202Eoverride',
         'isolate\u2066',
         'arabic\u061Cmark',

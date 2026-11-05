@@ -51,6 +51,17 @@ void main() {
       expect(detailsDropped, 0);
     });
 
+    test('a zero-width joiner and non-joiner stay as they are', () {
+      for (final message in [
+        'Shared with 👨\u200D👩\u200D👧',
+        'می\u200Cخواهم',
+      ]) {
+        final (:step, :detailsDropped) = sanitized(crumb(message));
+        expect(step!.message, message);
+        expect(detailsDropped, 0);
+      }
+    });
+
     test('a control, zero-width or bidirectional character in the message '
         'becomes a space', () {
       for (final control in [
@@ -59,6 +70,7 @@ void main() {
         '\u007F',
         '\u0090',
         '\u200B',
+        '\u200E',
         '\u200F',
         '\u202E',
         '\u2066',

@@ -27,7 +27,7 @@ Breaking changes:
   `className`).
 - A breadcrumb's message holds no control, invisible or bidirectional
   character (`TypedBreadcrumb.controlPattern`: C0 and C1, U+2028–U+2029,
-  U+200B–U+200F, U+2060–U+2064, U+FEFF, U+061C, U+202A–U+202E,
+  U+200B, U+200E–U+200F, U+2060–U+2064, U+FEFF, U+061C, U+202A–U+202E,
   U+2066–U+2069) and no unpaired surrogate.
   `cutText`, `hasUnpairedSurrogate` and `replaceUnpairedSurrogates` are the
   rules of a text's code units; `clampTagValue` never splits a surrogate
