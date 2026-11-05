@@ -19,7 +19,7 @@ its id or as `"<name>/<environment>"`.
 | `get_feedback(project, ticket_number)` | `feedback:read` | One report in full: message, trail and diagnostics under `reported`, `notes`, `analysis` (the newest, or null), `attachments`, `links` to the crash events of its run. |
 | `get_feedback_screenshot(project, ticket_number, index?)` | `feedback:read` | One screenshot as an image; `index` is an attachment's `idx`. |
 | `set_feedback_status(project, ticket_number, status, notes?)` | `feedback:write` | Sets the status; `notes` **replaces** the notes (an empty string clears them). |
-| `set_feedback_analysis(project, ticket_number, summary, severity, route, reason)` | `feedback:write` | Stores a triage block as the report's newest `analysis` (below, "Writing the block back"); the status and notes stay. |
+| `set_feedback_analysis(project, ticket_number, summary, severity, route, reason[, sections, references, revision, run_id])` | `feedback:write` | Stores a triage block as the report's newest `analysis` (below, "Writing the block back"); the status and notes stay. |
 | `list_events(project, session_id?, app?, build?, since?, …)` | events | The crash events of a window (one hour by default, at most 31 days); `session_id` gives those of one app run, the run a report came from. |
 | `get_event` / `list_issues` / `get_issue` | events | One event's stack and breadcrumbs; crashes grouped as issues. |
 | `set_issue_status(project, issue_id, status)` | `issues:write` | `resolved`, `ignored` or `unresolved`. |
