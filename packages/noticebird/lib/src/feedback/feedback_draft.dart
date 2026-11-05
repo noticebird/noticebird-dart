@@ -52,12 +52,12 @@ final class FeedbackDraft {
   /// hold, before it is redacted and cut.
   ///
   /// [userContext] is checked for its shape only and sent as the host gave
-  /// it. [trail] is the newest breadcrumbs, oldest first and each already
-  /// sanitized ([sanitizeBreadcrumb] left out one the protocol refuses); one
-  /// stamped later than the report allows, or with U+0000 in a data value,
-  /// which a report refuses and an event does not
-  /// ([FeedbackReport.checkTrailItem]), is left out, and [report] keeps as
-  /// many of the newest as fit.
+  /// it. [trail] is the newest breadcrumbs, oldest first and already
+  /// sanitized ([sanitizeTrail]), which left out [trailDropped] values and
+  /// steps; a step stamped later than the report allows
+  /// ([FeedbackReport.checkTrailItem]) is left out too, and [report] keeps
+  /// as many of the newest as fit. What went of the trail counts in the
+  /// note's `dropped_values`, with the diagnostics values.
   factory FeedbackDraft({
     required String reportId,
     required DateTime createdAt,
@@ -78,8 +78,18 @@ final class FeedbackDraft {
     required String? routeTemplate,
     required CrashUser? user,
     required List<TypedBreadcrumb> trail,
+    int trailDropped = 0,
     void Function(int dropped)? dropped,
   }) {
+    // A step stamped later than the report allows goes alone;
+    // sanitizeTrail left out the rest the protocol refuses.
+    final keptTrail = List<TypedBreadcrumb>.unmodifiable(
+      trail.where(
+        (item) => _passes(
+          () => FeedbackReport.checkTrailItem(item, createdAt: createdAt),
+        ),
+      ),
+    );
     final context = switch (userContext) {
       final values? => _checked(() => FeedbackUserContext.check(values)),
       null => null,
@@ -110,6 +120,7 @@ final class FeedbackDraft {
         'screenshot_dropped': ?screenshotDropped,
         'moment_taken_at': ?momentTakenAt?.toUtc(),
       },
+      droppedBefore: trailDropped + trail.length - keptTrail.length,
       dropped: dropped,
     );
 
@@ -159,20 +170,7 @@ final class FeedbackDraft {
       }
     }
 
-    // A breadcrumb stamped later than the report allows, or with U+0000 in a
-    // data value, goes alone; sanitizeBreadcrumb left out the rest the
-    // protocol refuses.
-    return FeedbackDraft._(
-      build,
-      List.unmodifiable(
-        trail.where(
-          (item) => _passes(
-            () => FeedbackReport.checkTrailItem(item, createdAt: createdAt),
-          ),
-        ),
-      ),
-      attachment,
-    );
+    return FeedbackDraft._(build, keptTrail, attachment);
   }
 
   /// What [attempt] answers for the most of the newest of [trail] it takes,

@@ -1,10 +1,13 @@
-// NoticebirdNavigatorObserver: a breadcrumb per step, named by the host's
-// describe, a route name that is a template, or the route's kind, so a raw
-// path never reaches the trail by default.
+// NoticebirdNavigatorObserver: a breadcrumb per step — a message of what
+// happened to which kind of route, an action per step, and the routes on top
+// after and before it as data — named by the host's describe, a route name
+// that is a template, or the route's kind, so a raw path never reaches the
+// trail by default.
 
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:noticebird_flutter/noticebird_flutter.dart';
+import 'package:noticebird_flutter/testing.dart';
 
 final class _Sheet extends PopupRoute<void> {
   @override
@@ -57,16 +60,13 @@ void main() {
     );
   });
 
-  List<(String, Object?, Object?)> trail() => [
+  List<(String?, Object?, Object?)> trail() => [
     for (final crumb in client.recentBreadcrumbs)
-      (
-        crumb.action,
-        crumb.data[AllowedTag.component],
-        crumb.data[AllowedTag.operation],
-      ),
+      (crumb.action, crumb.data['route'], crumb.data['from']),
   ];
 
-  test('records push, replace, pop and remove, from and to', () {
+  test('records push, replace, pop and remove, the route on top after the '
+      'step and before it', () {
     final observer = NoticebirdNavigatorObserver(client: client);
     final home = _Route('/home');
     final list = _Route('/lists/:listId');
@@ -81,19 +81,60 @@ void main() {
 
     expect(trail(), [
       ('route.push', '/home', null),
-      ('route.push', '/lists/:listId', '/home → /lists/:listId'),
-      (
-        'route.replace',
-        '/lists/:listId/items/:itemId',
-        '/lists/:listId → /lists/:listId/items/:itemId',
-      ),
-      (
-        'route.pop',
-        '/lists/:listId/items/:itemId',
-        '/lists/:listId/items/:itemId → /home',
-      ),
+      ('route.push', '/lists/:listId', '/home'),
+      ('route.replace', '/lists/:listId/items/:itemId', '/lists/:listId'),
+      ('route.pop', '/home', '/lists/:listId/items/:itemId'),
       ('route.remove', '/home', null),
     ]);
+    expect(
+      [for (final crumb in client.recentBreadcrumbs) crumb.message],
+      [
+        'Opened page',
+        'Opened page',
+        'Replaced page',
+        'Closed page',
+        'Removed page',
+      ],
+    );
+    for (final crumb in client.recentBreadcrumbs) {
+      expect(crumb.category, 'navigation');
+      expect(crumb.level, BreadcrumbLevel.info);
+    }
+  });
+
+  test('the message names the kind of route', () {
+    final observer = NoticebirdNavigatorObserver(client: client);
+    final home = _Route('/home');
+    final sheet = _Sheet();
+    final dialog = RawDialogRoute<void>(
+      pageBuilder: (_, _, _) => const SizedBox(),
+    );
+
+    observer
+      ..didPush(home, null)
+      ..didPush(sheet, home)
+      ..didPop(sheet, home)
+      ..didPush(dialog, home)
+      ..didPop(dialog, home);
+
+    expect(
+      [for (final crumb in client.recentBreadcrumbs) crumb.message],
+      [
+        'Opened page',
+        'Opened popup',
+        'Closed popup',
+        'Opened dialog',
+        'Closed dialog',
+      ],
+    );
+    expect(client.recentBreadcrumbs[1].data, {
+      'route': '_Sheet',
+      'from': '/home',
+    });
+    expect(client.recentBreadcrumbs[2].data, {
+      'route': '/home',
+      'from': '_Sheet',
+    });
   });
 
   test('a name that is no template is left out for the route\'s kind', () {
@@ -106,6 +147,46 @@ void main() {
 
     expect(trail().map((crumb) => crumb.$2), ['_Route', '_Route', '_Route']);
   });
+
+  test(
+    'a name the event does not take is left out of it, not the step',
+    () async {
+      final transport = RecordingCrashTransport();
+      final sending = NoticebirdClient(
+        config: NoticebirdConfig(
+          privacyProfile: CrashPrivacyProfile.privacyDefault,
+          app: const AppMetadata(
+            name: 'test',
+            version: '1.0.0',
+            build: '1',
+            release: 'test@1.0.0+1',
+          ),
+          platform: const PlatformMetadata(
+            platform: CrashPlatform.unknown,
+            osVersion: 'test',
+            deviceClass: 'test',
+          ),
+          sessionIdFactory: () => 'test_session_1234567890',
+        ),
+        transport: transport,
+      );
+      NoticebirdNavigatorObserver(
+        client: sending,
+        describe: (route) => 'the list page',
+      ).didPush(_Route('/lists'), null);
+
+      await sending.captureException(StateError('boom'), StackTrace.empty);
+
+      final step = (transport.events.single['breadcrumbs']! as List).single;
+      expect(step, {
+        'at': (step as Map)['at'],
+        'message': 'Opened page',
+        'action': 'route.push',
+        'category': 'navigation',
+        'level': 'info',
+      });
+    },
+  );
 
   test('the host\'s describe names a route first', () {
     final observer = NoticebirdNavigatorObserver(

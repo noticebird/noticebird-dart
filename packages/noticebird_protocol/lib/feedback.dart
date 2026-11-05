@@ -1,4 +1,4 @@
-/// The feedback report, schema version 2: what a client needs to build one.
+/// The feedback report, schema version 3: what a client needs to build one.
 /// Its model, the limits and patterns of its fields, the validating writer
 /// of its wire JSON, and the checks a client can run on a single value of
 /// its own first.

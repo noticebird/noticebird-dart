@@ -10,9 +10,10 @@ const exampleSha256 =
     '9f2c4b1e7a0d3c5f8e6b2a4d1c0f9e8d7c6b5a4f3e2d1c0b9a8f7e6d5c4b3a2f';
 
 TypedBreadcrumb breadcrumb(String action) => TypedBreadcrumb(
-  occurredAt: DateTime.utc(2026, 10, 29, 14, 2, 40, 112),
-  category: BreadcrumbCategory.ui,
+  at: DateTime.utc(2026, 10, 29, 14, 2, 40, 112),
+  message: 'Opened page',
   action: action,
+  category: 'ui',
 );
 
 /// A report of its required fields only, as a client builds one.
@@ -72,14 +73,12 @@ FeedbackReport fullReport({
         [
           breadcrumb('route.push'),
           TypedBreadcrumb(
-            occurredAt: DateTime.utc(2026, 10, 29, 14, 3, 1, 903),
-            category: BreadcrumbCategory.ui,
+            at: DateTime.utc(2026, 10, 29, 14, 3, 1, 903),
+            message: 'Toggled a record',
             action: 'record.toggle',
-            level: CrashSeverity.warning,
-            data: const {
-              AllowedTag.component: 'record_tile',
-              AllowedTag.retryCount: 2,
-            },
+            category: 'ui',
+            level: BreadcrumbLevel.warning,
+            data: const {'component': 'record_tile', 'retryCount': 2},
           ),
         ],
     diagnostics:

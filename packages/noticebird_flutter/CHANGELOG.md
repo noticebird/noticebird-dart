@@ -1,3 +1,22 @@
+## 0.8.0
+
+Moves with `noticebird` 0.8.0 and `noticebird_protocol` 0.8.0.
+
+Breaking changes:
+
+- `NoticebirdBlocObserver` writes a step as a message: `ProfileBloc
+  changed` (action `profileBloc.change`) and `ProfileBloc got
+  Reauthenticate` (action `profileBloc.event`), category `bloc`, without
+  data; a type's name loses its type arguments, its leading underscores
+  and a freezed `_$…Impl` wrapper, and a character outside
+  `[A-Za-z0-9_]` becomes `_`. `describeEvent`, `describeChange` and
+  `describeState` are removed. The `blocs` diagnostics group counts a type
+  under the same name its actions start with.
+- `NoticebirdNavigatorObserver` writes `Opened page`, `Closed dialog`, …
+  (actions `route.push`, `route.pop`, `route.replace`, `route.remove`,
+  category `navigation`), with the route on top after the step as `route`
+  and the one before it as `from`.
+
 ## 0.7.0
 
 Moves with `noticebird` 0.7.0 and `noticebird_protocol` 0.7.0.

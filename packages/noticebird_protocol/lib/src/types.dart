@@ -1,3 +1,6 @@
+import 'dart:convert';
+
+import 'canonical_json.dart';
 import 'checks.dart';
 import 'protocol_exception.dart';
 
@@ -5,9 +8,8 @@ enum CrashSeverity { debug, info, warning, error, fatal }
 
 enum CrashPlatform { android, ios, macos, windows, linux, web, unknown }
 
-enum BreadcrumbCategory { bloc, navigation, http, ui, auth, lifecycle, system }
-
-/// Keys whose meaning and scalar shape are fixed by protocol v1.
+/// The keys of an event's `tags`, each with a fixed meaning and a scalar
+/// value.
 enum AllowedTag {
   feature,
   operation,
@@ -171,13 +173,13 @@ final class PlatformMetadata {
 ///
 /// A tag is a label to filter and group by, not a place for a sentence — the
 /// limit is what keeps it one. Exported because a consumer that has to guess
-/// the number will eventually guess a different one: a bloc observer capping
-/// its summaries at 160 produced events this validator rejected, and the whole
+/// the number will eventually guess a different one: a producer capping its
+/// labels at 160 produced events this validator rejected, and the whole
 /// report was lost over a label.
 const int maxTagValueLength = 100;
 
-/// Whether [value] is a tag value an event or a breadcrumb takes: a string
-/// of at most [maxTagValueLength] characters, a finite number or a boolean.
+/// Whether [value] is a tag value an event takes: a string of at most
+/// [maxTagValueLength] characters, a finite number or a boolean.
 bool isTagValue(TagScalar value) => switch (value) {
   String() => value.length <= maxTagValueLength,
   num() => value.isFinite,
@@ -193,69 +195,211 @@ TagScalar clampTagValue(TagScalar value, {int maxLength = maxTagValueLength}) {
   return '${value.substring(0, maxLength - 1)}…';
 }
 
+/// How much a breadcrumb matters. Absent, a breadcrumb has none and reads as
+/// [info].
+enum BreadcrumbLevel { debug, info, warning, error }
+
+/// One step of the trail that led to an event or a feedback report: when
+/// ([at]), what happened as one line a human reads ([message]), and,
+/// optionally, a technical id of the kind of step ([action]), a short group
+/// ([category]), a [level] and the facts of the step as a flat map
+/// ([data]).
+///
+/// The message is the sentence; data are the facts one would want as a
+/// column, to compare, filter or count. A value is never in both.
+///
+/// A character is a UTF-16 code unit (Dart's [String.length]) for every
+/// length limit here, and a byte a byte of the UTF-8 encoding of the
+/// canonical JSON ([canonicalJsonEncode]) for every budget: a step's
+/// [maxEncodedBytes], an event's `CrashEvent.maxBreadcrumbsBytes` and a
+/// feedback report's `FeedbackReport.maxTrailBytes`.
+///
+/// [dataStringPattern] is a shape, not a privacy guarantee: a surname or a
+/// postcode fits it. What keeps such values out is what the app puts in
+/// [data], and the per-entry checks of the client and the platform.
 final class TypedBreadcrumb {
   const TypedBreadcrumb({
-    required this.occurredAt,
-    required this.category,
-    required this.action,
-    this.level = CrashSeverity.info,
+    required this.at,
+    required this.message,
+    this.action,
+    this.category,
+    this.level,
     this.data = const {},
   });
 
-  final DateTime occurredAt;
-  final BreadcrumbCategory category;
+  /// When the step happened, on the device's clock.
+  final DateTime at;
 
-  /// A technical action identifier such as `route.push` or `bloc.transition`.
-  final String action;
-  final CrashSeverity level;
-  final Map<AllowedTag, TagScalar> data;
+  /// One line a human reads: 1 to [maxMessageLength] characters, without a
+  /// line break ([lineBreakPattern]) or U+0000.
+  final String message;
+
+  /// A technical id of the kind of step, such as `route.push` or
+  /// `profileBloc.change`: 1 to [maxActionLength] characters matching
+  /// [actionPattern]. The key for grouping steps, and for comparing a step
+  /// with the previous step of the same action.
+  final String? action;
+
+  /// A short group, such as `navigation`: 1 to [maxCategoryLength]
+  /// characters matching [categoryPattern].
+  final String? category;
+
+  final BreadcrumbLevel? level;
+
+  /// The facts of the step: at most [maxDataEntries] entries, each name 1
+  /// to [maxDataNameLength] characters matching [dataNamePattern], each
+  /// value an [isDataValue].
+  final Map<String, Object> data;
+
+  static const maxMessageLength = 200;
+
+  /// A line break, which a message never holds: the client turns each into
+  /// a space.
+  static final lineBreakPattern = RegExp('\r\n|[\n\r\u000B\u000C\u0085  ]');
 
   static const maxActionLength = 100;
 
-  /// An action: lowercase, starting with a letter.
-  static final actionPattern = RegExp(r'^[a-z][a-z0-9_.-]*$');
+  /// An action: a lowercase letter first, then letters, digits, `_`, `.` and
+  /// `-`, so that a type's name in camel case can lead it.
+  static final actionPattern = RegExp(r'^[a-z][A-Za-z0-9_.-]*$');
 
-  /// The same breadcrumb with every tag value longer than [maxLength] (by
-  /// default the wire's [maxTagValueLength]) shortened.
-  ///
-  /// The validator is deliberately strict — it is the wire contract — but a
-  /// crash report is worth more than the precision of one label, so a producer
-  /// should clamp before an event is built rather than have the report
-  /// rejected on the way out.
-  TypedBreadcrumb clamped({int maxLength = maxTagValueLength}) {
-    if (data.isEmpty) return this;
-    return TypedBreadcrumb(
-      occurredAt: occurredAt,
-      category: category,
-      action: action,
-      level: level,
-      data: {
-        for (final entry in data.entries)
-          entry.key: clampTagValue(entry.value, maxLength: maxLength),
-      },
-    );
-  }
+  static const maxCategoryLength = 32;
 
-  Map<String, Object?> toJson() => {
-    'occurredAt': occurredAt.toUtc().toIso8601String(),
-    'category': category.name,
-    'action': action,
-    'level': level.name,
-    if (data.isNotEmpty)
-      'data': {for (final entry in data.entries) entry.key.name: entry.value},
+  /// A category: a lowercase letter first, then lowercase letters, digits
+  /// and `_`.
+  static final categoryPattern = RegExp(r'^[a-z][a-z0-9_]*$');
+
+  static const maxDataEntries = 16;
+
+  static const maxDataNameLength = 48;
+
+  /// A data name: identifier-like parts joined by dots
+  /// (`collections.count`).
+  static final dataNamePattern = RegExp(
+    r'^[a-z][A-Za-z0-9_]*(\.[a-z][A-Za-z0-9_]*)*$',
+  );
+
+  static const maxDataStringLength = 64;
+
+  /// A data string: identifier-like, no space, so never prose; `/` and `:`
+  /// for route templates (`/lists/:listId`) and sites
+  /// (`sync.write_held:entries`).
+  static final dataStringPattern = RegExp(r'^[A-Za-z0-9/:][A-Za-z0-9_.:/+-]*$');
+
+  /// The most bytes one step takes, encoded.
+  static const maxEncodedBytes = 512;
+
+  /// Whether [value] is a value [data] takes: a finite number, a boolean,
+  /// or a string of 1 to [maxDataStringLength] characters matching
+  /// [dataStringPattern].
+  static bool isDataValue(Object? value) => switch (value) {
+    num() => value.isFinite,
+    bool() => true,
+    String() =>
+      value.length <= maxDataStringLength && dataStringPattern.hasMatch(value),
+    _ => false,
   };
 
+  /// Whether [name] is a name [data] takes: 1 to [maxDataNameLength]
+  /// characters matching [dataNamePattern].
+  static bool isDataName(String name) =>
+      name.length <= maxDataNameLength && dataNamePattern.hasMatch(name);
+
+  /// The entry [name] → [value] as one text, `name: value`, a number and a
+  /// boolean as Dart writes them: what a privacy check scans of an entry,
+  /// on the client and on the platform alike, so a name and its value are
+  /// read together (`contact: 31612345678`).
+  static String dataEntryText(String name, Object value) => '$name: $value';
+
+  Map<String, Object?> toJson() => {
+    'at': at.toUtc().toIso8601String(),
+    'message': message,
+    'action': ?action,
+    'category': ?category,
+    'level': ?level?.name,
+    if (data.isNotEmpty) 'data': data,
+  };
+
+  /// The bytes [trail] takes encoded, as an event's
+  /// `CrashEvent.maxBreadcrumbsBytes` and a feedback report's
+  /// `FeedbackReport.maxTrailBytes` count them: the array's canonical JSON
+  /// in UTF-8.
+  static int trailBytes(List<TypedBreadcrumb> trail) => utf8
+      .encode(canonicalJsonEncode([for (final item in trail) item.toJson()]))
+      .length;
+
+  /// The bytes of this step's encoding: what [maxEncodedBytes] bounds.
+  int get encodedBytes => utf8.encode(canonicalJsonEncode(toJson())).length;
+
   /// Refuses this breadcrumb as an event's `breadcrumbs` refuse one, with a
-  /// [ProtocolException] at `$.breadcrumbs[]`: an [action] of 1 to
-  /// [maxActionLength] characters matching [actionPattern], and scalar tags,
-  /// each string of at most [maxTagValueLength] characters.
+  /// [ProtocolException] at `$.breadcrumbs[]`: every field by the rules
+  /// above, then the [maxEncodedBytes] of its encoding.
   void check() {
-    checkText(
-      action,
-      r'$.breadcrumbs[].action',
-      maxLength: maxActionLength,
-      pattern: actionPattern,
-    );
-    checkTags(data, r'$.breadcrumbs[].data');
+    checkText(message, r'$.breadcrumbs[].message', maxLength: maxMessageLength);
+    if (lineBreakPattern.hasMatch(message) || message.contains('\u0000')) {
+      throw const ProtocolException(
+        ProtocolViolation.invalidValue,
+        r'$.breadcrumbs[].message',
+        'A message is one line',
+      );
+    }
+    if (action case final action?) {
+      checkText(
+        action,
+        r'$.breadcrumbs[].action',
+        maxLength: maxActionLength,
+        pattern: actionPattern,
+      );
+    }
+    if (category case final category?) {
+      checkText(
+        category,
+        r'$.breadcrumbs[].category',
+        maxLength: maxCategoryLength,
+        pattern: categoryPattern,
+      );
+    }
+    _checkData();
+    if (encodedBytes > maxEncodedBytes) {
+      throw const ProtocolException(
+        ProtocolViolation.oversized,
+        r'$.breadcrumbs[]',
+        'A breadcrumb exceeds $maxEncodedBytes bytes',
+      );
+    }
+  }
+
+  void _checkData() {
+    const path = r'$.breadcrumbs[].data';
+    if (data.length > maxDataEntries) {
+      throw const ProtocolException(
+        ProtocolViolation.oversized,
+        path,
+        'Maximum is $maxDataEntries entries',
+      );
+    }
+    for (final MapEntry(:key, :value) in data.entries) {
+      if (!isDataName(key)) {
+        throw ProtocolException(
+          ProtocolViolation.invalidValue,
+          '$path.$key',
+          'Invalid data name',
+        );
+      }
+      if (isDataValue(value)) continue;
+      final (violation, message) = switch (value) {
+        String() when value.length > maxDataStringLength => (
+          ProtocolViolation.oversized,
+          'Data string exceeds $maxDataStringLength characters',
+        ),
+        String() => (
+          ProtocolViolation.invalidValue,
+          'A data string is identifier-like',
+        ),
+        num() => (ProtocolViolation.invalidValue, 'Data numbers are finite'),
+        _ => (ProtocolViolation.invalidType, 'A data value is a scalar'),
+      };
+      throw ProtocolException(violation, '$path.$key', message);
+    }
   }
 }

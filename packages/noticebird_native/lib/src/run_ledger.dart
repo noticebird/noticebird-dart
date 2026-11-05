@@ -250,24 +250,24 @@ PlatformMetadata _readPlatform(Object? value) {
 
 /// One breadcrumb, as `TypedBreadcrumb.toJson` wrote it, or null when it no
 /// longer reads or the protocol refuses it: a bad crumb costs only itself,
-/// not the engine's record.
+/// not the engine's record. A crumb of the shape before protocol v2 of a
+/// breadcrumb (`occurredAt`, a fixed category and tags, written by
+/// noticebird 0.7.0) does not read: a crash from such a run arrives with an
+/// empty trail. The engine file keeps its `version` for it.
 TypedBreadcrumb? _readBreadcrumb(Object? value) {
   try {
-    if (value case {
-      'occurredAt': final String occurredAt,
-      'category': final String category,
-      'action': final String action,
-      'level': final String level,
-    }) {
+    if (value case {'at': final String at, 'message': final String message}) {
+      final level = value['level'] as String?;
       final data = value['data'] as Map? ?? const {};
       return TypedBreadcrumb(
-        occurredAt: DateTime.parse(occurredAt).toUtc(),
-        category: BreadcrumbCategory.values.byName(category),
-        action: action,
-        level: CrashSeverity.values.byName(level),
+        at: DateTime.parse(at).toUtc(),
+        message: message,
+        action: value['action'] as String?,
+        category: value['category'] as String?,
+        level: level == null ? null : BreadcrumbLevel.values.byName(level),
         data: {
           for (final MapEntry(:key, :value) in data.entries)
-            AllowedTag.values.byName(key as String): value as TagScalar,
+            key as String: value as Object,
         },
       )..check();
     }

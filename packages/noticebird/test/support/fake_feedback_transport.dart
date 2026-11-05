@@ -15,6 +15,9 @@ final class FakeFeedbackTransport implements FeedbackTransport {
   final slotReportIds = <String>[];
   final uploaded = <Uint8List>[];
   final submitted = <Map<String, Object?>>[];
+
+  /// Each submitted report as the client wrote it, the text of [submitted].
+  final submittedJson = <String>[];
   final slotAnswers = <FeedbackDelivery>[];
   final submitAnswers = <FeedbackDelivery>[];
   bool submitThrows = false;
@@ -57,6 +60,7 @@ final class FakeFeedbackTransport implements FeedbackTransport {
     if (submitThrows) throw StateError('broken transport');
     final json = jsonDecode(reportJson) as Map<String, Object?>;
     submitted.add(json);
+    submittedJson.add(reportJson);
     return submitAnswers.isEmpty
         ? const FeedbackAccepted(ticket: fakeTicket)
         : submitAnswers.removeAt(0);

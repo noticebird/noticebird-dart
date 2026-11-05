@@ -273,7 +273,7 @@ void main() {
     cubit.emit(1);
 
     expect(found.changes, 1);
-    expect(noticebird.client.recentBreadcrumbs.last.action, 'bloc.change');
+    expect(noticebird.client.recentBreadcrumbs.last.action, 'counter.change');
   });
 
   test('a connection that goes away flushes nothing', () async {
@@ -416,10 +416,8 @@ void main() {
 
       expect(noticebird.blocObserver, same(mine));
       expect(mine.liveBlocCounts(), {'count': 1, 'counter': 1});
-      expect(
-        noticebird.client.recentBreadcrumbs.last.data[AllowedTag.operation],
-        'detailed',
-      );
+      expect(mine.traced, 1);
+      expect(noticebird.client.recentBreadcrumbs.last.action, 'counter.change');
     },
   );
 
@@ -482,8 +480,13 @@ final class _Counter extends Cubit<int> {
 }
 
 final class _DetailedObserver extends NoticebirdBlocObserver {
+  var traced = 0;
+
   @override
-  String describeState(Object? state) => 'detailed';
+  bool traces(BlocBase<dynamic> bloc) {
+    traced++;
+    return super.traces(bloc);
+  }
 }
 
 final class _RecordingObserver extends BlocObserver {

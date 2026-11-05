@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 5,
+  "schemaVersion": 6,
   "eventId": "0197f232-2bd8-7000-8000-000000000005",
   "occurredAt": "2026-07-11T10:15:00.000Z",
   "severity": "error",
@@ -34,12 +34,14 @@
   },
   "breadcrumbs": [
     {
-      "occurredAt": "2026-07-11T10:14:59.000Z",
-      "category": "navigation",
+      "at": "2026-07-11T10:14:59.000Z",
+      "message": "Opened page",
       "action": "route.push",
+      "category": "navigation",
       "level": "info",
       "data": {
-        "component": "list-detail"
+        "route": "/lists/:listId",
+        "from": "/"
       }
     }
   ],
@@ -47,5 +49,9 @@
     "sync-refusal",
     "23505",
     "collections"
-  ]
+  ],
+  "breadcrumbDrops": {
+    "dataDropped": 1,
+    "stepsDropped": 0
+  }
 }

@@ -9,7 +9,8 @@ import 'support/privacy_matches.dart';
 /// [PrivacyPatterns] in a field the client redacts. A host's trail holds such
 /// values on purpose (a route with a list's id, a bloc state's ids): the
 /// buffer keeps them for [NoticebirdClient.recentBreadcrumbs], and the event
-/// carries them redacted.
+/// carries a message redacted and leaves out a data entry, an action or a
+/// category that holds one, and counts what it left out.
 void main() {
   const uuid = '7d3f1c2a-9b4e-4f6a-8c1d-2e3f4a5b6c7d';
   late _RecordingTransport transport;
@@ -39,32 +40,20 @@ void main() {
     eventIdFactory: () => '0197f232-2bd8-7000-8000-000000000001',
   );
 
-  TypedBreadcrumb crumb(
-    Map<AllowedTag, TagScalar> data, {
-    String action = 'route.push',
-  }) => TypedBreadcrumb(
-    occurredAt: DateTime.utc(2026, 10, 13),
-    category: BreadcrumbCategory.navigation,
-    action: action,
-    data: data,
-  );
-
   setUp(() => transport = _RecordingTransport());
 
   test('a trail with ids reaches the event without them, and the buffer '
       'keeps them', () async {
     final reporter = client()
       ..addBreadcrumb(
-        crumb({
-          AllowedTag.component: '/collections/$uuid',
-          AllowedTag.operation: '/ → /collections/$uuid',
-        }),
+        'Opened /collections/$uuid',
+        action: 'route.push',
+        data: const {'route': '/collections/:id', 'from': '/collections/$uuid'},
       )
       ..addBreadcrumb(
-        crumb({
-          AllowedTag.component: 'CollectionCubit',
-          AllowedTag.operation: 'loading → ready · id: $uuid',
-        }, action: 'bloc.change'),
+        'CollectionCubit changed',
+        action: 'collectionCubit.change',
+        data: const {'status': 'ready', 'id': uuid},
       );
 
     final result = await reporter.captureException(
@@ -76,23 +65,49 @@ void main() {
     final event = transport.events.single;
     expect(privacyMatches(event), isEmpty);
     expect(
-      event['breadcrumbs'].first['data']['component'],
-      '/collections/[REDACTED]',
+      event['breadcrumbs'].first['message'],
+      'Opened /collections/[REDACTED]',
     );
+    expect(event['breadcrumbs'].first['data'], {'route': '/collections/:id'});
+    expect(event['breadcrumbs'].last['data'], {'status': 'ready'});
+    expect(event['breadcrumbDrops'], {'dataDropped': 2, 'stepsDropped': 0});
     expect(
-      event['breadcrumbs'].last['data']['operation'],
-      'loading → ready · id: [REDACTED]',
+      reporter.recentBreadcrumbs.first.message,
+      'Opened /collections/$uuid',
     );
-    expect(
-      reporter.recentBreadcrumbs.map(
-        (crumb) => crumb.data[AllowedTag.component],
-      ),
-      ['/collections/$uuid', 'CollectionCubit'],
+    expect(reporter.recentBreadcrumbs.last.data['id'], uuid);
+  });
+
+  test('the canary corpus: no name or value that reads as a credential, a '
+      'health value or an identifier leaves, and the event does', () async {
+    final reporter = client()
+      ..addBreadcrumb(
+        'Signed in',
+        action: 'auth.sign_in',
+        data: const {
+          'password': 'x',
+          'heartRate': 80,
+          'userEmail': true,
+          'contact': 31612345678,
+          'row': uuid,
+          'phase': 'load',
+          'attempt': 2,
+        },
+      );
+
+    final result = await reporter.captureException(
+      StateError('boom'),
+      StackTrace.empty,
     );
-    expect(
-      reporter.recentBreadcrumbs.last.data[AllowedTag.operation],
-      'loading → ready · id: $uuid',
-    );
+
+    expect(result.outcome, CaptureOutcome.sent);
+    final event = transport.events.single;
+    expect(privacyMatches(event), isEmpty);
+    expect(event['breadcrumbs'].single['data'], {
+      'phase': 'load',
+      'attempt': 2,
+    });
+    expect(event['breadcrumbDrops'], {'dataDropped': 5, 'stepsDropped': 0});
   });
 
   group('every value a redaction pattern matches is redacted', () {
@@ -114,11 +129,9 @@ void main() {
     };
 
     for (final MapEntry(key: name, value: value) in values.entries) {
-      test('$name, in a breadcrumb and a tag', () async {
+      test('$name, in a breadcrumb message and a tag', () async {
         final reporter = client()
-          ..addBreadcrumb(
-            crumb({AllowedTag.operation: value, AllowedTag.component: 'next'}),
-          );
+          ..addBreadcrumb(value, data: const {'next': 'next'});
 
         final result = await reporter.captureException(
           StateError('boom'),
@@ -128,10 +141,10 @@ void main() {
 
         expect(result.outcome, CaptureOutcome.sent);
         expect(privacyMatches(transport.events.single), isEmpty);
-        expect(
-          reporter.recentBreadcrumbs.single.data[AllowedTag.operation],
-          value,
-        );
+        expect(transport.events.single['breadcrumbs'].single['data'], {
+          'next': 'next',
+        });
+        expect(reporter.recentBreadcrumbs.single.message, value);
       });
     }
   });
@@ -175,16 +188,43 @@ void main() {
     });
   });
 
-  test('an action that names an id becomes a plain action', () async {
+  test('an action or a category that names an id or a credential is left '
+      'out, and the step kept', () async {
     final reporter = client()
-      ..addBreadcrumb(crumb(const {}, action: 'open.$uuid'));
+      ..addBreadcrumb('Opened', action: 'open.$uuid', category: 'ui')
+      ..addBreadcrumb('Opened', action: 'open.list', category: 'token');
 
     await reporter.captureException(StateError('boom'), StackTrace.empty);
 
     final event = transport.events.single;
     expect(privacyMatches(event), isEmpty);
-    expect(event['breadcrumbs'].single['action'], 'redacted');
-    expect(reporter.recentBreadcrumbs.single.action, 'open.$uuid');
+    expect(event['breadcrumbs'], [
+      {'at': '2026-10-13T10:00:00.000Z', 'message': 'Opened', 'category': 'ui'},
+      {
+        'at': '2026-10-13T10:00:00.000Z',
+        'message': 'Opened',
+        'action': 'open.list',
+      },
+    ]);
+    expect(event['breadcrumbDrops'], {'dataDropped': 2, 'stepsDropped': 0});
+    expect(reporter.recentBreadcrumbs.first.action, 'open.$uuid');
+  });
+
+  test('under regulatedStrict a data string never leaves', () async {
+    final reporter = client(profile: CrashPrivacyProfile.regulatedStrict)
+      ..addBreadcrumb(
+        'Loaded',
+        data: const {'status': 'loaded', 'items.count': 3, 'busy': false},
+      );
+
+    await reporter.captureException(StateError('boom'), StackTrace.empty);
+
+    final event = transport.events.single;
+    expect(event['breadcrumbs'].single['data'], {
+      'items.count': 3,
+      'busy': false,
+    });
+    expect(event['breadcrumbDrops'], {'dataDropped': 1, 'stepsDropped': 0});
   });
 
   test('a message with a health value or a credential is redacted', () async {

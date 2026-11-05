@@ -13,7 +13,8 @@ import 'types.dart';
 /// [ProtocolException] whose path names the offending value. The checks of
 /// a value a client sets before an event is built are public on its type:
 /// [AppMetadata.check], [PlatformMetadata.check], [CrashUser.check],
-/// [TypedBreadcrumb.check] and [NativeCrashInfo.check].
+/// [TypedBreadcrumb.check], [BreadcrumbDrops.check] and
+/// [NativeCrashInfo.check].
 final class CrashEvent {
   const CrashEvent({
     required this.eventId,
@@ -31,10 +32,11 @@ final class CrashEvent {
     this.breadcrumbs = const [],
     this.nativeCrash,
     this.groupingKey,
+    this.breadcrumbDrops,
   });
 
   /// The schema version [toJson] writes, the only one it writes.
-  static const schemaVersion = 5;
+  static const schemaVersion = 6;
   static const maxEncodedBytes = 65536;
 
   /// An event id: 36 hex digits and dashes, a UUID's shape.
@@ -58,6 +60,10 @@ final class CrashEvent {
 
   /// The breadcrumbs one event may carry at most.
   static const maxBreadcrumbs = 50;
+
+  /// The most bytes the encoded [breadcrumbs] take together, the array's
+  /// canonical JSON in UTF-8.
+  static const maxBreadcrumbsBytes = 16384;
 
   /// The parts a [groupingKey] holds at most.
   static const maxGroupingKeyParts = 8;
@@ -97,6 +103,10 @@ final class CrashEvent {
   /// value: never personal data or a credential.
   final List<String>? groupingKey;
 
+  /// What the client left out of [breadcrumbs] on the device (schema 6):
+  /// absent when it left out nothing.
+  final BreadcrumbDrops? breadcrumbDrops;
+
   /// This event as the wire's JSON object at [schemaVersion], checked by
   /// every rule of an event, then the [maxEncodedBytes] of its encoding. An
   /// event the platform would refuse for its shape throws a
@@ -122,6 +132,7 @@ final class CrashEvent {
         'breadcrumbs': breadcrumbs.map((value) => value.toJson()).toList(),
       if (nativeCrash != null) 'native': nativeCrash!.toJson(),
       if (groupingKey != null) 'groupingKey': groupingKey,
+      if (breadcrumbDrops != null) 'breadcrumbDrops': breadcrumbDrops!.toJson(),
     };
     if (utf8.encode(canonicalJsonEncode(json)).length > maxEncodedBytes) {
       throw const ProtocolException(
@@ -193,6 +204,14 @@ final class CrashEvent {
     for (final breadcrumb in breadcrumbs) {
       breadcrumb.check();
     }
+    if (TypedBreadcrumb.trailBytes(breadcrumbs) > maxBreadcrumbsBytes) {
+      throw const ProtocolException(
+        ProtocolViolation.oversized,
+        r'$.breadcrumbs',
+        'Breadcrumbs exceed $maxBreadcrumbsBytes bytes',
+      );
+    }
+    breadcrumbDrops?.check();
   }
 
   /// The [nativeCrash] and the [nativeStackTraceMarker] require each other.
@@ -311,4 +330,58 @@ void _checkExtra(Object? value, String path, {required int depth}) {
         'Context values must be JSON-compatible',
       );
   }
+}
+
+/// What a client left out of an event's breadcrumbs before it sent them
+/// (`breadcrumbDrops`, schema 6), so a loss of evidence is visible.
+final class BreadcrumbDrops {
+  const BreadcrumbDrops({this.dataDropped = 0, this.stepsDropped = 0});
+
+  /// Values left out of steps that were kept: a data entry, an action or a
+  /// category the client's checks refused.
+  final int dataDropped;
+
+  /// Steps left out whole: refused even after their values went, or past
+  /// the event's [CrashEvent.maxBreadcrumbsBytes], the oldest first.
+  final int stepsDropped;
+
+  /// Whether nothing was left out.
+  bool get isEmpty => dataDropped == 0 && stepsDropped == 0;
+
+  /// These counts and [other]'s together.
+  BreadcrumbDrops operator +(BreadcrumbDrops other) => BreadcrumbDrops(
+    dataDropped: dataDropped + other.dataDropped,
+    stepsDropped: stepsDropped + other.stepsDropped,
+  );
+
+  Map<String, Object> toJson() => {
+    'dataDropped': dataDropped,
+    'stepsDropped': stepsDropped,
+  };
+
+  /// Refuses these counts as an event refuses them, at
+  /// `$.breadcrumbDrops`: each 0 or more, and not both 0 — an event that
+  /// lost nothing carries none.
+  void check() {
+    if (dataDropped < 0 || stepsDropped < 0 || isEmpty) {
+      throw const ProtocolException(
+        ProtocolViolation.invalidValue,
+        r'$.breadcrumbDrops',
+        'Counts are not negative, and not both 0',
+      );
+    }
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      other is BreadcrumbDrops &&
+      other.dataDropped == dataDropped &&
+      other.stepsDropped == stepsDropped;
+
+  @override
+  int get hashCode => Object.hash(dataDropped, stepsDropped);
+
+  @override
+  String toString() =>
+      'BreadcrumbDrops(dataDropped: $dataDropped, stepsDropped: $stepsDropped)';
 }

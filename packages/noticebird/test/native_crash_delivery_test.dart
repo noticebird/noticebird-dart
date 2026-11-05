@@ -35,10 +35,15 @@ const _crashedPlatform = PlatformMetadata(
 
 final _t0 = DateTime.utc(2026, 9, 25, 8);
 
-TypedBreadcrumb _crumb(String action, {int minute = 0}) => TypedBreadcrumb(
-  occurredAt: _t0.add(Duration(minutes: minute)),
-  category: BreadcrumbCategory.navigation,
+TypedBreadcrumb _crumb(
+  String action, {
+  int minute = 0,
+  String message = 'Opened page',
+}) => TypedBreadcrumb(
+  at: _t0.add(Duration(minutes: minute)),
+  message: message,
   action: action,
+  category: 'navigation',
 );
 
 NativeCrashRecord _record({
@@ -427,31 +432,36 @@ void main() {
       _ledger(
         uiTrail: [
           TypedBreadcrumb(
-            occurredAt: _t0,
-            category: BreadcrumbCategory.navigation,
+            at: _t0,
+            message: 'Opened /lists/$id',
             action: 'route.push',
-            data: const {AllowedTag.component: '/lists/$id'},
+            data: const {'route': '/lists/:id', 'list': id},
           ),
         ],
       ),
       privacyProfile: CrashPrivacyProfile.privacyDefault,
     )!;
 
-    expect(
-      event.breadcrumbs.single.data[AllowedTag.component],
-      '/lists/[REDACTED]',
-    );
+    expect(event.breadcrumbs.single.message, 'Opened /lists/[REDACTED]');
+    expect(event.breadcrumbs.single.data, {'route': '/lists/:id'});
+    expect(event.breadcrumbDrops, const BreadcrumbDrops(dataDropped: 1));
   });
 
   test('a breadcrumb the protocol refuses is left out alone, not the '
       'event', () {
     final event = _build(
       _record(),
-      _ledger(uiTrail: [_crumb('Route.Push'), _crumb('list.open')]),
+      _ledger(
+        uiTrail: [
+          _crumb('route.push', message: '\u0000'),
+          _crumb('list.open'),
+        ],
+      ),
       privacyProfile: CrashPrivacyProfile.privacyDefault,
     )!;
 
     expect(event.breadcrumbs.map((crumb) => crumb.action), ['list.open']);
+    expect(event.breadcrumbDrops, const BreadcrumbDrops(stepsDropped: 1));
   });
 
   group('attribution', () {
@@ -814,7 +824,7 @@ void main() {
             NativeCrashBatch(records: [_record()], runs: _ledger()),
           ],
         );
-        client(collector).addBreadcrumb(_crumb('home.open'));
+        client(collector).addBreadcrumb('Opened page', action: 'home.open');
         await Future<void>.delayed(Duration.zero);
 
         expect(collector.starts.single.sessionId, 'current_session_000001');
@@ -855,7 +865,7 @@ void main() {
           collector,
           shouldCapture: (error) =>
               error is! NativeCrashRecord || error.kind != NativeCrashKind.hang,
-        )..addBreadcrumb(_crumb('home.open'));
+        )..addBreadcrumb('Opened page', action: 'home.open');
 
         final results = await reporter.reportNativeCrashes();
 
@@ -1062,7 +1072,7 @@ void main() {
         final reporter = client(collector);
         await Future<void>.delayed(Duration.zero);
         reporter
-          ..addBreadcrumb(_crumb('home.open'))
+          ..addBreadcrumb('Opened page', action: 'home.open')
           ..setRouteTemplate('/lists/:listId')
           ..clearBreadcrumbs();
 
@@ -1082,57 +1092,37 @@ void main() {
       final reporter = client(collector);
       await Future<void>.delayed(Duration.zero);
       reporter.addBreadcrumb(
-        TypedBreadcrumb(
-          occurredAt: _t0,
-          category: BreadcrumbCategory.navigation,
-          action: 'route.push',
-          data: const {AllowedTag.component: '/lists/$id'},
-        ),
+        'Opened /lists/$id',
+        action: 'route.push',
+        data: const {'route': '/lists/:id', 'list': id},
       );
 
-      expect(
-        collector.updates.last.breadcrumbs.single.data[AllowedTag.component],
-        '/lists/[REDACTED]',
-      );
-      expect(
-        reporter.recentBreadcrumbs.single.data[AllowedTag.component],
-        '/lists/$id',
-      );
+      final kept = collector.updates.last.breadcrumbs.single;
+      expect(kept.message, 'Opened /lists/[REDACTED]');
+      expect(kept.data, {'route': '/lists/:id'});
+      expect(reporter.recentBreadcrumbs.single.data['list'], id);
     });
 
-    for (final (name, refused) in [
-      ('an action outside the pattern', _crumb('Route.Push')),
-      (
-        'a NaN data value',
-        TypedBreadcrumb(
-          occurredAt: _t0,
-          category: BreadcrumbCategory.navigation,
-          action: 'list.load',
-          data: const {AllowedTag.operation: double.nan},
-        ),
-      ),
-    ]) {
-      test('a breadcrumb the protocol refuses ($name) is left out of the run '
-          'state alone', () async {
-        final collector = _FakeCollector();
-        final reporter = client(collector);
-        await Future<void>.delayed(Duration.zero);
-        reporter
-          ..addBreadcrumb(_crumb('route.push'))
-          ..addBreadcrumb(refused)
-          ..addBreadcrumb(_crumb('route.pop'));
+    test('a breadcrumb the protocol refuses is left out of the run state '
+        'alone', () async {
+      final collector = _FakeCollector();
+      final reporter = client(collector);
+      await Future<void>.delayed(Duration.zero);
+      reporter
+        ..addBreadcrumb('Opened page', action: 'route.push')
+        ..addBreadcrumb('\u0000', action: 'list.load')
+        ..addBreadcrumb('Closed page', action: 'route.pop');
 
-        expect(
-          collector.updates.last.breadcrumbs.map((crumb) => crumb.action),
-          ['route.push', 'route.pop'],
-        );
-      });
-    }
+      expect(collector.updates.last.breadcrumbs.map((crumb) => crumb.action), [
+        'route.push',
+        'route.pop',
+      ]);
+    });
 
     test('regulatedStrict hands over no trail', () async {
       final collector = _FakeCollector();
       client(collector, profile: CrashPrivacyProfile.regulatedStrict)
-        ..addBreadcrumb(_crumb('home.open'))
+        ..addBreadcrumb('Opened page', action: 'home.open')
         ..setRouteTemplate('/home');
       await Future<void>.delayed(Duration.zero);
 
@@ -1149,7 +1139,8 @@ void main() {
 
     test('a sent Dart event clears the trail the collector holds', () async {
       final collector = _FakeCollector();
-      final reporter = client(collector)..addBreadcrumb(_crumb('home.open'));
+      final reporter = client(collector)
+        ..addBreadcrumb('Opened page', action: 'home.open');
       await reporter.captureException(StateError('x'), StackTrace.empty);
       expect(collector.updates.last.breadcrumbs, isEmpty);
     });
@@ -1161,7 +1152,8 @@ void main() {
         ..onStart = (() async => throw StateError('start'))
         ..throwOnClaim = StateError('claim')
         ..throwOnUpdate = StateError('update');
-      final reporter = client(collector)..addBreadcrumb(_crumb('home.open'));
+      final reporter = client(collector)
+        ..addBreadcrumb('Opened page', action: 'home.open');
       expect(await reporter.reportNativeCrashes(), isEmpty);
       reporter.setRouteTemplate('/home');
       expect(reporter.recentBreadcrumbs, hasLength(1));

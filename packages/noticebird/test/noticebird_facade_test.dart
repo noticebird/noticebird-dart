@@ -44,13 +44,7 @@ void main() {
       await Noticebird.captureException(Exception('boom'), StackTrace.empty),
       isNull,
     );
-    Noticebird.addBreadcrumb(
-      TypedBreadcrumb(
-        occurredAt: DateTime.utc(2026, 7, 11),
-        category: BreadcrumbCategory.bloc,
-        action: 'noop',
-      ),
-    );
+    Noticebird.addBreadcrumb('Nothing happened', action: 'noop');
     Noticebird.clearBreadcrumbs();
     Noticebird.setUserId('user-1');
     Noticebird.setRouteTemplate('/lists/:listId');

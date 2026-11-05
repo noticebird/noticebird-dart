@@ -240,19 +240,18 @@ the protocol's 100 characters. A sent event does not empty the buffer; it only m
 start of the next event's breadcrumbs past what it carried.
 
 ```dart
-Noticebird.addBreadcrumb(TypedBreadcrumb(
-  occurredAt: DateTime.now().toUtc(),
-  category: BreadcrumbCategory.ui,           // fixed enum, never a free-form string
-  action: 'checkout.confirm',                // must match ^[a-z][a-z0-9_.-]*$
-  data: {AllowedTag.component: 'CheckoutPage'}, // AllowedTag keys, scalar values
-));
+Noticebird.addBreadcrumb(
+  'Confirmed the checkout',      // the one line a human reads, at most 200 characters
+  action: 'checkout.confirm',    // optional, ^[a-z][A-Za-z0-9_.-]*$
+  category: 'ui',                // optional short token, ^[a-z][a-z0-9_]*$
+  data: {'items.count': 3},      // optional facts: numbers, bools, short identifier-like strings
+);
 ```
 
-Categories are `bloc`, `navigation`, `http`, `ui`, `auth`, `lifecycle`, `system`; the
-category and the data keys are enums, so there is no free-form one. A breadcrumb the
-protocol refuses — an action outside `^[a-z][a-z0-9_.-]*$` (`Route.Push`) or over 100
-characters, a NaN or infinite number in its data — is left out alone: the event, a
-feedback report's trail and a native crash's trail go without it, never the whole event.
+A value the protocol refuses or that reads as a credential, a health value or an
+identifier — a data name or value, an action, a category — is left out alone and
+counted; a step left without a message is left out whole. The event, a feedback report's
+trail and a native crash's trail go without it, never the whole event.
 Navigation and bloc breadcrumbs come from the observers (*Route context*, *Bloc
 integration*); do not add them by hand on top.
 
@@ -260,9 +259,9 @@ Call `clearBreadcrumbs()` on logout: the trail leading to the next event should 
 the previous user's session.
 
 `recentBreadcrumbs` gives a read-only snapshot of the whole buffer for host-app
-diagnostics, such as an error dialog showing the trail. Values keep up to
-`NoticebirdClient.maxBufferedTagValueLength` (1000) characters there, as recorded; only an
-event or a report redacts and shortens them. Reading it sends nothing.
+diagnostics, such as an error dialog showing the trail. A message keeps up to
+`NoticebirdClient.maxBufferedMessageLength` (1000) characters there, as recorded; only an
+event or a report redacts and shortens it. Reading it sends nothing.
 
 ## Identity
 
@@ -502,9 +501,8 @@ Bloc.observer = MultiBlocObserver(
 );
 ```
 
-A subclass of `NoticebirdBlocObserver` that names its steps in more detail
-(`describeEvent`, `describeChange`, `describeState`) is passed as `blocObserver:`; the
-start sets and counts that one. `observeBlocs: false` leaves `Bloc.observer` to the host
+A subclass of `NoticebirdBlocObserver` (one that overrides `traces`) is passed as
+`blocObserver:`; the start sets and counts that one. `observeBlocs: false` leaves `Bloc.observer` to the host
 entirely; reports then go without the `blocs` group. A bloc that implements `UntracedBloc` leaves no breadcrumbs (its errors
 are still captured, and it is still counted): use it for a bloc that changes with every
 keystroke, such as a feedback sheet's. The observer asks `traces(bloc)`: a subclass with

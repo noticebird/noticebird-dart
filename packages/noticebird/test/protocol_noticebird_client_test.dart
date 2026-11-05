@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:noticebird/noticebird.dart';
 import 'package:noticebird/src/protocol/crash_exception_type.dart';
@@ -69,15 +68,10 @@ void main() {
         ),
       );
       reporter.addBreadcrumb(
-        TypedBreadcrumb(
-          occurredAt: DateTime.utc(2026, 7, 11),
-          category: BreadcrumbCategory.bloc,
-          action: 'bloc.change',
-          data: const {
-            AllowedTag.component: 'PatientCubit user@example.com',
-            AllowedTag.operation: 'PatientLoaded glucose=12.4',
-          },
-        ),
+        'PatientCubit changed for user@example.com, glucose=12.4',
+        action: 'patientCubit.change',
+        category: 'bloc',
+        data: const {'status': 'loaded', 'items.count': 3},
       );
 
       await reporter.captureException(
@@ -112,10 +106,10 @@ void main() {
         'StateError',
       );
       expect(transport.events.single['user'], isNull);
-      expect(
-        transport.events.single['breadcrumbs'].single['data']['component'],
-        'PatientCubit [REDACTED]',
-      );
+      final breadcrumb = transport.events.single['breadcrumbs'].single;
+      expect(breadcrumb['message'], startsWith('PatientCubit changed for '));
+      expect(breadcrumb['message'], contains('[REDACTED]'));
+      expect(breadcrumb['data'], {'items.count': 3});
       expect(
         transport.events.single,
         isNot(contains('extra')),
@@ -217,23 +211,21 @@ void main() {
 
   // The rule the feedback trail follows: a breadcrumb the protocol refuses
   // used to fail validation at capture time and drop the whole event.
-  for (final (name, refused) in [
-    ('an action outside the pattern', _crumb('Route.Push')),
-    (
-      'an action over ${TypedBreadcrumb.maxActionLength} characters',
-      _crumb('a' * (TypedBreadcrumb.maxActionLength + 1)),
-    ),
+  for (final (name, message, data, keptData) in [
+    ('a message left empty', '\u0000', const <String, Object>{}, null),
     (
       'a NaN data value',
-      _crumb('list.load', data: const {AllowedTag.operation: double.nan}),
+      'Loaded',
+      const <String, Object>{'ratio': double.nan, 'attempt': 2},
+      const {'attempt': 2},
     ),
   ]) {
-    test('a breadcrumb the protocol refuses ($name) is left out alone, not '
-        'the event lost', () async {
+    test('a breadcrumb the protocol refuses ($name) costs only itself or its '
+        'value, not the event', () async {
       reporter
-        ..addBreadcrumb(_crumb('route.push'))
-        ..addBreadcrumb(refused)
-        ..addBreadcrumb(_crumb('route.pop'));
+        ..addBreadcrumb('Opened page', action: 'route.push')
+        ..addBreadcrumb(message, action: 'list.load', data: data)
+        ..addBreadcrumb('Closed page', action: 'route.pop');
 
       final result = await reporter.captureException(
         StateError('boom'),
@@ -241,15 +233,35 @@ void main() {
       );
 
       expect(result.outcome, CaptureOutcome.sent);
+      final breadcrumbs = transport.events.single['breadcrumbs'] as List;
       expect(
-        [
-          for (final breadcrumb in transport.events.single['breadcrumbs'])
-            breadcrumb['action'],
-        ],
-        ['route.push', 'route.pop'],
+        [for (final breadcrumb in breadcrumbs) breadcrumb['action']],
+        ['route.push', if (keptData != null) 'list.load', 'route.pop'],
       );
+      if (keptData != null) expect(breadcrumbs[1]['data'], keptData);
+      expect(transport.events.single['breadcrumbDrops'], {
+        'dataDropped': keptData == null ? 0 : 1,
+        'stepsDropped': keptData == null ? 1 : 0,
+      });
     });
   }
+
+  test('an action or category outside its pattern costs only itself', () async {
+    reporter.addBreadcrumb(
+      'Opened page',
+      action: 'Route.Push',
+      category: 'a' * (TypedBreadcrumb.maxCategoryLength + 1),
+    );
+
+    await reporter.captureException(
+      StateError('boom'),
+      StackTrace.fromString('#0 A.b (package:app/a.dart:1:1)'),
+    );
+
+    expect(transport.events.single['breadcrumbs'], [
+      {'at': '2026-07-11T10:15:00.000Z', 'message': 'Opened page'},
+    ]);
+  });
 
   test('invalid or excessive free context cannot poison crash capture', () async {
     reporter = NoticebirdClient(
@@ -1049,13 +1061,7 @@ void main() {
   });
 
   test('clearBreadcrumbs empties the ring buffer without capturing', () async {
-    reporter.addBreadcrumb(
-      TypedBreadcrumb(
-        occurredAt: DateTime.utc(2026, 7, 11),
-        category: BreadcrumbCategory.auth,
-        action: 'auth.logout',
-      ),
-    );
+    reporter.addBreadcrumb('Signed out', action: 'auth.logout');
     reporter.clearBreadcrumbs();
     await reporter.captureException(
       StateError('boom'),
@@ -1066,13 +1072,7 @@ void main() {
 
   test('recentBreadcrumbs reflects the current ring buffer', () {
     expect(reporter.recentBreadcrumbs, isEmpty);
-    reporter.addBreadcrumb(
-      TypedBreadcrumb(
-        occurredAt: DateTime.utc(2026, 7, 11),
-        category: BreadcrumbCategory.navigation,
-        action: 'route.push',
-      ),
-    );
+    reporter.addBreadcrumb('Opened page', action: 'route.push');
     expect(reporter.recentBreadcrumbs, hasLength(1));
     expect(reporter.recentBreadcrumbs.single.action, 'route.push');
   });
@@ -1107,11 +1107,9 @@ void main() {
       );
 
       dedupReporter.addBreadcrumb(
-        TypedBreadcrumb(
-          occurredAt: DateTime.utc(2026, 7, 11, 10, 16),
-          category: BreadcrumbCategory.navigation,
-          action: 'route.push',
-        ),
+        'Opened page',
+        action: 'route.push',
+        at: DateTime.utc(2026, 7, 11, 10, 16),
       );
       // addBreadcrumb fires the sync deliberately fire-and-forget (it must
       // stay synchronous/non-blocking for callers); flush pending microtasks
@@ -1145,11 +1143,9 @@ void main() {
 
     for (var i = 0; i < 25; i++) {
       liveReporter.addBreadcrumb(
-        TypedBreadcrumb(
-          occurredAt: DateTime.utc(2026, 7, 11, 10, 16),
-          category: BreadcrumbCategory.navigation,
-          action: 'route.$i',
-        ),
+        'Opened page',
+        action: 'route.$i',
+        at: DateTime.utc(2026, 7, 11, 10, 16),
       );
     }
     await Future<void>.delayed(Duration.zero);
@@ -1333,17 +1329,8 @@ void main() {
       expect(store.values, hasLength(1));
     });
 
-    test('an entry as 0.2.0 stored it is sent byte for byte', () async {
-      expect(
-        _v5Entry,
-        canonicalJsonEncode(
-          jsonDecode(
-            File(
-              '../noticebird_protocol/test/fixtures/v5_event.json',
-            ).readAsStringSync(),
-          ),
-        ),
-      );
+    test('an entry as 0.7.0 stored it, schema 5 with a breadcrumb of the '
+        'shape before v2, is sent byte for byte', () async {
       final store = _MemoryStore(isEncrypted: true)..values = [_v5Entry];
       final (api, bodies) = hostedApi('none');
       final restarted = NoticebirdClient(
@@ -1516,8 +1503,9 @@ final class _ScriptedTransport implements CrashTransport {
   }
 }
 
-/// `noticebird_protocol`'s `test/fixtures/v5_event.json` in its canonical
-/// encoding: an entry of the offline store as 0.2.0 wrote it.
+/// An entry of the offline store as noticebird 0.7.0 wrote it: an event of
+/// schema 5 in its canonical encoding, its breadcrumb of the shape before
+/// protocol v2 of a breadcrumb.
 const _v5Entry =
     '{"app":{"build":"100","name":"justorganize",'
     '"release":"justorganize@1.0.0+100","version":"1.0.0"},'
@@ -1535,11 +1523,3 @@ const _v5Entry =
     '"sessionId":"random_session_123456","severity":"error",'
     '"tags":{"feature":"lists","foreground":true},'
     '"user":{"id":"user_abc123"}}';
-
-TypedBreadcrumb _crumb(String action, {Map<AllowedTag, TagScalar>? data}) =>
-    TypedBreadcrumb(
-      occurredAt: DateTime.utc(2026, 7, 11),
-      category: BreadcrumbCategory.navigation,
-      action: action,
-      data: data ?? const {},
-    );

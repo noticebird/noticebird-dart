@@ -6,6 +6,7 @@ import 'package:noticebird/feedback.dart';
 import 'package:noticebird/noticebird.dart';
 
 import 'bloc_error_report.dart';
+import 'bloc_names.dart';
 
 /// Records bloc events and state changes as breadcrumbs, captures bloc
 /// errors in the shape a [BlocErrorReport] gives them, and knows which blocs
@@ -17,10 +18,16 @@ import 'bloc_error_report.dart';
 /// that sets an observer of its own afterwards keeps this one the same way:
 /// `MultiBlocObserver(observers: [noticebird.blocObserver, mine])`.
 ///
-/// A breadcrumb names the bloc as its component and, as its operation, what
-/// [describeEvent] and [describeChange] make of the step: the runtime type
-/// only, since a breadcrumb leaves the device. An observer that says more
-/// overrides those two.
+/// A step leaves a breadcrumb in category `bloc`: a change as
+/// `ProfileBloc changed` with the action `profileBloc.change`, an event as
+/// `ProfileBloc got Reauthenticate` with the action `profileBloc.event`.
+/// The message is the sentence, never the facts; it names the types only,
+/// since a breadcrumb leaves the device. Several live blocs of one type
+/// share its action. A name is the runtime type's, without type arguments
+/// and leading underscores, a freezed `_$…Impl` reduced to its middle, and
+/// every character outside `[A-Za-z0-9_]` (a minified web name's `:`) a
+/// `_`; in the action it starts in lower case, with `bloc` in front of a
+/// name that does not start with a letter.
 ///
 /// A bloc [traces] declines leaves no breadcrumb — by default one that is an
 /// [UntracedBloc]; its errors are still captured, and it is still counted. A
@@ -56,32 +63,21 @@ class NoticebirdBlocObserver extends BlocObserver {
   ];
 
   /// How many blocs are live (`count`), and how many of each type, under
-  /// the type's name with its first letter in lower case and without type
-  /// arguments or leading underscores (`collectionRecordsBloc`), for the
-  /// newest [maxBlocTypes] types: the `blocs` group a feedback report
+  /// the name the type's actions start with (`collectionRecordsBloc`), for
+  /// the newest [maxBlocTypes] types: the `blocs` group a feedback report
   /// carries.
   Map<String, Object?> liveBlocCounts() {
     final live = liveBlocs;
     final perType = <String, int>{};
     for (final bloc in live.reversed) {
-      final name = _typeName(bloc.runtimeType);
-      if (name == null) continue;
+      final name = blocActionName('${bloc.runtimeType}');
+      if (name == 'count') continue;
       if (!perType.containsKey(name) && perType.length >= maxBlocTypes) {
         continue;
       }
       perType[name] = (perType[name] ?? 0) + 1;
     }
     return {'count': live.length, ...perType};
-  }
-
-  static String? _typeName(Type type) {
-    var name = '$type';
-    final generic = name.indexOf('<');
-    if (generic >= 0) name = name.substring(0, generic);
-    name = name.replaceFirst(RegExp('^_+'), '');
-    if (name.isEmpty) return null;
-    name = '${name[0].toLowerCase()}${name.substring(1)}';
-    return name == 'count' ? null : name;
   }
 
   @override
@@ -95,13 +91,17 @@ class NoticebirdBlocObserver extends BlocObserver {
   @override
   void onEvent(Bloc<dynamic, dynamic> bloc, Object? event) {
     super.onEvent(bloc, event);
-    _note(bloc, 'bloc.event', () => describeEvent(event));
+    _note(
+      bloc,
+      'event',
+      (name) => '$name got ${blocTypeName('${event.runtimeType}')}',
+    );
   }
 
   @override
   void onChange(BlocBase<dynamic> bloc, Change<dynamic> change) {
     super.onChange(bloc, change);
-    _note(bloc, 'bloc.change', () => describeChange(change));
+    _note(bloc, 'change', (name) => '$name changed');
   }
 
   @override
@@ -137,40 +137,24 @@ class NoticebirdBlocObserver extends BlocObserver {
   @protected
   bool traces(BlocBase<dynamic> bloc) => bloc is! UntracedBloc;
 
-  /// The operation of an event's breadcrumb: the event's runtime type.
-  @protected
-  String describeEvent(Object? event) => event.runtimeType.toString();
-
-  /// The operation of a change's breadcrumb: [describeState] of the next
-  /// state.
-  @protected
-  String describeChange(Change<dynamic> change) =>
-      describeState(change.nextState);
-
-  /// A state as a breadcrumb names it: its runtime type.
-  @protected
-  String describeState(Object? state) => state.runtimeType.toString();
-
-  /// Leaves the breadcrumb of a step of a bloc [traces] takes; [traces]
-  /// and [operation] are asked inside the guard, since a subclass's may
+  /// Leaves the breadcrumb of a step of a bloc [traces] takes, its action
+  /// the bloc's name and [step], its message what [message] makes of the
+  /// bloc's name; [traces] is asked inside the guard, since a subclass's may
   /// throw.
   void _note(
     BlocBase<dynamic> bloc,
-    String action,
-    String Function() operation,
+    String step,
+    String Function(String name) message,
   ) {
     try {
       if (!traces(bloc)) return;
+      final type = '${bloc.runtimeType}';
       _reporter?.addBreadcrumb(
-        TypedBreadcrumb(
-          occurredAt: _clock().toUtc(),
-          category: BreadcrumbCategory.bloc,
-          action: action,
-          data: {
-            AllowedTag.component: bloc.runtimeType.toString(),
-            AllowedTag.operation: operation(),
-          },
-        ),
+        message(blocTypeName(type)),
+        action: '${blocActionName(type)}.$step',
+        category: 'bloc',
+        level: BreadcrumbLevel.info,
+        at: _clock(),
       );
     } catch (_) {
       // Reporting must never affect the host application.

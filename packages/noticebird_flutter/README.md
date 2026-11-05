@@ -162,12 +162,12 @@ Bloc.observer = MultiBlocObserver(
 ```
 
 Each bloc event and state change becomes a breadcrumb named by its runtime
-type, a bloc's `addError` is captured as handled (wrap it in a
-`BlocErrorReport` to set its severity, tags or extra), and each feedback
-report's `blocs` diagnostics group counts the live blocs per type.
-A host whose breadcrumbs say more about a step subclasses
-`NoticebirdBlocObserver` (`describeEvent`, `describeChange`, `describeState`)
-and passes it as `blocObserver:`; the start sets and counts that one. A host
+type (`ProfileBloc changed`, `ProfileBloc got Reauthenticate`), a bloc's
+`addError` is captured as handled (wrap it in a `BlocErrorReport` to set its
+severity, tags or extra), and each feedback report's `blocs` diagnostics
+group counts the live blocs per type. A host's subclass of
+`NoticebirdBlocObserver` is passed as `blocObserver:`; the start sets and
+counts that one. A host
 with an untraced marker of its own overrides `traces(bloc)`
 (`super.traces(bloc) && bloc is! MyUntraced`); its errors are still captured.
 `observeBlocs: false` leaves `Bloc.observer` to the host, and the report goes

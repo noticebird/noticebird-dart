@@ -1,3 +1,31 @@
+## 0.8.0
+
+Moves with `noticebird_protocol` 0.8.0: a breadcrumb is a message and data;
+crash events are of schema 6, feedback reports of schema 3.
+
+Breaking changes:
+
+- `NoticebirdClient.addBreadcrumb(String message, {action, category, level,
+  data, at})`, and the facade's the same; `recentBreadcrumbs` holds the
+  steps as recorded, each message bounded at
+  `NoticebirdClient.maxBufferedMessageLength` (1000), which replaces
+  `maxBufferedTagValueLength`.
+- An event or a report carries a step sanitized per entry: a line break in
+  the message becomes a space and the message is redacted and cut to 200
+  characters; an action, a category, or a data entry the protocol does not
+  take, or that reads as a credential, a health value or an identifier
+  (its name on its own, or `name: value` read together), is left out, and
+  the step kept; under `regulatedStrict` every data string is left out. A
+  step over 512 bytes loses its last data entries first, then the end of
+  its message; a trail over its budget loses its oldest steps. What went
+  is counted: an event's `breadcrumbDrops`, a report's
+  `noticebird.dropped_values`.
+
+Changes:
+
+- An event kept offline by 0.7.0 (schema 5) and a feedback report kept by
+  0.7.0 (schema 2) are still sent as they were written.
+
 ## 0.7.0
 
 Moves with `noticebird_protocol` 0.7.0: feedback reports are of schema 2.

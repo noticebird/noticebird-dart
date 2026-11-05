@@ -5,10 +5,15 @@ import 'package:noticebird/noticebird.dart';
 /// (`MaterialApp(navigatorObservers: [NoticebirdNavigatorObserver()])`, a
 /// router's `observers`). Each navigator needs its own.
 ///
-/// Every crumb names the route it is about as its component — the pushed,
-/// popped, replaced or removed one — and, when there is a route on either
-/// side, the step as its operation: `from → to`. A route is named once, when
-/// it appears, and keeps that name until it goes:
+/// Every crumb, in category `navigation`, says what happened to which kind
+/// of route — `Opened page`, `Closed dialog`, `Replaced page`, `Removed
+/// popup` (a page is a `PageRoute`, a dialog a `RawDialogRoute`, a popup
+/// any other `PopupRoute`, such as a sheet or a menu; anything else a
+/// route) — with the action `route.push`, `route.pop`, `route.replace` or
+/// `route.remove`, and as data the route on top after the step (`route`)
+/// and the one on top before it (`from`), each by its name; a removed
+/// route is `route` alone. A route is named once, when it appears, and
+/// keeps that name until it goes:
 ///
 /// - by [describe], when the host gives one and it answers a name: the place
 ///   for a router's path pattern, which only the host's router knows;
@@ -17,9 +22,10 @@ import 'package:noticebird/noticebird.dart';
 ///   segment of digits or of a long hex id. A router that names its pages
 ///   by their path pattern (`/lists/:listId`) passes; so does a raw path
 ///   whose segments are words, such as `/users/jdoe`: an app that pushes
-///   such names gives a [describe]. What must not leave the device in a name
-///   (an e-mail address) is redacted before a breadcrumb is sent, as in every
-///   breadcrumb;
+///   such names gives a [describe]. A name that is no breadcrumb data value
+///   (`TypedBreadcrumb.isDataValue`, such as one with a space or more than
+///   64 characters), or that reads as an identifier, is left out of the
+///   step before it is sent, as in every breadcrumb;
 /// - else by its kind (`MaterialPageRoute`).
 ///
 /// With [tracksRouteTemplate], it also keeps the client's route template
@@ -61,19 +67,19 @@ class NoticebirdNavigatorObserver extends NavigatorObserver {
   void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) {
     _names[route] = _locate(route);
     _stack.add(route);
-    _note('route.push', route, from: previousRoute, to: route);
+    _note('push', 'Opened', route, top: route, from: previousRoute);
   }
 
   @override
   void didPop(Route<dynamic> route, Route<dynamic>? previousRoute) {
     _stack.remove(route);
-    _note('route.pop', route, from: route, to: previousRoute);
+    _note('pop', 'Closed', route, top: previousRoute, from: route);
   }
 
   @override
   void didRemove(Route<dynamic> route, Route<dynamic>? previousRoute) {
     _stack.remove(route);
-    _note('route.remove', route);
+    _note('remove', 'Removed', route, top: route);
   }
 
   @override
@@ -86,14 +92,18 @@ class NoticebirdNavigatorObserver extends NavigatorObserver {
     } else {
       _stack[at] = newRoute;
     }
-    _note('route.replace', newRoute, from: oldRoute, to: newRoute);
+    _note('replace', 'Replaced', newRoute, top: newRoute, from: oldRoute);
   }
 
+  /// Leaves the crumb of [step] (`push`, …) about [route], its message
+  /// [verb] and the route's kind, `route` the name of [top] and `from` the
+  /// name of [from].
   void _note(
-    String action,
+    String step,
+    String verb,
     Route<dynamic> route, {
+    required Route<dynamic>? top,
     Route<dynamic>? from,
-    Route<dynamic>? to,
   }) {
     try {
       final reporter = _client ?? Noticebird.instance;
@@ -109,21 +119,27 @@ class NoticebirdNavigatorObserver extends NavigatorObserver {
         );
       }
       reporter.addBreadcrumb(
-        TypedBreadcrumb(
-          occurredAt: _clock().toUtc(),
-          category: BreadcrumbCategory.navigation,
-          action: action,
-          data: {
-            AllowedTag.component: _name(route),
-            if (from != null && to != null)
-              AllowedTag.operation: '${_name(from)} → ${_name(to)}',
-          },
-        ),
+        '$verb ${_kindWord(route)}',
+        action: 'route.$step',
+        category: 'navigation',
+        level: BreadcrumbLevel.info,
+        data: {'route': ?_nameOf(top), 'from': ?_nameOf(from)},
+        at: _clock(),
       );
     } catch (_) {
       // Reporting must never affect the host application.
     }
   }
+
+  /// What kind of route [route] is, as a crumb's message says it.
+  static String _kindWord(Route<dynamic> route) => switch (route) {
+    PageRoute() => 'page',
+    RawDialogRoute() => 'dialog',
+    PopupRoute() => 'popup',
+    _ => 'route',
+  };
+
+  String? _nameOf(Route<dynamic>? route) => route == null ? null : _name(route);
 
   /// The name [route] got when it appeared; one from before this observer
   /// was attached is named now.

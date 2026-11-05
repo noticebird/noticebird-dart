@@ -1,6 +1,7 @@
 import 'package:bloc/bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:noticebird_flutter/noticebird_flutter.dart';
+import 'package:noticebird_flutter/src/bloc_names.dart';
 import 'package:noticebird_flutter/testing.dart';
 
 final class _CounterCubit extends Cubit<int> {
@@ -9,6 +10,22 @@ final class _CounterCubit extends Cubit<int> {
   void increment() => emit(state + 1);
 
   void fail() => addError(StateError('boom'), StackTrace.current);
+}
+
+sealed class _CounterEvent {}
+
+final class _Increment extends _CounterEvent {}
+
+/// A freezed union's case, as its generated code names it.
+// ignore: camel_case_types
+final class _$ReauthenticateImpl extends _CounterEvent {}
+
+final class _CounterBloc extends Bloc<_CounterEvent, int> {
+  _CounterBloc() : super(0);
+}
+
+final class _Box<T> extends Cubit<T?> {
+  _Box() : super(null);
 }
 
 void main() {
@@ -39,17 +56,84 @@ void main() {
     observer = NoticebirdBlocObserver(client: reporter);
   });
 
-  test('onChange adds a bloc breadcrumb tagged with component/operation', () {
+  test('a change is a step of the bloc: its name changed, and no facts', () {
     final cubit = _CounterCubit();
+    addTearDown(cubit.close);
     observer.onChange(cubit, const Change(currentState: 0, nextState: 1));
 
-    expect(reporter.recentBreadcrumbs, hasLength(1));
     final breadcrumb = reporter.recentBreadcrumbs.single;
-    expect(breadcrumb.category, BreadcrumbCategory.bloc);
-    expect(breadcrumb.action, 'bloc.change');
-    expect(breadcrumb.data[AllowedTag.component], '_CounterCubit');
-    expect(breadcrumb.data[AllowedTag.operation], 'int');
-    cubit.close();
+    expect(breadcrumb.message, 'CounterCubit changed');
+    expect(breadcrumb.action, 'counterCubit.change');
+    expect(breadcrumb.category, 'bloc');
+    expect(breadcrumb.level, BreadcrumbLevel.info);
+    expect(breadcrumb.data, isEmpty);
+  });
+
+  test('an event is a step of the bloc: its name got the event', () {
+    final bloc = _CounterBloc();
+    addTearDown(bloc.close);
+    observer
+      ..onEvent(bloc, _Increment())
+      ..onEvent(bloc, _$ReauthenticateImpl());
+
+    expect(
+      [for (final crumb in reporter.recentBreadcrumbs) crumb.message],
+      ['CounterBloc got Increment', 'CounterBloc got Reauthenticate'],
+    );
+    expect(
+      [for (final crumb in reporter.recentBreadcrumbs) crumb.action],
+      ['counterBloc.event', 'counterBloc.event'],
+    );
+  });
+
+  test('a generic bloc is named without its type arguments', () {
+    final box = _Box<Map<String, int>>();
+    addTearDown(box.close);
+    observer.onChange(box, const Change(currentState: null, nextState: null));
+
+    expect(reporter.recentBreadcrumbs.single.message, 'Box changed');
+    expect(reporter.recentBreadcrumbs.single.action, 'box.change');
+  });
+
+  group('the name rule', () {
+    for (final (type, message, action) in [
+      ('ProfileBloc', 'ProfileBloc', 'profileBloc'),
+      ('_ProfileBloc', 'ProfileBloc', 'profileBloc'),
+      ('Foo<Bar>', 'Foo', 'foo'),
+      ('_Box<Map<String, int>>', 'Box', 'box'),
+      (r'_$ReauthenticateImpl', 'Reauthenticate', 'reauthenticate'),
+      ('minified:aB', 'minified_aB', 'minified_aB'),
+      ('1Bloc', '1Bloc', 'bloc1Bloc'),
+      ('_', '', 'bloc'),
+    ]) {
+      test('$type is $message, its action $action', () {
+        expect(blocTypeName(type), message);
+        expect(blocActionName(type), action);
+        for (final step in ['change', 'event']) {
+          expect(
+            TypedBreadcrumb.actionPattern.hasMatch('$action.$step'),
+            isTrue,
+          );
+        }
+      });
+    }
+  });
+
+  test('the step reaches an event as the protocol takes it', () async {
+    final bloc = _CounterBloc();
+    addTearDown(bloc.close);
+    observer.onEvent(bloc, _$ReauthenticateImpl());
+
+    await reporter.captureException(StateError('boom'), StackTrace.empty);
+
+    final step = (transport.events.single['breadcrumbs']! as List).single;
+    expect(step, {
+      'at': (step as Map)['at'],
+      'message': 'CounterBloc got Reauthenticate',
+      'action': 'counterBloc.event',
+      'category': 'bloc',
+      'level': 'info',
+    });
   });
 
   test(
@@ -178,11 +262,8 @@ void main() {
     await Future<void>.delayed(Duration.zero);
 
     expect(
-      [
-        for (final crumb in reporter.recentBreadcrumbs)
-          crumb.data[AllowedTag.component],
-      ],
-      ['_CounterCubit'],
+      [for (final crumb in reporter.recentBreadcrumbs) crumb.action],
+      ['counterCubit.change'],
       reason: 'the SDK marker stays out through super.traces',
     );
     expect(transport.events, hasLength(1));
@@ -248,17 +329,6 @@ void main() {
 
     expect(reporter.recentBreadcrumbs, hasLength(1));
   });
-
-  test('a describe that throws costs the bloc nothing', () {
-    final cubit = _CounterCubit();
-    addTearDown(cubit.close);
-
-    _ThrowingObserver(
-      reporter,
-    ).onChange(cubit, const Change(currentState: 0, nextState: 1));
-
-    expect(reporter.recentBreadcrumbs, isEmpty);
-  });
 }
 
 final class _Untraced extends Cubit<int> implements UntracedBloc {
@@ -287,17 +357,6 @@ final class _ThrowingTracesObserver extends NoticebirdBlocObserver {
   bool traces(BlocBase<dynamic> bloc) => throw StateError('traces');
 }
 
-final class _Box<T> extends Cubit<T?> {
-  _Box() : super(null);
-}
-
 final class _ReportedElsewhere implements Exception {
   const _ReportedElsewhere();
-}
-
-final class _ThrowingObserver extends NoticebirdBlocObserver {
-  _ThrowingObserver(NoticebirdClient client) : super(client: client);
-
-  @override
-  String describeState(Object? state) => throw StateError('describe');
 }

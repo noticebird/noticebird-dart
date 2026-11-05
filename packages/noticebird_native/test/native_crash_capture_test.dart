@@ -384,6 +384,52 @@ void main() {
     expect(native.settled, [('9' * 64, false)]);
   });
 
+  /// The engine file of the crashed run, with [breadcrumbs] as they were
+  /// written.
+  Map<String, Object?> crashedEngine(List<Object?> breadcrumbs) => {
+    'version': 1,
+    'sessionId': 'run_crashedsession0001',
+    'app': const AppMetadata(
+      name: 'test-app',
+      version: '1.3.0',
+      build: '130',
+      release: 'test-app@1.3.0+130',
+    ).toJson(),
+    'platform': _platform.toJson(),
+    'delivers': true,
+    'routeTemplate': '/lists/:listId',
+    'foreground': true,
+    'breadcrumbs': breadcrumbs,
+    'updatedAtMs': 1790325600000,
+  };
+
+  Future<Map<String, dynamic>> deliveredEvent() async {
+    native.inbox.add(_nativeRecord('5'));
+    final transport = _RecordingTransport();
+    final client = NoticebirdClient(
+      config: NoticebirdConfig(
+        privacyProfile: CrashPrivacyProfile.privacyDefault,
+        app: _app,
+        platform: _platform,
+        sessionIdFactory: () => 'run_currentsession0001',
+        nativeCrashes: capture(),
+      ),
+      transport: transport,
+    );
+
+    final results = await client.reportNativeCrashes();
+
+    expect(results.map((result) => result.outcome), [CaptureOutcome.sent]);
+    expect(native.settled, [('5' * 64, true)]);
+    final event = transport.events.single;
+    expect(event['sessionId'], 'run_crashedsession0001');
+    expect(event['app']['release'], 'test-app@1.3.0+130');
+    expect(event['exception']['type'], 'EXC_BAD_ACCESS/SIGBUS');
+    expect(event['routeTemplate'], '/lists/:listId');
+    expect(event['native']['frames'], hasLength(2));
+    return event;
+  }
+
   test(
     'end to end: a native report becomes one event of the crashed run',
     () async {
@@ -391,54 +437,52 @@ void main() {
         'b' * 32,
         1790323200000,
         engines: [
-          {
-            'version': 1,
-            'sessionId': 'run_crashedsession0001',
-            'app': const AppMetadata(
-              name: 'test-app',
-              version: '1.3.0',
-              build: '130',
-              release: 'test-app@1.3.0+130',
+          crashedEngine([
+            TypedBreadcrumb(
+              at: DateTime.utc(2026, 9, 25, 8, 40),
+              message: 'Opened page',
+              action: 'route.push',
+              category: 'navigation',
             ).toJson(),
-            'platform': _platform.toJson(),
-            'delivers': true,
-            'routeTemplate': '/lists/:listId',
-            'foreground': true,
-            'breadcrumbs': [
-              TypedBreadcrumb(
-                occurredAt: DateTime.utc(2026, 9, 25, 8, 40),
-                category: BreadcrumbCategory.navigation,
-                action: 'route.push',
-              ).toJson(),
-            ],
-            'updatedAtMs': 1790325600000,
-          },
+          ]),
         ],
       );
-      native.inbox.add(_nativeRecord('5'));
-      final transport = _RecordingTransport();
-      final client = NoticebirdClient(
-        config: NoticebirdConfig(
-          privacyProfile: CrashPrivacyProfile.privacyDefault,
-          app: _app,
-          platform: _platform,
-          sessionIdFactory: () => 'run_currentsession0001',
-          nativeCrashes: capture(),
-        ),
-        transport: transport,
-      );
 
-      final results = await client.reportNativeCrashes();
+      final event = await deliveredEvent();
 
-      expect(results.map((result) => result.outcome), [CaptureOutcome.sent]);
-      final event = transport.events.single;
-      expect(event['sessionId'], 'run_crashedsession0001');
-      expect(event['app']['release'], 'test-app@1.3.0+130');
-      expect(event['exception']['type'], 'EXC_BAD_ACCESS/SIGBUS');
-      expect(event['routeTemplate'], '/lists/:listId');
-      expect(event['breadcrumbs'].single['action'], 'route.push');
-      expect(event['native']['frames'], hasLength(2));
-      expect(native.settled, [('5' * 64, true)]);
+      expect(event['breadcrumbs'], [
+        {
+          'at': '2026-09-25T08:40:00.000Z',
+          'message': 'Opened page',
+          'action': 'route.push',
+          'category': 'navigation',
+        },
+      ]);
     },
   );
+
+  test('a run noticebird 0.7.0 recorded, its trail of the shape before '
+      'protocol v2 of a breadcrumb, still reports its crash, with an empty '
+      'trail', () async {
+    native.writeRun(
+      'b' * 32,
+      1790323200000,
+      engines: [
+        crashedEngine([
+          {
+            'occurredAt': '2026-09-25T08:40:00.000Z',
+            'category': 'navigation',
+            'action': 'route.push',
+            'level': 'info',
+            'data': {'component': '/lists/:listId'},
+          },
+        ]),
+      ],
+    );
+
+    final event = await deliveredEvent();
+
+    expect(event, isNot(contains('breadcrumbs')));
+    expect(event, isNot(contains('breadcrumbDrops')));
+  });
 }

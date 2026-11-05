@@ -361,6 +361,46 @@ void main() {
       expect(transport.requests, ['slot']);
     });
 
+    test('a report of schema 2 that noticebird 0.7.0 kept, its trail of the '
+        'shape before protocol v2 of a breadcrumb, is sent as it was '
+        'written', () async {
+      // As 0.7.0's FeedbackReport.toJsonString wrote it.
+      final reportJson = jsonEncode({
+        'schemaVersion': 2,
+        'reportId': '3b0c6f2e-8d41-4a77-9c5e-1f2a3b4c5d6e',
+        'createdAt': '2026-10-30T11:58:00.000Z',
+        'kind': 'bug',
+        'message': 'The list does not load',
+        'app': _app.toJson(),
+        'platform': _platform.toJson(),
+        'sessionId': 'random_session_123456',
+        'trail': [
+          {
+            'occurredAt': '2026-10-30T11:57:00.000Z',
+            'category': 'ui',
+            'action': 'button.tap',
+            'level': 'info',
+            'data': {'feature': 'lists'},
+          },
+        ],
+      });
+      store._json['3b0c6f2e-8d41-4a77-9c5e-1f2a3b4c5d6e'] = jsonEncode({
+        'format': 2,
+        'report': reportJson,
+        'next': 'submit',
+        'attempts': 1,
+        'nextAttemptAt': '2026-10-30T11:59:00.000Z',
+      });
+
+      final reporter = client();
+      await reporter.flush();
+      await pumpEventQueue();
+
+      expect(transport.submittedJson, [reportJson]);
+      expect(settledOf(reporter).single.outcome, isA<FeedbackDelivered>());
+      expect(await store.pending(), isEmpty);
+    });
+
     test('a stored form whose report is no report is no pending '
         'report', () {
       for (final report in ['{"not": "a report"}', '[]', 'not JSON']) {

@@ -32,6 +32,16 @@ CrashEvent? buildNativeCrashEvent(
   final routeTemplate = context.withTrail ? engine.routeTemplate : null;
   final foreground = record.foreground ?? engine.foreground;
   final kind = record.kind;
+  // An earlier version of the client may have kept a step this one would
+  // not send: each is sanitized again.
+  final trail = sanitizeTrail(
+    strict || !context.withTrail
+        ? const []
+        : engine.breadcrumbs
+              .take(CrashEvent.maxBreadcrumbs)
+              .map((step) => sanitizeBreadcrumb(step, strict: false)),
+    maxBytes: CrashEvent.maxBreadcrumbsBytes,
+  );
   return CrashEvent(
     eventId: nativeCrashEventId(record.recordId),
     occurredAt: context.occurredAt,
@@ -49,14 +59,8 @@ CrashEvent? buildNativeCrashEvent(
         : sanitizeRouteTemplate(routeTemplate),
     sessionId: context.sessionId,
     tags: {if (foreground != null) AllowedTag.foreground: foreground},
-    breadcrumbs: strict || !context.withTrail
-        ? const []
-        : List.unmodifiable(
-            engine.breadcrumbs
-                .take(CrashEvent.maxBreadcrumbs)
-                .map(sanitizeBreadcrumb)
-                .nonNulls,
-          ),
+    breadcrumbs: trail.steps,
+    breadcrumbDrops: trail.drops.isEmpty ? null : trail.drops,
     nativeCrash: NativeCrashInfo(
       kind: kind,
       source: record.source,

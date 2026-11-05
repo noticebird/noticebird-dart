@@ -113,8 +113,22 @@ final class Noticebird {
   static Future<List<CaptureResult>>? reportNativeCrashes() =>
       _instance?.reportNativeCrashes();
 
-  static void addBreadcrumb(TypedBreadcrumb breadcrumb) =>
-      _instance?.addBreadcrumb(breadcrumb);
+  /// See [NoticebirdClient.addBreadcrumb].
+  static void addBreadcrumb(
+    String message, {
+    String? action,
+    String? category,
+    BreadcrumbLevel? level,
+    Map<String, Object> data = const {},
+    DateTime? at,
+  }) => _instance?.addBreadcrumb(
+    message,
+    action: action,
+    category: category,
+    level: level,
+    data: data,
+    at: at,
+  );
 
   static void clearBreadcrumbs() => _instance?.clearBreadcrumbs();
 

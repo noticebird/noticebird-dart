@@ -329,7 +329,7 @@ final class FeedbackReport {
     this.attachments = const [],
   });
 
-  static const schemaVersion = 2;
+  static const schemaVersion = 3;
 
   /// The most bytes an encoded report may have, as an event.
   static const maxEncodedBytes = 65536;
@@ -340,6 +340,10 @@ final class FeedbackReport {
   static const maxDiagnosticValues = 32;
   static const maxMessageLength = 4000;
   static const maxTrailItems = 100;
+
+  /// The most bytes the encoded [trail] takes, counted as
+  /// [TypedBreadcrumb.trailBytes] counts it.
+  static const maxTrailBytes = 32768;
   static const maxAttachments = 1;
 
   static const minContactEmailLength = 3;
@@ -457,10 +461,10 @@ final class FeedbackReport {
   }) {
     final path = '\$.trail[$index]';
     _checkBreadcrumb(item, path);
-    if (item.occurredAt.isAfter(createdAt.add(maxClockSkew))) {
+    if (item.at.isAfter(createdAt.add(maxClockSkew))) {
       throw ProtocolException(
         ProtocolViolation.invalidValue,
-        '$path.occurredAt',
+        '$path.at',
         'Later than createdAt',
       );
     }
@@ -544,6 +548,13 @@ final class FeedbackReport {
     for (final (index, item) in trail.indexed) {
       _checkBreadcrumb(item, '\$.trail[$index]');
     }
+    if (TypedBreadcrumb.trailBytes(trail) > maxTrailBytes) {
+      throw const ProtocolException(
+        ProtocolViolation.oversized,
+        r'$.trail',
+        'The trail exceeds $maxTrailBytes bytes',
+      );
+    }
     _diagnostics(diagnostics, _checkedDiagnostic);
     if (attachments.length > maxAttachments) {
       throw const ProtocolException(
@@ -573,10 +584,10 @@ void _checkBreadcrumb(TypedBreadcrumb item, String path) {
     );
   }
   final json = item.toJson();
-  if (!FeedbackReport.isUtcTimestamp(json['occurredAt']! as String)) {
+  if (!FeedbackReport.isUtcTimestamp(json['at']! as String)) {
     throw ProtocolException(
       ProtocolViolation.invalidValue,
-      '$path.occurredAt',
+      '$path.at',
       'Expected UTC timestamp',
     );
   }

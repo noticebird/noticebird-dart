@@ -1,5 +1,5 @@
 // The FeedbackReport model as a client builds it: its validating writer
-// against the rules of the feedback report schema 2 and the rules the schema
+// against the rules of the feedback report schema 3 and the rules the schema
 // cannot express, the checks of a single value, and the checks of a host's
 // user context and diagnostics.
 
@@ -29,12 +29,14 @@ void _expectRefused(
 
 TypedBreadcrumb _crumb({
   DateTime? at,
+  String message = 'Toggled a record',
   String action = 'record.toggle',
-  Map<AllowedTag, TagScalar> data = const {},
+  Map<String, Object> data = const {},
 }) => TypedBreadcrumb(
-  occurredAt: at ?? DateTime.utc(2026, 10, 29, 14, 3, 1, 903),
-  category: BreadcrumbCategory.ui,
+  at: at ?? DateTime.utc(2026, 10, 29, 14, 3, 1, 903),
+  message: message,
   action: action,
+  category: 'ui',
   data: data,
 );
 
@@ -62,7 +64,7 @@ void main() {
         'diagnostics',
         'attachments',
       });
-      expect(json['schemaVersion'], 2);
+      expect(json['schemaVersion'], 3);
       expect(json['contact'], {'email': 'reporter@example.com'});
       expect(json['platform'], {
         'name': 'android',
@@ -439,11 +441,26 @@ void main() {
       );
     });
 
+    test('the trail takes at most 32 KiB encoded', () {
+      final step = _crumb(
+        message: 'm' * TypedBreadcrumb.maxMessageLength,
+        data: {'first': 'v' * 64, 'second': 'v' * 64},
+      );
+      final fitting = FeedbackReport.maxTrailBytes ~/ (step.encodedBytes + 1);
+      expect(fitting, lessThan(FeedbackReport.maxTrailItems));
+      replaced(full, trail: List.filled(fitting, step)).toJson();
+      _expectRefused(
+        replaced(full, trail: List.filled(fitting + 1, step)),
+        ProtocolViolation.oversized,
+        r'$.trail',
+      );
+    });
+
     test('a trail timestamp past the year 9999 is refused', () {
       _expectRefused(
         replaced(full, trail: [_crumb(at: DateTime.utc(10000))]),
         ProtocolViolation.invalidValue,
-        r'$.trail[0].occurredAt',
+        r'$.trail[0].at',
       );
     });
 
@@ -490,11 +507,9 @@ void main() {
           deviceClass: 'phone$nul',
         ),
       ),
-      r'$.trail[0].data.component': replaced(
+      r'$.trail[0].message': replaced(
         full,
-        trail: [
-          _crumb(data: const {AllowedTag.component: 'tile$nul'}),
-        ],
+        trail: [_crumb(message: 'Tapped a tile$nul')],
       ),
     };
     for (final MapEntry(key: path, value: report) in cases.entries) {
@@ -544,7 +559,7 @@ void main() {
           full,
           trail: [
             _crumb(),
-            _crumb(data: const {AllowedTag.retryCount: double.infinity}),
+            _crumb(data: const {'retryCount': double.infinity}),
           ],
         ),
         ProtocolViolation.invalidValue,
@@ -674,10 +689,7 @@ void main() {
             createdAt: createdAt,
             index: 3,
           ),
-          _refusedWith(
-            ProtocolViolation.invalidValue,
-            r'$.trail[3].occurredAt',
-          ),
+          _refusedWith(ProtocolViolation.invalidValue, r'$.trail[3].at'),
         );
       });
 
@@ -691,15 +703,15 @@ void main() {
           (
             _crumb(at: DateTime.utc(10000)),
             ProtocolViolation.invalidValue,
-            r'$.trail[0].occurredAt',
+            r'$.trail[0].at',
           ),
           (
-            _crumb(data: const {AllowedTag.component: 'tile\u0000'}),
+            _crumb(data: const {'component': 'tile\u0000'}),
             ProtocolViolation.invalidValue,
             r'$.trail[0].data.component',
           ),
           (
-            _crumb(data: {AllowedTag.component: 'a' * 101}),
+            _crumb(data: {'component': 'a' * 65}),
             ProtocolViolation.oversized,
             r'$.trail[0].data.component',
           ),

@@ -1,3 +1,35 @@
+## 0.8.0
+
+Moves with `noticebird` 0.8.0, `noticebird_flutter` 0.8.0 and
+`noticebird_native` 0.8.0. A breadcrumb is a message and data (protocol v2
+of a breadcrumb): the crash event's schema moves to 6, the feedback
+report's to 3.
+
+Breaking changes:
+
+- `TypedBreadcrumb({required at, required message, action, category,
+  level, data})`: `at` replaces `occurredAt`; `message` is one line of 1–200
+  characters; `action` (now `^[a-z][A-Za-z0-9_.-]*$`, at most 100) and
+  `category` (`^[a-z][a-z0-9_]*$`, at most 32) are optional strings;
+  `level` is an optional `BreadcrumbLevel` (`debug`, `info`, `warning`,
+  `error`); `data` is a flat `Map<String, Object>` of at most 16 entries,
+  names by `dataNamePattern` (at most 48), values a finite number, a
+  boolean or a string by `dataStringPattern` (at most 64). A step takes at
+  most 512 bytes encoded. Every limit and pattern is a constant on
+  `TypedBreadcrumb`, with `isDataName`, `isDataValue`, `dataEntryText`,
+  `trailBytes` and `encodedBytes`. A character is a UTF-16 code unit, a
+  byte a byte of the canonical JSON in UTF-8.
+- `BreadcrumbCategory` and `TypedBreadcrumb.clamped` are removed;
+  `AllowedTag`, `isTagValue` and `clampTagValue` are an event's `tags`
+  only.
+- `CrashEvent.schemaVersion` is 6: the breadcrumbs take at most
+  `CrashEvent.maxBreadcrumbsBytes` (16 KiB) together, and an event may
+  carry `breadcrumbDrops` (`BreadcrumbDrops`: what the client left out of
+  its breadcrumbs).
+- `FeedbackReport.schemaVersion` is 3: its trail takes at most
+  `FeedbackReport.maxTrailBytes` (32 KiB), and `checkTrailItem` checks
+  `at`.
+
 ## 0.7.0
 
 Moves with `noticebird` 0.7.0, `noticebird_flutter` 0.7.0 and

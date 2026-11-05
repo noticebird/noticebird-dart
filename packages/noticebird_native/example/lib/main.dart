@@ -103,11 +103,9 @@ class _CrashLabPageState extends State<CrashLabPage> {
   void _crash(String action, void Function() crash) {
     // The trail of this run travels with the native report of its crash.
     Noticebird.addBreadcrumb(
-      TypedBreadcrumb(
-        occurredAt: DateTime.now().toUtc(),
-        category: BreadcrumbCategory.ui,
-        action: action,
-      ),
+      'Triggered a native crash',
+      action: action,
+      category: 'ui',
     );
     // Give the ledger's debounced write time to land before the process dies.
     Future<void>.delayed(const Duration(seconds: 1), crash);

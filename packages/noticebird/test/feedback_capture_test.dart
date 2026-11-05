@@ -118,12 +118,11 @@ void main() {
         )
         ..setRouteTemplate('/lists/:listId')
         ..addBreadcrumb(
-          TypedBreadcrumb(
-            occurredAt: _capturedAt.subtract(const Duration(minutes: 1)),
-            category: BreadcrumbCategory.ui,
-            action: 'button.tap',
-            data: const {AllowedTag.feature: 'lists'},
-          ),
+          'Tapped a button',
+          action: 'button.tap',
+          category: 'ui',
+          data: const {'feature': 'lists'},
+          at: _capturedAt.subtract(const Duration(minutes: 1)),
         );
 
       final outcome = await reporter.captureFeedback(
@@ -155,7 +154,7 @@ void main() {
       expect(transport.uploaded.single, _png);
       final report = sent();
       expect(report, {
-        'schemaVersion': 2,
+        'schemaVersion': 3,
         'reportId': report['reportId'],
         'createdAt': '2026-10-30T12:00:00.000Z',
         'kind': 'bug',
@@ -175,10 +174,10 @@ void main() {
         },
         'trail': [
           {
-            'occurredAt': '2026-10-30T11:59:00.000Z',
-            'category': 'ui',
+            'at': '2026-10-30T11:59:00.000Z',
+            'message': 'Tapped a button',
             'action': 'button.tap',
-            'level': 'info',
+            'category': 'ui',
             'data': {'feature': 'lists'},
           },
         ],
@@ -277,31 +276,24 @@ void main() {
       });
     });
 
-    test('the trail is sanitized and the oldest go until it fits', () async {
+    test('the trail is sanitized, the oldest go until it fits 32 KiB, and '
+        'what went is counted', () async {
       final reporter = client();
-      final long = 'x' * 1000;
       for (var index = 0; index < 150; index++) {
         reporter.addBreadcrumb(
-          TypedBreadcrumb(
-            occurredAt: _capturedAt.subtract(Duration(seconds: 150 - index)),
-            category: BreadcrumbCategory.bloc,
-            action: 'step.${index.toString().padLeft(3, '0')}',
-            data: {
-              AllowedTag.feature: long,
-              AllowedTag.operation: long,
-              AllowedTag.component: long,
-              AllowedTag.connectivity: long,
-            },
-          ),
+          'x' * 1000,
+          action: 'step.${index.toString().padLeft(3, '0')}',
+          category: 'bloc',
+          data: {for (var e = 0; e < 4; e++) 'name$e': 'v' * 64},
+          at: _capturedAt.subtract(Duration(seconds: 150 - index)),
         );
       }
       reporter.addBreadcrumb(
-        TypedBreadcrumb(
-          occurredAt: _capturedAt,
-          category: BreadcrumbCategory.auth,
-          action: 'login.ada@example.com',
-          data: const {AllowedTag.feature: 'signed in as ada@example.com'},
-        ),
+        'Signed in as ada@example.com',
+        action: 'login.ada@example.com',
+        category: 'auth',
+        data: const {'feature': 'lists', 'userEmail': true},
+        at: _capturedAt,
       );
 
       final outcome = await capture(reporter, message: '€' * 4000);
@@ -311,57 +303,59 @@ void main() {
       final trail = (report['trail']! as List).cast<Map<String, Object?>>();
       expect(trail.length, lessThan(100));
       expect(trail.last, {
-        'occurredAt': '2026-10-30T12:00:00.000Z',
+        'at': '2026-10-30T12:00:00.000Z',
+        'message': 'Signed in as [REDACTED]',
         'category': 'auth',
-        'action': 'redacted',
-        'level': 'info',
-        'data': {'feature': 'signed in as [REDACTED]'},
+        'data': {'feature': 'lists'},
       });
       expect(trail[trail.length - 2]['action'], 'step.149');
       for (final item in trail) {
-        for (final value in (item['data']! as Map).values) {
-          expect((value as String).length, lessThanOrEqualTo(100));
-        }
+        expect(
+          (item['message']! as String).length,
+          lessThanOrEqualTo(TypedBreadcrumb.maxMessageLength),
+        );
       }
-      expect(utf8.encode(jsonEncode(report)).length, lessThanOrEqualTo(65536));
+      int bytes(List<Object?> trail) => utf8.encode(jsonEncode(trail)).length;
+      expect(bytes(trail), lessThanOrEqualTo(FeedbackReport.maxTrailBytes));
       // The next older breadcrumb, the size of the oldest sent, would not
       // have fit.
-      final withOneMore = {
-        ...report,
-        'trail': [trail.first, ...trail],
-      };
-      expect(utf8.encode(jsonEncode(withOneMore)).length, greaterThan(65536));
+      expect(
+        bytes([trail.first, ...trail]),
+        greaterThan(FeedbackReport.maxTrailBytes),
+      );
+      expect(utf8.encode(jsonEncode(report)).length, lessThanOrEqualTo(65536));
+      // The steps of the newest 100 that did not fit, the entries the long
+      // steps lost to their 512 bytes, and the login's action and e-mail
+      // flag.
+      final entriesLost = [
+        for (final item in trail.take(trail.length - 1))
+          4 - (item['data']! as Map).length,
+      ].fold(0, (sum, lost) => sum + lost);
+      expect(entriesLost, greaterThan(0));
+      expect((report['diagnostics']! as Map)['noticebird'], {
+        'dropped_values': (100 - trail.length) + entriesLost + 2,
+      });
       expect(reporter.recentBreadcrumbs, hasLength(151));
     });
 
     test('a breadcrumb the report refuses is left out alone', () async {
       final reporter = client()
+        ..addBreadcrumb('\u0000', action: 'left.empty', at: _capturedAt)
         ..addBreadcrumb(
-          TypedBreadcrumb(
-            occurredAt: _capturedAt,
-            category: BreadcrumbCategory.ui,
-            action: 'Not An Action',
-          ),
+          'Later',
+          action: 'from.the.future',
+          at: _capturedAt.add(const Duration(minutes: 6)),
         )
-        ..addBreadcrumb(
-          TypedBreadcrumb(
-            occurredAt: _capturedAt.add(const Duration(minutes: 6)),
-            category: BreadcrumbCategory.ui,
-            action: 'from.the.future',
-          ),
-        )
-        ..addBreadcrumb(
-          TypedBreadcrumb(
-            occurredAt: _capturedAt,
-            category: BreadcrumbCategory.ui,
-            action: 'kept',
-          ),
-        );
+        ..addBreadcrumb('Kept', action: 'kept', at: _capturedAt);
       await capture(reporter);
+      final report = sent();
       expect(
-        [for (final item in sent()['trail']! as List) (item as Map)['action']],
+        [for (final item in report['trail']! as List) (item as Map)['action']],
         ['kept'],
       );
+      expect((report['diagnostics']! as Map)['noticebird'], {
+        'dropped_values': 2,
+      });
     });
 
     test('the message is redacted and cut to 4000 characters', () async {
@@ -1120,21 +1114,24 @@ void main() {
         );
       for (var index = random.nextInt(130); index > 0; index--) {
         reporter.addBreadcrumb(
-          TypedBreadcrumb(
-            occurredAt: _capturedAt.add(
-              Duration(seconds: random.nextInt(600) - 500),
-            ),
-            category: BreadcrumbCategory
-                .values[random.nextInt(BreadcrumbCategory.values.length)],
-            action:
-                pick(['tap', 'route.push', 'Route Push', 'a' * 150]) +
-                (random.nextBool() ? '' : '.ada@example.com'),
-            data: {
-              AllowedTag.feature: text(4),
-              AllowedTag.operation: text(2),
-              AllowedTag.retryCount: random.nextInt(5),
-            },
-          ),
+          text(4),
+          action:
+              pick(['tap', 'route.push', 'Route Push', 'a' * 150]) +
+              (random.nextBool() ? '' : '.ada@example.com'),
+          category: pick(['ui', 'bloc', 'Not A Category', 'token']),
+          level: BreadcrumbLevel.values[random.nextInt(4)],
+          data: {
+            'feature': pick([
+              'lists',
+              'two words',
+              'ada@example.com',
+              'x' * 70,
+            ]),
+            'operation': text(2),
+            'retryCount': random.nextInt(5),
+            pick(['userId', 'phase', 'glucose']): pick(['load', '€']),
+          },
+          at: _capturedAt.add(Duration(seconds: random.nextInt(600) - 500)),
         );
       }
       final outcome = await capture(

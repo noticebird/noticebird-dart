@@ -143,29 +143,57 @@ final class NoticebirdClient {
 
   /// Read-only snapshot of the breadcrumb buffer, oldest first: the last
   /// [NoticebirdConfig.breadcrumbBuffer] breadcrumbs as they were
-  /// recorded, each string value bounded at [maxBufferedTagValueLength]. For
+  /// recorded, each message bounded at [maxBufferedMessageLength]. For
   /// host-app diagnostics (an error details dialog, a user's feedback report)
   /// — never sent anywhere by reading it.
   ///
   /// A sent event does not empty it: the event carries the newest of the
   /// breadcrumbs no sent event carried yet ([NoticebirdConfig.maxBreadcrumbs]
-  /// at most, shortened to the protocol's limits), and the next event starts
+  /// at most, sanitized to the protocol's limits), and the next event starts
   /// after them. Only [clearBreadcrumbs] forgets the trail.
   List<TypedBreadcrumb> get recentBreadcrumbs =>
       List.unmodifiable(_breadcrumbs);
 
-  /// The longest string value a buffered breadcrumb keeps. An event shortens
-  /// it further, to the protocol's [maxTagValueLength].
-  static const maxBufferedTagValueLength = 1000;
+  /// The longest message a buffered breadcrumb keeps. An event shortens it
+  /// further, to the protocol's [TypedBreadcrumb.maxMessageLength].
+  static const maxBufferedMessageLength = 1000;
 
-  void addBreadcrumb(TypedBreadcrumb breadcrumb) {
+  /// Records a step of the trail: [message] is the one line a human reads,
+  /// [data] the facts of the step, each a value one would want as a column
+  /// to compare, filter or count; a value is never in both. [action] is a
+  /// technical id of the kind of step (`checkout.submit`), [category] a
+  /// short group (`ui`), and [at] when it happened, by default now.
+  ///
+  /// Kept as given in [recentBreadcrumbs] (the message bounded at
+  /// [maxBufferedMessageLength]); an event or a report carries it sanitized
+  /// by the protocol's rules, where what does not pass is left out and
+  /// counted, never the event: a line break in [message] becomes a space, a
+  /// data name or value the protocol does not take or that reads as a
+  /// credential, a health value or an identifier goes, and under
+  /// [CrashPrivacyProfile.regulatedStrict] every string in [data] goes.
+  /// Never throws.
+  void addBreadcrumb(
+    String message, {
+    String? action,
+    String? category,
+    BreadcrumbLevel? level,
+    Map<String, Object> data = const {},
+    DateTime? at,
+  }) {
     try {
       // Bounded on the way in, so the buffer stays small whatever a host
-      // records; shortened to the wire's limit only when an event is built
+      // records; sanitized to the wire's rules only when an event is built
       // (`_eventBreadcrumbs`), so a host reading the trail keeps the whole
-      // label.
+      // step.
       _breadcrumbs.add(
-        breadcrumb.clamped(maxLength: maxBufferedTagValueLength),
+        TypedBreadcrumb(
+          at: (at ?? _clock()).toUtc(),
+          message: truncateCrashText(message, maxBufferedMessageLength),
+          action: action,
+          category: category,
+          level: level,
+          data: Map.unmodifiable(data),
+        ),
       );
       _recorded++;
       while (_breadcrumbs.length > _config.breadcrumbBuffer) {
@@ -309,8 +337,11 @@ final class NoticebirdClient {
   /// is taken now, with the context diagnostics only. The client fills in the rest as for an event:
   /// the app, the platform and its locale, the session, the user of
   /// [setUser] and the trail, the newest [FeedbackReport.maxTrailItems]
-  /// breadcrumbs of the buffer, sanitized, the oldest left out first until
-  /// the report fits [FeedbackReport.maxEncodedBytes]. Under
+  /// breadcrumbs of the buffer, sanitized as an event's are
+  /// ([addBreadcrumb]), the oldest left out first until the trail fits
+  /// [FeedbackReport.maxTrailBytes] and the report
+  /// [FeedbackReport.maxEncodedBytes]; what the sanitizing left out counts
+  /// in `noticebird.dropped_values`. Under
   /// [CrashPrivacyProfile.regulatedStrict] it sends no user, no
   /// [userContext] and no locale. A report is not an event: its trail does
   /// not count as sent.
@@ -368,6 +399,12 @@ final class NoticebirdClient {
           _config.privacyProfile == CrashPrivacyProfile.regulatedStrict;
       final context = reportedContext;
       final createdAt = _clock().toUtc();
+      final trail = sanitizeTrail(
+        _breadcrumbs
+            .skip(max(0, _breadcrumbs.length - FeedbackReport.maxTrailItems))
+            .map(_sanitizedBreadcrumb),
+        maxBytes: FeedbackReport.maxTrailBytes,
+      );
       final draft = FeedbackDraft(
         reportId: _reportId(),
         createdAt: createdAt,
@@ -392,16 +429,10 @@ final class NoticebirdClient {
             ? sanitizeRouteTemplate(route)
             : null,
         user: strict ? null : _user,
-        trail: [
-          for (final breadcrumb in _breadcrumbs.skip(
-            max(0, _breadcrumbs.length - FeedbackReport.maxTrailItems),
-          ))
-            ?_sanitizedBreadcrumb(breadcrumb),
-        ],
+        trail: trail.steps,
+        trailDropped: trail.drops.dataDropped + trail.drops.stepsDropped,
         dropped: (count) {
-          if (count > 0) {
-            _debugNote('$count feedback diagnostics values left out');
-          }
+          if (count > 0) _debugNote('$count feedback values left out');
         },
       );
       final result = await sender.send(
@@ -609,9 +640,9 @@ final class NoticebirdClient {
   /// ([sanitizeGroupingKey]); without one, Noticebird groups the event
   /// itself.
   ///
-  /// [tags] are redacted and shortened as breadcrumb data is; a tag that is
-  /// still no tag value ([isTagValue]), such as a NaN or an infinite number,
-  /// is left out alone.
+  /// [tags] are redacted and shortened to [maxTagValueLength]; a tag that
+  /// is still no tag value ([isTagValue]), such as a NaN or an infinite
+  /// number, is left out alone.
   ///
   /// The [CaptureResult] carries the event's id
   /// ([CaptureResult.eventId]), for a feedback report about this error;
@@ -979,7 +1010,7 @@ final class NoticebirdClient {
           breadcrumbs:
               _config.privacyProfile == CrashPrivacyProfile.regulatedStrict
               ? const []
-              : _eventBreadcrumbs(),
+              : _eventBreadcrumbs().steps,
         ),
       );
     } catch (_) {
@@ -1074,11 +1105,11 @@ final class NoticebirdClient {
       _sanitizeStack(stackTrace.toString()),
       CrashException.maxStackTraceLength,
     );
-    // Redacted and shortened rather than rejected, as breadcrumbs are: an
-    // over-long tag value would fail validation when the event is written,
-    // and an id or an address in one must not leave the device. A tag the
-    // protocol refuses even so (a NaN or an infinite number) is left out
-    // alone, as a breadcrumb or an `extra` value is, never the event.
+    // Redacted and shortened rather than rejected: an over-long tag value
+    // would fail validation when the event is written, and an id or an
+    // address in one must not leave the device. A tag the protocol refuses
+    // even so (a NaN or an infinite number) is left out alone, as a
+    // breadcrumb or an `extra` value is, never the event.
     final safeTags = Map<AllowedTag, TagScalar>.unmodifiable({
       for (final MapEntry(:key, :value) in tags.entries)
         if (sanitizeTagValue(value) case final safe when isTagValue(safe))
@@ -1087,6 +1118,7 @@ final class NoticebirdClient {
     final safeExtra = strict
         ? const <String, Object?>{}
         : _sanitizeExtra(extra);
+    final trail = _eventBreadcrumbs();
     return CrashEvent(
       eventId: _eventIdFactory(),
       occurredAt: _clock().toUtc(),
@@ -1104,10 +1136,11 @@ final class NoticebirdClient {
       user: strict ? null : _user,
       tags: safeTags,
       extra: safeExtra,
-      breadcrumbs: _eventBreadcrumbs(),
+      breadcrumbs: trail.steps,
       groupingKey: groupingKey == null
           ? null
           : sanitizeGroupingKey(groupingKey),
+      breadcrumbDrops: trail.drops.isEmpty ? null : trail.drops,
     );
   }
 
@@ -1116,27 +1149,31 @@ final class NoticebirdClient {
   static _WrittenEvent _write(CrashEvent event) =>
       _WrittenEvent(event.eventId, event.toCanonicalJson());
 
-  /// The breadcrumbs the next event carries: the newest of those no sent
-  /// event carried yet, [NoticebirdConfig.maxBreadcrumbs] at most, each
-  /// redacted and shortened to the protocol's limits, and one the protocol
-  /// refuses even so left out ([sanitizeBreadcrumb]). The buffer keeps them
-  /// as recorded, for [recentBreadcrumbs].
-  List<TypedBreadcrumb> _eventBreadcrumbs() {
+  /// The breadcrumbs the next event carries, and what went of them: the
+  /// newest of those no sent event carried yet,
+  /// [NoticebirdConfig.maxBreadcrumbs] at most, each sanitized
+  /// ([sanitizeBreadcrumb]), and the oldest left out until they fit
+  /// [CrashEvent.maxBreadcrumbsBytes] ([sanitizeTrail]). The buffer keeps
+  /// them as recorded, for [recentBreadcrumbs].
+  ({List<TypedBreadcrumb> steps, BreadcrumbDrops drops}) _eventBreadcrumbs() {
     final unsent = min(_recorded - _sentThrough, _breadcrumbs.length);
     final count = min(unsent, _config.maxBreadcrumbs);
-    return List.unmodifiable([
-      for (final breadcrumb in _breadcrumbs.skip(_breadcrumbs.length - count))
-        ?_sanitizedBreadcrumb(breadcrumb),
-    ]);
+    return sanitizeTrail(
+      _breadcrumbs.skip(_breadcrumbs.length - count).map(_sanitizedBreadcrumb),
+      maxBytes: CrashEvent.maxBreadcrumbsBytes,
+    );
   }
 
-  /// [breadcrumb]'s [sanitizeBreadcrumb], made once, a refused one's `null`
-  /// included: the native run state takes the event's breadcrumbs on every
-  /// [addBreadcrumb].
-  TypedBreadcrumb? _sanitizedBreadcrumb(TypedBreadcrumb breadcrumb) =>
-      (_sanitized[breadcrumb] ??= (sanitizeBreadcrumb(breadcrumb),)).$1;
+  /// [breadcrumb]'s [sanitizeBreadcrumb] under the client's privacy
+  /// profile, made once: the native run state takes the event's breadcrumbs
+  /// on every [addBreadcrumb].
+  SanitizedBreadcrumb _sanitizedBreadcrumb(TypedBreadcrumb breadcrumb) =>
+      _sanitized[breadcrumb] ??= sanitizeBreadcrumb(
+        breadcrumb,
+        strict: _config.privacyProfile == CrashPrivacyProfile.regulatedStrict,
+      );
 
-  final _sanitized = Expando<(TypedBreadcrumb?,)>();
+  final _sanitized = Expando<SanitizedBreadcrumb>();
 
   Future<CaptureResult> _enqueue(_WrittenEvent event) async {
     if (_config.maxPendingEvents == 0) {

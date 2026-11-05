@@ -28,15 +28,18 @@ const clientNoteGroup = 'noticebird';
 /// as [FeedbackDiagnostics.build] types it.
 ///
 /// [notes] are the client's own values for the note group (a dropped
-/// screenshot, when the moment was taken). [dropped] is told how many values
-/// were left out.
+/// screenshot, when the moment was taken). [droppedBefore] is what the
+/// client left out of the report elsewhere (its trail's values and steps),
+/// counted in `dropped_values` too. [dropped] is told how many values were
+/// left out, [droppedBefore] included.
 Map<String, Map<String, DiagnosticValue>> sanitizeDiagnostics({
   Map<String, Map<String, Object?>> context = const {},
   Map<String, Map<String, Object?>> host = const {},
   Map<String, Object> notes = const {},
+  int droppedBefore = 0,
   void Function(int dropped)? dropped,
 }) {
-  var droppedValues = 0;
+  var droppedValues = droppedBefore;
   final groups = <String, Map<String, DiagnosticValue>>{};
   for (final source in [context, host]) {
     for (final MapEntry(key: name, value: values) in source.entries) {

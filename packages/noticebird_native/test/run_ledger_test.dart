@@ -28,14 +28,12 @@ NativeRunInfo _run({
 );
 
 TypedBreadcrumb _crumb(int index) => TypedBreadcrumb(
-  occurredAt: DateTime.utc(2026, 9, 25, 8, 0, index),
-  category: BreadcrumbCategory.ui,
+  at: DateTime.utc(2026, 9, 25, 8, 0, index),
+  message: 'm' * 200,
   action: 'tap.button_$index',
-  data: {
-    AllowedTag.feature: 'f' * 100,
-    AllowedTag.operation: 'o' * 100,
-    AllowedTag.component: 'c' * 100,
-  },
+  category: 'ui',
+  level: BreadcrumbLevel.info,
+  data: {'feature': 'f' * 40, 'operation': 'o' * 40, 'component': 'c' * 40},
 );
 
 void main() {
@@ -223,8 +221,16 @@ void main() {
     final json = jsonDecode(file.readAsStringSync()) as Map<String, Object?>;
     json['breadcrumbs'] = [
       _crumb(1).toJson(),
-      {'occurredAt': 'yesterday'},
+      {'at': 'yesterday', 'message': 'm'},
       {..._crumb(2).toJson(), 'action': 'Route.Push'},
+      // As noticebird 0.7.0 wrote a crumb, before protocol v2 of a
+      // breadcrumb.
+      {
+        'occurredAt': '2026-09-25T08:00:03.000Z',
+        'category': 'ui',
+        'action': 'tap.button_3',
+        'level': 'info',
+      },
     ];
     file.writeAsStringSync(jsonEncode(json));
 
@@ -238,6 +244,50 @@ void main() {
       runs.single.engines.single.breadcrumbs.single.action,
       'tap.button_1',
     );
+  });
+
+  test('a ledger noticebird 0.7.0 wrote reads as its run with an empty '
+      'trail, and the engine file keeps version 1', () {
+    writeRun('run-old', startedAtMs: 1000);
+    // An engine file as 0.7.0 wrote it: crumbs of the shape before
+    // protocol v2 of a breadcrumb.
+    File('${root.path}/runs/run-old/engine-e0.json').writeAsStringSync(
+      jsonEncode({
+        'version': 1,
+        'sessionId': 'run_0000000000000000',
+        'app': _app.toJson(),
+        'platform': _platform.toJson(),
+        'delivers': true,
+        'routeTemplate': '/home',
+        'breadcrumbs': [
+          {
+            'occurredAt': '2026-09-25T08:00:00.000Z',
+            'category': 'navigation',
+            'action': 'route.push',
+            'level': 'info',
+            'data': {'component': '/home'},
+          },
+        ],
+        'updatedAtMs': 1000,
+      }),
+    );
+
+    final engine = readRunLedger(
+      root,
+      currentRunId: 'x',
+      includeDebugBuilds: false,
+    ).single.engines.single;
+    expect(engine.sessionId, 'run_0000000000000000');
+    expect(engine.routeTemplate, '/home');
+    expect(engine.breadcrumbs, isEmpty);
+
+    ledger()
+      ..recordStart()
+      ..update(NativeRunState(breadcrumbs: [_crumb(1)]))
+      ..flush();
+    final written = engineJson('run-current', 'e1');
+    expect(written['version'], 1);
+    expect(written['breadcrumbs'], [_crumb(1).toJson()]);
   });
 
   test('no ledger directory yet reads as no runs', () {

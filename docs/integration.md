@@ -216,9 +216,9 @@ addError(
 ```
 
 The observer also counts the live blocs per type, for each feedback report's
-`blocs` diagnostics group. A subclass of `NoticebirdBlocObserver` that names
-its steps in more detail (`describeEvent`, `describeChange`, `describeState`)
-is passed as `blocObserver:`, and the start sets and counts that one.
+`blocs` diagnostics group. A subclass of `NoticebirdBlocObserver` (one that
+overrides `traces`) is passed as `blocObserver:`, and the start sets and
+counts that one.
 `observeBlocs: false` leaves `Bloc.observer` to the host, and reports go
 without that group.
 
@@ -257,12 +257,13 @@ await Noticebird.captureException(
   extra: {'retry_count': 2, 'checkout_phase': 'confirmation'},
 );
 
-// Manual breadcrumb.
-Noticebird.addBreadcrumb(TypedBreadcrumb(
-  occurredAt: DateTime.now().toUtc(),
-  category: BreadcrumbCategory.ui,
+// Manual breadcrumb: the sentence a human reads, and the facts as data.
+Noticebird.addBreadcrumb(
+  'Confirmed the checkout',
   action: 'checkout.confirm',
-));
+  category: 'ui',
+  data: {'items.count': 3},
+);
 
 // Route context must be a template, never a raw id.
 Noticebird.setRouteTemplate('/lists/:listId');

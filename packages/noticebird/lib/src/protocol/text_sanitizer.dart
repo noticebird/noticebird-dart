@@ -121,32 +121,169 @@ List<String>? sanitizeGroupingKey(List<String> groupingKey) {
   return parts.isEmpty ? null : List.unmodifiable(parts);
 }
 
-/// [breadcrumb] as an event carries it: every data value through
-/// [sanitizeTagValue], and an action a redaction pattern matches (it names
-/// an id or a credential) replaced by `redacted`; `null` when the protocol
-/// still refuses it ([TypedBreadcrumb.check]), such as an action outside its
-/// pattern. A bad breadcrumb costs only itself, never the event or the
-/// report that carries the trail.
-TypedBreadcrumb? sanitizeBreadcrumb(TypedBreadcrumb breadcrumb) {
-  final sanitized = TypedBreadcrumb(
-    occurredAt: breadcrumb.occurredAt,
-    category: breadcrumb.category,
-    action: redactCrashText(breadcrumb.action) == breadcrumb.action
-        ? breadcrumb.action
-        : 'redacted',
-    level: breadcrumb.level,
-    data: {
-      for (final entry in breadcrumb.data.entries)
-        entry.key: sanitizeTagValue(entry.value),
-    },
-  );
-  try {
-    sanitized.check();
-    return sanitized;
-  } on ProtocolException {
+/// [breadcrumb] as an event or a feedback report carries it, and how many
+/// of its values were left out ([SanitizedBreadcrumb]); its `step` is
+/// `null` when the protocol refuses it even so ([TypedBreadcrumb.check]),
+/// such as a message left empty. A bad breadcrumb costs only itself, a bad
+/// value only itself, never the event or the report that carries the trail.
+///
+/// - The message's line breaks become spaces and its U+0000 characters go;
+///   it is redacted ([redactCrashText]) and cut to
+///   [TypedBreadcrumb.maxMessageLength].
+/// - An action or a category outside its pattern, or one a redaction
+///   pattern matches (it names an id or a credential), is left out: the
+///   step is kept without it.
+/// - A data entry is left out when its name is no data name
+///   ([TypedBreadcrumb.isDataName]) or names a credential, a health measure
+///   or an identity on its own ([PrivacyPatterns.extraKeyViolation]), when
+///   its value is no data value ([TypedBreadcrumb.isDataValue]), when
+///   [strict] and its value is a string, and when a redaction pattern
+///   matches the entry read as one text ([TypedBreadcrumb.dataEntryText]),
+///   so a number reads with its name (`contact: 31612345678`). The entries
+///   past [TypedBreadcrumb.maxDataEntries] are left out too.
+/// - A step over [TypedBreadcrumb.maxEncodedBytes] loses its last data
+///   entries first, in the order they were given, and then the end of its
+///   message, until it fits.
+///
+/// Every value left out of a kept step counts in `dataDropped`; the end cut
+/// off a message does not.
+SanitizedBreadcrumb sanitizeBreadcrumb(
+  TypedBreadcrumb breadcrumb, {
+  required bool strict,
+}) {
+  var dropped = 0;
+  String? kept(String? value, int maxLength, RegExp pattern) {
+    if (value == null) return null;
+    if (value.length <= maxLength &&
+        pattern.hasMatch(value) &&
+        !_holdsMatch(value)) {
+      return value;
+    }
+    dropped++;
     return null;
   }
+
+  final action = kept(
+    breadcrumb.action,
+    TypedBreadcrumb.maxActionLength,
+    TypedBreadcrumb.actionPattern,
+  );
+  final category = kept(
+    breadcrumb.category,
+    TypedBreadcrumb.maxCategoryLength,
+    TypedBreadcrumb.categoryPattern,
+  );
+  final data = <String, Object>{};
+  for (final MapEntry(:key, :value) in breadcrumb.data.entries) {
+    if (data.length < TypedBreadcrumb.maxDataEntries &&
+        _keepsEntry(key, value, strict: strict)) {
+      data[key] = value;
+    } else {
+      dropped++;
+    }
+  }
+  var message = sanitizeCrashText(
+    breadcrumb.message
+        .replaceAll(TypedBreadcrumb.lineBreakPattern, ' ')
+        .replaceAll('\u0000', ''),
+    maxLength: TypedBreadcrumb.maxMessageLength,
+  );
+  TypedBreadcrumb step() => TypedBreadcrumb(
+    at: breadcrumb.at.toUtc(),
+    message: message,
+    action: action,
+    category: category,
+    level: breadcrumb.level,
+    data: Map.unmodifiable(data),
+  );
+
+  var sanitized = step();
+  for (
+    var over = sanitized.encodedBytes - TypedBreadcrumb.maxEncodedBytes;
+    over > 0 && message.isNotEmpty;
+    over = sanitized.encodedBytes - TypedBreadcrumb.maxEncodedBytes
+  ) {
+    if (data.isNotEmpty) {
+      data.remove(data.keys.last);
+      dropped++;
+    } else {
+      // A character takes at most six bytes encoded (`\u0001`), so at
+      // least this many go.
+      final cut = (over + 5) ~/ 6;
+      message = sanitizeCrashText(
+        message,
+        maxLength: cut < message.length ? message.length - cut : 0,
+      );
+    }
+    sanitized = step();
+  }
+  try {
+    sanitized.check();
+    return (step: sanitized, dataDropped: dropped);
+  } on ProtocolException {
+    return (step: null, dataDropped: 0);
+  }
 }
+
+/// A breadcrumb as [sanitizeBreadcrumb] made it: the `step` a trail
+/// carries, or `null` for one the protocol refuses even so, and how many of
+/// its values were left out of the step.
+typedef SanitizedBreadcrumb = ({TypedBreadcrumb? step, int dataDropped});
+
+/// The trail [sanitized] (oldest first, each made by [sanitizeBreadcrumb])
+/// as an event or a report carries it: the refused steps left out, and
+/// then the oldest steps until the trail takes at most [maxBytes]
+/// ([TypedBreadcrumb.trailBytes]); with what went, as [BreadcrumbDrops].
+({List<TypedBreadcrumb> steps, BreadcrumbDrops drops}) sanitizeTrail(
+  Iterable<SanitizedBreadcrumb> sanitized, {
+  required int maxBytes,
+}) {
+  var stepsDropped = 0;
+  final kept = <({TypedBreadcrumb step, int dataDropped, int bytes})>[];
+  for (final (:step, :dataDropped) in sanitized) {
+    if (step == null) {
+      stepsDropped++;
+    } else {
+      kept.add((
+        step: step,
+        dataDropped: dataDropped,
+        bytes: step.encodedBytes,
+      ));
+    }
+  }
+  // `[`, `]` and a comma between two steps, around the steps' own bytes.
+  var bytes = kept.fold(kept.isEmpty ? 2 : kept.length + 1, (sum, item) {
+    return sum + item.bytes;
+  });
+  var first = 0;
+  while (bytes > maxBytes && first < kept.length) {
+    bytes -= kept[first].bytes + (first < kept.length - 1 ? 1 : 0);
+    first++;
+    stepsDropped++;
+  }
+  final steps = kept.skip(first);
+  return (
+    steps: List.unmodifiable([for (final item in steps) item.step]),
+    // A step left out whole counts as a step, not as its values.
+    drops: BreadcrumbDrops(
+      dataDropped: steps.fold(0, (sum, item) => sum + item.dataDropped),
+      stepsDropped: stepsDropped,
+    ),
+  );
+}
+
+/// Whether the data entry [name] → [value] goes out under [strict]: by the
+/// rules of [sanitizeBreadcrumb].
+bool _keepsEntry(String name, Object value, {required bool strict}) =>
+    TypedBreadcrumb.isDataName(name) &&
+    PrivacyPatterns.extraKeyViolation(name) == null &&
+    TypedBreadcrumb.isDataValue(value) &&
+    !(strict && value is String) &&
+    !_holdsMatch(TypedBreadcrumb.dataEntryText(name, value));
+
+/// Whether a redaction pattern matches [text].
+bool _holdsMatch(String text) =>
+    _patterns.any((pattern) => pattern.hasMatch(text));
 
 /// Every round that changes the text turns a match into the replacement,
 /// which no pattern matches, so the fixed point comes within a few rounds; the

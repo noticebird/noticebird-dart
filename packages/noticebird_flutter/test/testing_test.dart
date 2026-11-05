@@ -40,10 +40,7 @@ void main() {
     final event = recorder.events.single;
     expect(event['handled'], isTrue);
     expect((event['tags']! as Map)['component'], '_ListCubit');
-    expect(
-      recorder.client.recentBreadcrumbs.single.data[AllowedTag.component],
-      '_ListCubit',
-    );
+    expect(recorder.client.recentBreadcrumbs.single.action, 'listCubit.change');
   });
 
   group('resetForTesting', () {

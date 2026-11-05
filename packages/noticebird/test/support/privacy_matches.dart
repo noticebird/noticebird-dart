@@ -9,8 +9,10 @@ import 'package:noticebird/noticebird.dart';
 ///
 /// The client's own redaction contract: the fields it redacts — the
 /// message, the stack trace, the route template, tag values, the grouping
-/// key, breadcrumb actions and data, native image names and frame symbols,
-/// and `extra` — hold no such match. They are read together, a value a
+/// key, a breadcrumb's message, action and category and each of its data
+/// entries read as one text (`TypedBreadcrumb.dataEntryText`), native image
+/// names and frame symbols, and `extra` — hold no such match, and no
+/// `extra` key or breadcrumb data name is a [PrivacyViolation] on its own. They are read together, a value a
 /// line, with `extra` encoded as JSON after them, so that no two values
 /// form a match either: a value ending in a credential word does not take
 /// the next one as its secret. The identity (`user`) is sent as the host
@@ -25,8 +27,12 @@ List<String> privacyMatches(Map<String, dynamic> event) {
     ...?(event['tags'] as Map?)?.values,
     ...?event['groupingKey'] as List?,
     for (final crumb in event['breadcrumbs'] as List? ?? const []) ...[
+      crumb['message'],
       crumb['action'],
-      ...?(crumb['data'] as Map?)?.values,
+      crumb['category'],
+      for (final MapEntry(:key, :value)
+          in (crumb['data'] as Map? ?? const {}).entries)
+        TypedBreadcrumb.dataEntryText(key as String, value as Object),
     ],
     if (native != null) ...[
       for (final image in native['images'] as List? ?? const []) image['name'],
@@ -43,6 +49,9 @@ List<String> privacyMatches(Map<String, dynamic> event) {
       ).allMatches(scanned))
         match[0]!,
     ..._forbiddenKeys(event['extra']),
+    for (final crumb in event['breadcrumbs'] as List? ?? const [])
+      for (final name in (crumb['data'] as Map? ?? const {}).keys)
+        if (PrivacyPatterns.extraKeyViolation(name as String) != null) name,
   ];
 }
 
