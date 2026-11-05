@@ -2,8 +2,6 @@ import 'dart:async';
 
 import 'package:noticebird_protocol/noticebird_protocol.dart';
 
-import 'text_sanitizer.dart';
-
 /// The `exception.type` of [error], whose runtime type is named
 /// [runtimeTypeName] (`error.runtimeType.toString()`), cut to the protocol's
 /// [CrashException.maxTypeLength].
@@ -20,7 +18,7 @@ String crashExceptionType(Object error, String runtimeTypeName) {
   final type = runtimeTypeName.startsWith('minified:')
       ? _coreType(error) ?? runtimeTypeName
       : runtimeTypeName;
-  return truncateCrashText(type, CrashException.maxTypeLength);
+  return cutText(type, CrashException.maxTypeLength);
 }
 
 /// The Dart core type [error] is, or null when it is none of them.

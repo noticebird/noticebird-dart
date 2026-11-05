@@ -41,8 +41,14 @@
       "level": "info",
       "data": {
         "route": "/lists/:listId",
-        "from": "/"
+        "from": "/",
+        "items.count": 3,
+        "fromCache": false
       }
+    },
+    {
+      "at": "2026-07-11T10:14:59.500Z",
+      "message": "Synced the list"
     }
   ],
   "groupingKey": [

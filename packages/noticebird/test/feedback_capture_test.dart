@@ -325,18 +325,61 @@ void main() {
       );
       expect(utf8.encode(jsonEncode(report)).length, lessThanOrEqualTo(65536));
       // The steps of the newest 100 that did not fit, the entries the long
-      // steps lost to their 512 bytes, and the login's action and e-mail
-      // flag.
+      // steps lost to their 512 bytes, their messages cut, and the login's
+      // action and e-mail flag.
       final entriesLost = [
         for (final item in trail.take(trail.length - 1))
           4 - (item['data']! as Map).length,
       ].fold(0, (sum, lost) => sum + lost);
       expect(entriesLost, greaterThan(0));
       expect((report['diagnostics']! as Map)['noticebird'], {
-        'dropped_values': (100 - trail.length) + entriesLost + 2,
+        'dropped_values':
+            (100 - trail.length) + entriesLost + (trail.length - 1) + 2,
       });
       expect(reporter.recentBreadcrumbs, hasLength(151));
     });
+
+    test(
+      'the steps a full report leaves out of its trail are counted',
+      () async {
+        final reporter = client();
+        for (var index = 0; index < 100; index++) {
+          reporter.addBreadcrumb(
+            'm' * 200,
+            action: 'step.$index',
+            data: {'value': 'v' * 64},
+            at: _capturedAt.subtract(Duration(seconds: 100 - index)),
+          );
+        }
+
+        // 12 KB of message, 8 KB of user context and 12 KB of diagnostics
+        // leave a 32 KiB trail no room in 64 KiB.
+        final outcome = await capture(
+          reporter,
+          message: '€' * FeedbackReport.maxMessageLength,
+          userContext: {for (var key = 0; key < 30; key++) 'k$key': 'u' * 256},
+          diagnostics: {
+            for (var group = 0; group < 12; group++)
+              'g$group': {
+                for (var value = 0; value < 32; value++) 'v$value': 'x' * 20,
+              },
+          },
+        );
+
+        expect(outcome, isA<FeedbackDelivered>());
+        final report = sent();
+        final trail = report['trail']! as List;
+        expect(
+          utf8.encode(jsonEncode(report)).length,
+          lessThanOrEqualTo(65536),
+        );
+        // About 98 steps fit 32 KiB; the report takes fewer.
+        expect(trail.length, lessThan(96));
+        expect((report['diagnostics']! as Map)['noticebird'], {
+          'dropped_values': 100 - trail.length,
+        });
+      },
+    );
 
     test('a breadcrumb the report refuses is left out alone', () async {
       final reporter = client()

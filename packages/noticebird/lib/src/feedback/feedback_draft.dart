@@ -29,7 +29,7 @@ final class FeedbackInputException implements Exception {
 /// passed and the report refuses is a [FeedbackInputException], and the
 /// trail is cut to fit.
 final class FeedbackDraft {
-  FeedbackDraft._(this._build, this._trail, this.attachment);
+  FeedbackDraft._(this._build, this._trail, this.attachment, this._dropped);
 
   /// Throws a [FeedbackInputException] for a value of the host's the report
   /// refuses: the message redacted and cut to
@@ -45,8 +45,8 @@ final class FeedbackDraft {
   /// [FeedbackAttachmentRef.maxByteLength] bytes is left out; the report's
   /// group [clientNoteGroup] says what went (`dropped_values`,
   /// `screenshot_dropped`), and when the moment was taken
-  /// ([momentTakenAt], `moment_taken_at`). [dropped] is told how many
-  /// diagnostics values went.
+  /// ([momentTakenAt], `moment_taken_at`). [dropped] is told, when the
+  /// report is written ([report]), how many values went in all.
   ///
   /// The message loses its U+0000 characters, which no report string may
   /// hold, before it is redacted and cut.
@@ -56,8 +56,9 @@ final class FeedbackDraft {
   /// sanitized ([sanitizeTrail]), which left out [trailDropped] values and
   /// steps; a step stamped later than the report allows
   /// ([FeedbackReport.checkTrailItem]) is left out too, and [report] keeps
-  /// as many of the newest as fit. What went of the trail counts in the
-  /// note's `dropped_values`, with the diagnostics values.
+  /// as many of the newest as fit. What went of the trail, the steps
+  /// [report] leaves out included, counts in the note's `dropped_values`,
+  /// with the diagnostics values.
   factory FeedbackDraft({
     required String reportId,
     required DateTime createdAt,
@@ -113,18 +114,13 @@ final class FeedbackDraft {
       message.replaceAll('\u0000', ''),
       maxLength: FeedbackReport.maxMessageLength,
     );
-    final typedDiagnostics = sanitizeDiagnostics(
-      context: contextDiagnostics,
-      host: diagnostics ?? const {},
-      notes: {
-        'screenshot_dropped': ?screenshotDropped,
-        'moment_taken_at': ?momentTakenAt?.toUtc(),
-      },
-      droppedBefore: trailDropped + trail.length - keptTrail.length,
-      dropped: dropped,
-    );
-
-    FeedbackReport build(List<TypedBreadcrumb> trail) => FeedbackReport(
+    // Every step given and not carried counts with the rest — one stamped
+    // too late, one [report] leaves out — so the note is made per trail.
+    final given = trail.length;
+    FeedbackReport build(
+      List<TypedBreadcrumb> trail, {
+      void Function(int dropped)? told,
+    }) => FeedbackReport(
       reportId: reportId,
       createdAt: createdAt,
       kind: kind,
@@ -146,7 +142,16 @@ final class FeedbackDraft {
             ),
       userContext: context,
       trail: trail,
-      diagnostics: typedDiagnostics,
+      diagnostics: sanitizeDiagnostics(
+        context: contextDiagnostics,
+        host: diagnostics ?? const {},
+        notes: {
+          'screenshot_dropped': ?screenshotDropped,
+          'moment_taken_at': ?momentTakenAt?.toUtc(),
+        },
+        droppedBefore: trailDropped + given - trail.length,
+        dropped: told,
+      ),
       attachments: [?reference],
     );
 
@@ -170,7 +175,7 @@ final class FeedbackDraft {
       }
     }
 
-    return FeedbackDraft._(build, keptTrail, attachment);
+    return FeedbackDraft._(build, keptTrail, attachment, dropped);
   }
 
   /// What [attempt] answers for the most of the newest of [trail] it takes,
@@ -202,24 +207,31 @@ final class FeedbackDraft {
     return best;
   }
 
-  final FeedbackReport Function(List<TypedBreadcrumb>) _build;
+  final FeedbackReport Function(
+    List<TypedBreadcrumb> trail, {
+    void Function(int dropped)? told,
+  })
+  _build;
   final List<TypedBreadcrumb> _trail;
+  final void Function(int dropped)? _dropped;
 
   /// The screenshot's bytes, copied at capture; `null` without one.
   final Uint8List? attachment;
 
   /// The report with as many of the newest breadcrumbs as fit
-  /// [FeedbackReport.maxEncodedBytes]: the oldest go first.
+  /// [FeedbackReport.maxEncodedBytes]: the oldest go first, and are counted
+  /// in the note's `dropped_values`.
   FeedbackReport report() {
-    FeedbackReport? fitting(List<TypedBreadcrumb> trail) {
+    List<TypedBreadcrumb>? fitting(List<TypedBreadcrumb> trail) {
       try {
-        return _build(trail)..toJson();
+        _build(trail).toJson();
+        return trail;
       } on ProtocolException {
         return null;
       }
     }
 
-    return _fitTrail(_trail, fitting) ?? _build(const []);
+    return _build(_fitTrail(_trail, fitting) ?? const [], told: _dropped);
   }
 
   /// Whether [path] names a value of the host's input rather than of the

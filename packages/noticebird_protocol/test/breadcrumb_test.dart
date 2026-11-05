@@ -15,7 +15,12 @@ void main() {
         'action': 'route.push',
         'category': 'navigation',
         'level': 'info',
-        'data': {'route': '/lists/:listId', 'from': '/'},
+        'data': {
+          'route': '/lists/:listId',
+          'from': '/',
+          'items.count': 3,
+          'fromCache': false,
+        },
       });
     });
 
@@ -58,6 +63,14 @@ void main() {
         'one two',
         'one\u0085two',
         'nul\u0000',
+        'escape\u001B',
+        'del\u007F',
+        'c1\u0090',
+        'zero\u200Bwidth',
+        'bidi\u202Eoverride',
+        'isolate\u2066',
+        'lone \ud83d',
+        'lone \ude00 low',
       ]) {
         refused(
           v6Breadcrumb(message: message),

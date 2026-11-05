@@ -338,7 +338,8 @@ final class BreadcrumbDrops {
   const BreadcrumbDrops({this.dataDropped = 0, this.stepsDropped = 0});
 
   /// Values left out of steps that were kept: a data entry, an action or a
-  /// category the client's checks refused.
+  /// category the client's checks refused, and a message the client cut
+  /// (to its length or to the step's bytes), one per message.
   final int dataDropped;
 
   /// Steps left out whole: refused even after their values went, or past

@@ -36,7 +36,12 @@ TypedBreadcrumb v6Breadcrumb({
   String? action = 'route.push',
   String? category = 'navigation',
   BreadcrumbLevel? level = BreadcrumbLevel.info,
-  Map<String, Object> data = const {'route': '/lists/:listId', 'from': '/'},
+  Map<String, Object> data = const {
+    'route': '/lists/:listId',
+    'from': '/',
+    'items.count': 3,
+    'fromCache': false,
+  },
 }) => TypedBreadcrumb(
   at: DateTime.utc(2026, 7, 11, 10, 14, 59),
   message: message,
@@ -44,6 +49,12 @@ TypedBreadcrumb v6Breadcrumb({
   category: category,
   level: level,
   data: data,
+);
+
+/// The fixture's second step: a time and a message, nothing else.
+final v6MinimalBreadcrumb = TypedBreadcrumb(
+  at: DateTime.utc(2026, 7, 11, 10, 14, 59, 500),
+  message: 'Synced the list',
 );
 
 /// The fixture's event, with any field replaced.
@@ -77,7 +88,7 @@ CrashEvent v6Event({
   user: user,
   tags: tags,
   extra: extra,
-  breadcrumbs: breadcrumbs ?? [v6Breadcrumb()],
+  breadcrumbs: breadcrumbs ?? [v6Breadcrumb(), v6MinimalBreadcrumb],
   nativeCrash: nativeCrash,
   groupingKey: groupingKey,
   breadcrumbDrops: breadcrumbDrops,

@@ -42,6 +42,10 @@ CrashEvent? buildNativeCrashEvent(
               .map((step) => sanitizeBreadcrumb(step, strict: false)),
     maxBytes: CrashEvent.maxBreadcrumbsBytes,
   );
+  // What went in the run, and since, counts with what goes now.
+  final drops = strict || !context.withTrail
+      ? trail.drops
+      : trail.drops + engine.breadcrumbDrops;
   return CrashEvent(
     eventId: nativeCrashEventId(record.recordId),
     occurredAt: context.occurredAt,
@@ -60,7 +64,7 @@ CrashEvent? buildNativeCrashEvent(
     sessionId: context.sessionId,
     tags: {if (foreground != null) AllowedTag.foreground: foreground},
     breadcrumbs: trail.steps,
-    breadcrumbDrops: trail.drops.isEmpty ? null : trail.drops,
+    breadcrumbDrops: drops.isEmpty ? null : drops,
     nativeCrash: NativeCrashInfo(
       kind: kind,
       source: record.source,
@@ -102,7 +106,7 @@ String nativeExceptionType(NativeCrashRecord record) {
     '',
   );
   if (exceptionClass != null && exceptionClass.isNotEmpty) {
-    return truncateCrashText(exceptionClass, CrashException.maxTypeLength);
+    return cutText(exceptionClass, CrashException.maxTypeLength);
   }
   return switch (record.kind) {
     NativeCrashKind.crash => switch ((record.machException, record.signal)) {

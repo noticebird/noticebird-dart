@@ -15,7 +15,8 @@ Breaking changes:
 - `NoticebirdNavigatorObserver` writes `Opened page`, `Closed dialog`, …
   (actions `route.push`, `route.pop`, `route.replace`, `route.remove`,
   category `navigation`), with the route on top after the step as `route`
-  and the one before it as `from`.
+  and the one before it as `from`, for every step alike: a route removed
+  or replaced below the top leaves both the top.
 
 Changes:
 

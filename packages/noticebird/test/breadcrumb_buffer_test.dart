@@ -227,6 +227,21 @@ void main() {
     },
   );
 
+  test('a message cut for the buffer or the event never splits a pair, '
+      'and the event goes', () async {
+    final reporter = client(config(breadcrumbBuffer: 10));
+    // 1201 code units: the 1000th, and the 200th, the first half of a pair.
+    reporter.addBreadcrumb('a${'😀' * 600}', action: 'emoji.typed');
+
+    final buffered = reporter.recentBreadcrumbs.single.message;
+    expect(buffered, 'a${'😀' * 499}');
+    expect(hasUnpairedSurrogate(buffered), isFalse);
+
+    await capture(reporter, 'boom');
+    final step = (transport.events.single['breadcrumbs'] as List).single;
+    expect((step as Map)['message'], 'a${'😀' * 99}');
+  });
+
   test('the buffer keeps a step as given; the event sanitizes it', () async {
     final reporter = client(config(breadcrumbBuffer: 10));
     final at = DateTime.utc(2026, 10, 13, 9, 59);

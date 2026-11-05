@@ -92,6 +92,8 @@ void main() {
           'row': uuid,
           // Nine digits pass every pattern: only the name gives them away.
           'bsn': 123456789,
+          // 0612345678 as an int: nine digits, below the phone pattern.
+          'phone': 612345678,
           'payoutIban': 'NL91ABNA0417164300',
           'phase': 'load',
           'attempt': 2,
@@ -110,7 +112,7 @@ void main() {
       'phase': 'load',
       'attempt': 2,
     });
-    expect(event['breadcrumbDrops'], {'dataDropped': 7, 'stepsDropped': 0});
+    expect(event['breadcrumbDrops'], {'dataDropped': 8, 'stepsDropped': 0});
   });
 
   group('every value a redaction pattern matches is redacted', () {

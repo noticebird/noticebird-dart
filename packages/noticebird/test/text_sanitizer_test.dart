@@ -47,12 +47,48 @@ void main() {
       expect(dataDropped, 0);
     });
 
-    test('the message is redacted and cut to 200 characters', () {
-      final (:step, dataDropped: _) = sanitized(
+    test('a control, zero-width or bidirectional character in the message '
+        'becomes a space', () {
+      for (final control in [
+        '\u0001',
+        '\u001B',
+        '\u007F',
+        '\u0090',
+        '\u200B',
+        '\u200F',
+        '\u202E',
+        '\u2066',
+      ]) {
+        final (:step, :dataDropped) = sanitized(crumb('a${control}b'));
+        expect(step!.message, 'a b', reason: control.codeUnits.toString());
+        expect(dataDropped, 0);
+      }
+    });
+
+    test('the message is redacted and cut to 200 characters, the cut '
+        'counted once', () {
+      final (:step, :dataDropped) = sanitized(
         crumb('Invited person@example.com ${'x' * 300}'),
       );
       expect(step!.message, startsWith('Invited [REDACTED] '));
       expect(step.message.length, TypedBreadcrumb.maxMessageLength);
+      expect(dataDropped, 1);
+      expect(sanitized(crumb('x' * 200)).dataDropped, 0);
+    });
+
+    test('a cut never ends inside a surrogate pair', () {
+      // 'a' and 100 emoji: 201 code units, whose 200th is the first half of
+      // a pair.
+      final (:step, :dataDropped) = sanitized(crumb('a${'😀' * 100}'));
+      expect(step, isNotNull);
+      expect(step!.message, 'a${'😀' * 99}');
+      expect(hasUnpairedSurrogate(step.message), isFalse);
+      expect(dataDropped, 1);
+    });
+
+    test('an unpaired surrogate in a message becomes U+FFFD', () {
+      final (:step, dataDropped: _) = sanitized(crumb('a\ud83db\ude00c'));
+      expect(step!.message, 'a\uFFFDb\uFFFDc');
     });
 
     test('a step whose message is left empty is refused, its values not '
@@ -152,13 +188,13 @@ void main() {
         greaterThan(TypedBreadcrumb.maxEncodedBytes),
       );
 
-      // A message of 200 characters of six bytes each (`\u0001`) is over
-      // 512 bytes alone: every entry goes, then its end.
+      // A message of 200 characters of three bytes each (`€`) is over 512
+      // bytes alone: every entry goes, then its end, the cut counted once.
       final messageToo = sanitized(
-        crumb('\u0001' * 200, data: const {'phase': 'load'}),
+        crumb('€' * 200, data: const {'phase': 'load'}),
       );
       expect(messageToo.step!.data, isEmpty);
-      expect(messageToo.dataDropped, 1);
+      expect(messageToo.dataDropped, 2);
       expect(messageToo.step!.message.length, lessThan(200));
       expect(
         messageToo.step!.encodedBytes,

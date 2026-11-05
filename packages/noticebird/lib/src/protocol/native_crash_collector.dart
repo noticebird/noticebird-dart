@@ -62,12 +62,20 @@ final class NativeRunInfo {
 /// What a native report of this run would carry of its context: the route
 /// template and the breadcrumb trail as they are now.
 final class NativeRunState {
-  const NativeRunState({this.routeTemplate, this.breadcrumbs = const []});
+  const NativeRunState({
+    this.routeTemplate,
+    this.breadcrumbs = const [],
+    this.breadcrumbDrops = const BreadcrumbDrops(),
+  });
 
   final String? routeTemplate;
 
   /// Empty under [CrashPrivacyProfile.regulatedStrict].
   final List<TypedBreadcrumb> breadcrumbs;
+
+  /// What the client left out of [breadcrumbs] when it sanitized them: an
+  /// event of this run carries it, with what the ledger left out after.
+  final BreadcrumbDrops breadcrumbDrops;
 }
 
 /// A report the operating system kept about an earlier run: bounded and
@@ -185,6 +193,7 @@ final class NativeEngineRecord {
     this.routeTemplate,
     this.foreground,
     this.breadcrumbs = const [],
+    this.breadcrumbDrops = const BreadcrumbDrops(),
   });
 
   final String sessionId;
@@ -197,4 +206,9 @@ final class NativeEngineRecord {
   final String? routeTemplate;
   final bool? foreground;
   final List<TypedBreadcrumb> breadcrumbs;
+
+  /// What was left out of [breadcrumbs] in the run and since: what the
+  /// client left out when it sanitized them, the oldest steps the ledger
+  /// left out to keep its size, and the steps that no longer read.
+  final BreadcrumbDrops breadcrumbDrops;
 }

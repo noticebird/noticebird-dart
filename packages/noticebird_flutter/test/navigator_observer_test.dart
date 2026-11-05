@@ -84,7 +84,7 @@ void main() {
       ('route.push', '/lists/:listId', '/home'),
       ('route.replace', '/lists/:listId/items/:itemId', '/lists/:listId'),
       ('route.pop', '/home', '/lists/:listId/items/:itemId'),
-      ('route.remove', '/home', null),
+      ('route.remove', null, '/home'),
     ]);
     expect(
       [for (final crumb in client.recentBreadcrumbs) crumb.message],
@@ -100,6 +100,36 @@ void main() {
       expect(crumb.category, 'navigation');
       expect(crumb.level, BreadcrumbLevel.info);
     }
+  });
+
+  test('a step below the top leaves route and from both the top', () {
+    final observer = NoticebirdNavigatorObserver(client: client);
+    final home = _Route('/home');
+    final list = _Route('/lists/:listId');
+    final detail = _Route('/lists/:listId/items/:itemId');
+    final other = _Route('/settings');
+
+    observer
+      ..didPush(home, null)
+      ..didPush(list, home)
+      ..didPush(detail, list)
+      ..didReplace(newRoute: other, oldRoute: list)
+      ..didRemove(home, null)
+      ..didRemove(detail, other);
+
+    expect(trail().skip(3), [
+      (
+        'route.replace',
+        '/lists/:listId/items/:itemId',
+        '/lists/:listId/items/:itemId',
+      ),
+      (
+        'route.remove',
+        '/lists/:listId/items/:itemId',
+        '/lists/:listId/items/:itemId',
+      ),
+      ('route.remove', '/settings', '/lists/:listId/items/:itemId'),
+    ]);
   });
 
   test('the message names the kind of route', () {

@@ -3,7 +3,10 @@
 - Moves with `noticebird` 0.8.0 and `noticebird_protocol` 0.8.0. The run
   ledger stores breadcrumbs of protocol v2; its engine file keeps
   `version: 1`. A crumb a run of 0.7.0 recorded does not read, so the
-  crash of such a run is reported with an empty trail.
+  crash of such a run is reported with an empty trail, each such crumb
+  counted in its `breadcrumbDrops`. The engine file keeps what the client
+  and the ledger left out of the run's trail (`breadcrumbDrops`), and the
+  crash carries it.
 
 ## 0.7.0
 

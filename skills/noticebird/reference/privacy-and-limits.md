@@ -34,8 +34,9 @@ the trail of a feedback report) and keeps the other defaults.
 | `setUser` (`CrashUser`) | at least one field; `id` / `email` / `name` / `ipAddress` 1–100 / 1–254 / 1–200 / 1–45 characters | the user is left out |
 | `setUserId` | — | the client's own stable form of the id, not a protocol rule: characters outside `[A-Za-z0-9_-]` are stripped, the rest cut to 100 |
 | `tags` | `AllowedTag` keys; a string, a finite number or a boolean | strings are redacted and cut to 100 characters (ellipsis included); a NaN or infinite number leaves the tag out alone |
-| breadcrumb `action` | `^[a-z][a-z0-9_.-]*$`, at most 100 characters | the breadcrumb is left out alone: of the event, of a feedback report's trail and of a native crash's trail |
-| breadcrumb `data` | `AllowedTag` keys; a string, a finite number or a boolean | strings are redacted and cut to 100 characters; a NaN or infinite number leaves the breadcrumb out alone |
+| breadcrumb `message` | one line of 1–200 characters, no control character, at most 512 bytes for the whole step | line breaks and control characters become spaces; redacted, then cut to 200 characters and, past 512 bytes, further; a cut counts as one dropped value |
+| breadcrumb `action` / `category` | `^[a-z][A-Za-z0-9_.-]*$`, at most 100 / `^[a-z][a-z0-9_]*$`, at most 32 | left out alone, and counted; the step is kept |
+| breadcrumb `data` | at most 16 entries; names `^[a-z][A-Za-z0-9_]*(\.[a-z][A-Za-z0-9_]*)*$`, at most 48; a finite number, a boolean or a string of at most 64 `[A-Za-z0-9_.:/+-]` | an entry whose name or value the protocol refuses, whose name names a credential, health measure or identity, or that reads as one together with its value (`name: value`), is left out alone and counted; under `regulatedStrict` every string |
 | `groupingKey` | at most 8 parts of at most 100 characters | each part redacted and cut, empty parts left out, the first 8 kept; none left is no key |
 | `extra` | below | left out or cut, silently |
 | the whole event | 65,536 bytes (64 KiB) of canonical JSON | the event is `dropped`; a large `extra` is the usual cause |
@@ -73,8 +74,8 @@ keeps the values as recorded). Each match becomes `[REDACTED]`:
 - `glucose`, `ecg`, `electrocardiogram`, `heart rate`, `blood pressure`, `spo2`,
   `diagnosis`, `observation` followed by `:` or `=`
 
-The patterns are built from the protocol's `PrivacyPatterns`. A breadcrumb `action` that
-matches one becomes `redacted`. A native image name, whose characters allow no
+The patterns are built from the protocol's `PrivacyPatterns`. A breadcrumb `action` or
+`category` that matches one is left out of its step, and counted. A native image name, whose characters allow no
 `[REDACTED]`, has each match replaced by `redacted`. The route template is redacted when
 it is set, then cut to its 200 characters.
 
@@ -122,7 +123,8 @@ type's name instead, and any other type keeps its minified name.
 | `sanitizedMessage` | sanitized `toString()` | exception type only |
 | `extra` | sanitized | `{}` |
 | `user` | filtered by `CrashPiiConfig` | `null` |
-| tag and breadcrumb strings | redacted and shortened to 100 chars in an event (ellipsis included); `recentBreadcrumbs` keeps them as recorded, up to 1000 | the same |
+| tag strings | redacted and shortened to 100 chars in an event (ellipsis included) | the same |
+| breadcrumb message and data | the message redacted and cut to 200 chars, data per entry (above); `recentBreadcrumbs` keeps a step as recorded, its message up to 1000 | data strings left out |
 | `groupingKey` | each part redacted and cut to 100 chars, empty parts left out, the first 8 kept; none left is no key | the same |
 | offline store | any | must report `isEncrypted: true` or the config throws |
 
@@ -153,9 +155,9 @@ route template, a user field, a trail item) is left out.
 | `relatedEventId` | a UUID of any version in the 8-4-4-4-12 hex shape, such as a `CaptureResult.eventId`; the client lowercases it |
 | screenshot | one, PNG, JPEG or WebP by its bytes' file signature, at most 5 MiB (5,242,880 bytes); bytes of another type, or more, are left out (`noticebird.screenshot_dropped`) |
 | `diagnostics` | at most 16 groups of at most 32 values, keys `^[a-z][a-zA-Z0-9_]{0,63}$`, at most 16 KiB (16,384 bytes) encoded; a value is a boolean, a finite number, a UTC timestamp, a lowercase UUID v4 or a token of 1–64 characters `[A-Za-z0-9_.:+/-]`; an enum is sent as its name, a `DateTime` in UTC. The context groups (the `blocs` group of `noticebird_flutter`) come first, then the host's (the moment's `diagnostics`), whose groups of a context group's name are left out; one group's room is kept for the note. A group or value that breaks a rule is left out and counted (`noticebird.dropped_values`), and the last groups go until the whole fits; a value is never shortened |
-| the note group `noticebird` | the client's own: `dropped_values` (how many diagnostics values were left out), `screenshot_dropped`, `moment_taken_at` (when a moment passed in was taken, if before the capture); a host's group of that name is left out |
+| the note group `noticebird` | the client's own: `dropped_values` (how many diagnostics values, trail values and trail steps were left out), `screenshot_dropped`, `moment_taken_at` (when a moment passed in was taken, if before the capture); a host's group of that name is left out |
 | locale (`NoticebirdConfig.locale`) | at most 35 characters, a language tag `^[A-Za-z]{2,3}([_-][A-Za-z0-9]{2,8}){0,3}$` (`nl-NL`); another is left out |
-| trail | the newest 100 breadcrumbs of the buffer, redacted as in an event; a breadcrumb the report refuses is left out alone, and the oldest go first until the report fits |
+| trail | the newest 100 breadcrumbs of the buffer, sanitized as in an event, at most 32 KiB; a breadcrumb the report refuses is left out alone, and the oldest go first until the trail and then the report fit; each counts in `noticebird.dropped_values` |
 | whole report | 65,536 bytes (64 KiB) encoded |
 | submission window | the platform takes a report up to 7 days after it was captured, and none whose capture time is more than 5 minutes ahead of its clock: `FeedbackRejected(clock)`. A kept report older than 7 days is removed unsent (`FeedbackRejection.expired`) |
 

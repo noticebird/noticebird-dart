@@ -123,6 +123,7 @@ List<NativeRecordedRun> _ledger({
   String crashedBuild = '130',
   String uiRoute = '/lists/:listId',
   List<TypedBreadcrumb>? uiTrail,
+  BreadcrumbDrops uiDrops = const BreadcrumbDrops(),
 }) => [
   NativeRecordedRun(
     runId: 'run-crashed',
@@ -150,6 +151,7 @@ List<NativeRecordedRun> _ledger({
               breadcrumbs:
                   uiTrail ??
                   [_crumb('route.push'), _crumb('list.open', minute: 1)],
+              breadcrumbDrops: uiDrops,
             ),
           ]
         : const [],
@@ -445,6 +447,29 @@ void main() {
     expect(event.breadcrumbs.single.message, 'Opened /lists/[REDACTED]');
     expect(event.breadcrumbs.single.data, {'route': '/lists/:id'});
     expect(event.breadcrumbDrops, const BreadcrumbDrops(dataDropped: 1));
+  });
+
+  test('what the run left out of its trail counts with what goes now', () {
+    final event = _build(
+      _record(),
+      _ledger(
+        uiTrail: [
+          _crumb('route.push'),
+          TypedBreadcrumb(
+            at: _t0,
+            message: 'Opened',
+            data: const {'password': 'x'},
+          ),
+        ],
+        uiDrops: const BreadcrumbDrops(dataDropped: 2, stepsDropped: 3),
+      ),
+      privacyProfile: CrashPrivacyProfile.privacyDefault,
+    )!;
+
+    expect(
+      event.breadcrumbDrops,
+      const BreadcrumbDrops(dataDropped: 3, stepsDropped: 3),
+    );
   });
 
   test('a breadcrumb the protocol refuses is left out alone, not the '
@@ -1101,6 +1126,11 @@ void main() {
       expect(kept.message, 'Opened /lists/[REDACTED]');
       expect(kept.data, {'route': '/lists/:id'});
       expect(reporter.recentBreadcrumbs.single.data['list'], id);
+      expect(
+        collector.updates.last.breadcrumbDrops,
+        const BreadcrumbDrops(dataDropped: 1),
+        reason: 'what the run left out travels with its trail',
+      );
     });
 
     test('a breadcrumb the protocol refuses is left out of the run state '

@@ -194,7 +194,7 @@ final class NoticebirdClient {
       _breadcrumbs.add(
         TypedBreadcrumb(
           at: (at ?? _clock()).toUtc(),
-          message: truncateCrashText(message, maxBufferedMessageLength),
+          message: cutText(message, maxBufferedMessageLength),
           action: action,
           category: category,
           level: level,
@@ -260,7 +260,7 @@ final class NoticebirdClient {
       // content. Changing the form would split an account's reports over two
       // ids, so it stays. A UUID or a numeric id stays intact — the free-text
       // sanitizer used to turn every UUID into `REDACTED`.
-      final sanitized = truncateCrashText(
+      final sanitized = cutText(
         userId.replaceAll(RegExp(r'[^A-Za-z0-9_-]'), ''),
         CrashUser.maxIdLength,
       );
@@ -1010,13 +1010,15 @@ final class NoticebirdClient {
     final collector = _config.nativeCrashes;
     if (collector == null) return;
     try {
+      final trail =
+          _config.privacyProfile == CrashPrivacyProfile.regulatedStrict
+          ? null
+          : _eventBreadcrumbs();
       collector.update(
         NativeRunState(
           routeTemplate: _routeTemplate,
-          breadcrumbs:
-              _config.privacyProfile == CrashPrivacyProfile.regulatedStrict
-              ? const []
-              : _eventBreadcrumbs().steps,
+          breadcrumbs: trail?.steps ?? const [],
+          breadcrumbDrops: trail?.drops ?? const BreadcrumbDrops(),
         ),
       );
     } catch (_) {
@@ -1107,7 +1109,7 @@ final class NoticebirdClient {
             error.toString(),
             maxLength: CrashException.maxMessageLength,
           );
-    final safeStack = truncateCrashText(
+    final safeStack = cutText(
       _sanitizeStack(stackTrace.toString()),
       CrashException.maxStackTraceLength,
     );

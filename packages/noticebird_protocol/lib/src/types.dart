@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'canonical_json.dart';
 import 'checks.dart';
 import 'protocol_exception.dart';
+import 'text.dart';
 
 enum CrashSeverity { debug, info, warning, error, fatal }
 
@@ -192,7 +193,7 @@ bool isTagValue(TagScalar value) => switch (value) {
 /// scalars have no length to clamp.
 TagScalar clampTagValue(TagScalar value, {int maxLength = maxTagValueLength}) {
   if (value is! String || value.length <= maxLength) return value;
-  return '${value.substring(0, maxLength - 1)}…';
+  return '${cutText(value, maxLength - 1)}…';
 }
 
 /// How much a breadcrumb matters. Absent, a breadcrumb has none and reads as
@@ -231,7 +232,8 @@ final class TypedBreadcrumb {
   final DateTime at;
 
   /// One line a human reads: 1 to [maxMessageLength] characters, without a
-  /// line break ([lineBreakPattern]) or U+0000.
+  /// line break ([lineBreakPattern]), a control character
+  /// ([controlPattern]) or an unpaired surrogate ([hasUnpairedSurrogate]).
   final String message;
 
   /// A technical id of the kind of step, such as `route.push` or
@@ -256,6 +258,15 @@ final class TypedBreadcrumb {
   /// A line break, which a message never holds: the client turns each into
   /// a space.
   static final lineBreakPattern = RegExp('\r\n|[\n\r\u000B\u000C\u0085  ]');
+
+  /// A character a message never holds: a C0 or C1 control (a line break
+  /// among them), a zero-width character (U+200B–U+200F) or a
+  /// bidirectional override or isolate (U+202A–U+202E, U+2066–U+2069),
+  /// which hide or reorder what a reader sees. The client turns each into a
+  /// space, U+0000 excepted, which it leaves out.
+  static final controlPattern = RegExp(
+    r'[\u0000-\u001F\u007F-\u009F\u200B-\u200F\u202A-\u202E\u2066-\u2069]',
+  );
 
   static const maxActionLength = 100;
 
@@ -336,11 +347,19 @@ final class TypedBreadcrumb {
   /// above, then the [maxEncodedBytes] of its encoding.
   void check() {
     checkText(message, r'$.breadcrumbs[].message', maxLength: maxMessageLength);
-    if (lineBreakPattern.hasMatch(message) || message.contains('\u0000')) {
+    if (lineBreakPattern.hasMatch(message) ||
+        controlPattern.hasMatch(message)) {
       throw const ProtocolException(
         ProtocolViolation.invalidValue,
         r'$.breadcrumbs[].message',
-        'A message is one line',
+        'A message is one line, without control characters',
+      );
+    }
+    if (hasUnpairedSurrogate(message)) {
+      throw const ProtocolException(
+        ProtocolViolation.invalidValue,
+        r'$.breadcrumbs[].message',
+        'A message holds no unpaired surrogate',
       );
     }
     if (action case final action?) {

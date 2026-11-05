@@ -83,8 +83,8 @@ abstract final class PrivacyPatterns {
   /// so `User_ID`, `user-id` and `userId` read alike. A key that contains a
   /// credential word is a [PrivacyViolation.secret], one that contains a
   /// health measure (or `medical`) a [PrivacyViolation.medicalData], and one
-  /// that is `name`, contains an identity (`email`, `userid`, `passport`,
-  /// `nationalid`, …) or has a short personal number as a word of its own
+  /// that is `name` or `mobile`, contains an identity (`email`, `userid`,
+  /// `phone`, `passport`, `nationalid`, …) or has a short personal number as a word of its own
   /// (`bsn`, `ssn`, `iban`: `customerBsn`, `ssn_last4`, `IBAN`, but not
   /// `className`) a [PrivacyViolation.identifier]. Words are split at
   /// anything outside `A-Za-z0-9` and where a capital starts a word.
@@ -127,7 +127,13 @@ abstract final class PrivacyPatterns {
     'nationalid',
     'passport',
     'socialsecurity',
+    'phone',
+    'mobilenumber',
   ];
+
+  // Identities only as the whole key: `mobile` names a phone number, but
+  // `isMobile` a layout.
+  static const _identifierNames = {'name', 'mobile'};
 
   // Too short to look for inside a key (`className` holds `ssn`): a word of
   // the key's own.
@@ -150,7 +156,7 @@ bool _isKeyOf(PrivacyViolation violation, String key) {
       normalized.contains,
     ),
     PrivacyViolation.identifier =>
-      normalized == 'name' ||
+      PrivacyPatterns._identifierNames.contains(normalized) ||
           PrivacyPatterns._identifierKeys.any(normalized.contains) ||
           _keyWords
               .allMatches(key)

@@ -463,7 +463,7 @@ void main() {
 
   test('a run noticebird 0.7.0 recorded, its trail of the shape before '
       'protocol v2 of a breadcrumb, still reports its crash, with an empty '
-      'trail', () async {
+      'trail, the step it lost counted', () async {
     native.writeRun(
       'b' * 32,
       1790323200000,
@@ -483,6 +483,6 @@ void main() {
     final event = await deliveredEvent();
 
     expect(event, isNot(contains('breadcrumbs')));
-    expect(event, isNot(contains('breadcrumbDrops')));
+    expect(event['breadcrumbDrops'], {'dataDropped': 0, 'stepsDropped': 1});
   });
 }

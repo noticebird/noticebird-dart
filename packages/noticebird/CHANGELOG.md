@@ -18,8 +18,14 @@ Breaking changes:
   the step kept; under `regulatedStrict` every data string is left out. A
   step over 512 bytes loses its last data entries first, then the end of
   its message; a trail over its budget loses its oldest steps. What went
-  is counted: an event's `breadcrumbDrops`, a report's
-  `noticebird.dropped_values`.
+  is counted — a cut message as one value, the steps a feedback report
+  leaves out to fit 64 KiB too: an event's `breadcrumbDrops`, a report's
+  `noticebird.dropped_values`. A control, zero-width or bidirectional
+  character in a message becomes a space; a cut never splits a surrogate
+  pair, and an unpaired surrogate in a sanitized text becomes U+FFFD.
+- `NativeRunState.breadcrumbDrops` and `NativeEngineRecord.breadcrumbDrops`:
+  what a run left out of its trail reaches its native crash's
+  `breadcrumbDrops`.
 
 Changes:
 

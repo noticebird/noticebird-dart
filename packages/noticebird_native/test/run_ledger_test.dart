@@ -158,6 +158,41 @@ void main() {
     expect(file.lengthSync(), lessThanOrEqualTo(RunLedger.maxEngineFileBytes));
     expect(crumbs.length, lessThan(50));
     expect((crumbs.last as Map)['action'], 'tap.button_49');
+    expect(json['breadcrumbDrops'], {
+      'dataDropped': 0,
+      'stepsDropped': 50 - crumbs.length,
+    });
+  });
+
+  test('what the client left out of the trail is kept with it, and read '
+      'back', () {
+    final entry = ledger()..recordStart();
+    entry
+      ..update(
+        NativeRunState(
+          breadcrumbs: [_crumb(1)],
+          breadcrumbDrops: const BreadcrumbDrops(
+            dataDropped: 2,
+            stepsDropped: 1,
+          ),
+        ),
+      )
+      ..flush();
+
+    expect(engineJson('run-current', 'e1')['breadcrumbDrops'], {
+      'dataDropped': 2,
+      'stepsDropped': 1,
+    });
+    writeRun('run-current', startedAtMs: 1000);
+    final engine = readRunLedger(
+      root,
+      currentRunId: 'run-current',
+      includeDebugBuilds: false,
+    ).single.engines.single;
+    expect(
+      engine.breadcrumbDrops,
+      const BreadcrumbDrops(dataDropped: 2, stepsDropped: 1),
+    );
   });
 
   test('regulatedStrict never persists a trail', () {
@@ -169,6 +204,7 @@ void main() {
 
     final json = engineJson('run-current', 'e1');
     expect(json['breadcrumbs'], isEmpty);
+    expect(json, isNot(contains('breadcrumbDrops')));
     expect(json['routeTemplate'], '/home');
   });
 
@@ -244,6 +280,11 @@ void main() {
       runs.single.engines.single.breadcrumbs.single.action,
       'tap.button_1',
     );
+    expect(
+      runs.single.engines.single.breadcrumbDrops,
+      const BreadcrumbDrops(stepsDropped: 3),
+      reason: 'a crumb that does not read is a step left out',
+    );
   });
 
   test('a ledger noticebird 0.7.0 wrote reads as its run with an empty '
@@ -280,6 +321,7 @@ void main() {
     expect(engine.sessionId, 'run_0000000000000000');
     expect(engine.routeTemplate, '/home');
     expect(engine.breadcrumbs, isEmpty);
+    expect(engine.breadcrumbDrops, const BreadcrumbDrops(stepsDropped: 1));
 
     ledger()
       ..recordStart()

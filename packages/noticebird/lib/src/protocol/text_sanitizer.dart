@@ -2,22 +2,24 @@ import 'package:noticebird_protocol/noticebird_protocol.dart';
 
 /// Redacts from technical free text what [PrivacyPatterns] match — e-mail
 /// addresses, JWTs, credentials, UUIDs, phone-number-like digit runs, IPv4
-/// addresses and health values — and cuts the result to [maxLength].
-/// [replacement] is as in [redactCrashText].
+/// addresses and health values — and cuts the result to [maxLength], never
+/// inside a surrogate pair ([cutText]). A surrogate that is not half of a
+/// pair, which no JSON store takes, becomes U+FFFD first
+/// ([replaceUnpairedSurrogates]). [replacement] is as in [redactCrashText].
 String sanitizeCrashText(
   String source, {
   required int maxLength,
   String replacement = _redacted,
 }) {
-  final value = redactCrashText(source, replacement: replacement);
+  final value = redactCrashText(
+    replaceUnpairedSurrogates(source),
+    replacement: replacement,
+  );
   if (value.length <= maxLength) return value;
   // A cut can end the text on a credential keyword; its new end is redacted
   // too, and a redaction that outgrows the limit is cut inside [replacement].
-  return truncateCrashText(
-    redactCrashText(
-      truncateCrashText(value, maxLength),
-      replacement: replacement,
-    ),
+  return cutText(
+    redactCrashText(cutText(value, maxLength), replacement: replacement),
     maxLength,
   );
 }
@@ -87,7 +89,7 @@ String respellSymbol(String symbol) {
     (match) => match[0]!.replaceAll('.', '_'),
   );
   if (_endsInCredentialWord.hasMatch(safe)) {
-    safe = '${truncateCrashText(safe, NativeFrame.maxSymbolLength - 1)}_';
+    safe = '${cutText(safe, NativeFrame.maxSymbolLength - 1)}_';
   }
   return safe.isEmpty ? '_' : safe;
 }
@@ -96,10 +98,6 @@ String respellSymbol(String symbol) {
 /// number, cut to its first nine.
 String shortenDigitRuns(String value) =>
     value.replaceAllMapped(_longDigitRun, (match) => match[0]!.substring(0, 9));
-
-/// [value] cut to at most [maxLength] characters.
-String truncateCrashText(String value, int maxLength) =>
-    value.length <= maxLength ? value : value.substring(0, maxLength);
 
 /// [value] as an event carries it: a string redacted and shortened to the
 /// protocol's [maxTagValueLength], any other scalar as it is.
@@ -127,9 +125,10 @@ List<String>? sanitizeGroupingKey(List<String> groupingKey) {
 /// such as a message left empty. A bad breadcrumb costs only itself, a bad
 /// value only itself, never the event or the report that carries the trail.
 ///
-/// - The message's line breaks become spaces and its U+0000 characters go;
+/// - The message's U+0000 characters go, and its line breaks and other
+///   control characters ([TypedBreadcrumb.controlPattern]) become spaces;
 ///   it is redacted ([redactCrashText]) and cut to
-///   [TypedBreadcrumb.maxMessageLength].
+///   [TypedBreadcrumb.maxMessageLength], never inside a surrogate pair.
 /// - An action or a category outside its pattern, or one a redaction
 ///   pattern matches (it names an id or a credential), is left out: the
 ///   step is kept without it.
@@ -145,8 +144,9 @@ List<String>? sanitizeGroupingKey(List<String> groupingKey) {
 ///   entries first, in the order they were given, and then the end of its
 ///   message, until it fits.
 ///
-/// Every value left out of a kept step counts in `dataDropped`; the end cut
-/// off a message does not.
+/// Every value left out of a kept step counts in `dataDropped`, and so does
+/// a message that was cut, once, whether to its length or to the step's
+/// bytes.
 SanitizedBreadcrumb sanitizeBreadcrumb(
   TypedBreadcrumb breadcrumb, {
   required bool strict,
@@ -182,12 +182,17 @@ SanitizedBreadcrumb sanitizeBreadcrumb(
       dropped++;
     }
   }
+  final oneLine = breadcrumb.message
+      .replaceAll('\u0000', '')
+      .replaceAll(TypedBreadcrumb.lineBreakPattern, ' ')
+      .replaceAll(TypedBreadcrumb.controlPattern, ' ');
   var message = sanitizeCrashText(
-    breadcrumb.message
-        .replaceAll(TypedBreadcrumb.lineBreakPattern, ' ')
-        .replaceAll('\u0000', ''),
+    oneLine,
     maxLength: TypedBreadcrumb.maxMessageLength,
   );
+  var messageCut =
+      redactCrashText(replaceUnpairedSurrogates(oneLine)).length >
+      TypedBreadcrumb.maxMessageLength;
   TypedBreadcrumb step() => TypedBreadcrumb(
     at: breadcrumb.at.toUtc(),
     message: message,
@@ -207,9 +212,10 @@ SanitizedBreadcrumb sanitizeBreadcrumb(
       data.remove(data.keys.last);
       dropped++;
     } else {
-      // A character takes at most six bytes encoded (`\u0001`), so at
-      // least this many go.
-      final cut = (over + 5) ~/ 6;
+      // A character takes at most three bytes encoded (no control is left
+      // to take six), so at least this many go.
+      final cut = (over + 2) ~/ 3;
+      messageCut = true;
       message = sanitizeCrashText(
         message,
         maxLength: cut < message.length ? message.length - cut : 0,
@@ -219,7 +225,7 @@ SanitizedBreadcrumb sanitizeBreadcrumb(
   }
   try {
     sanitized.check();
-    return (step: sanitized, dataDropped: dropped);
+    return (step: sanitized, dataDropped: dropped + (messageCut ? 1 : 0));
   } on ProtocolException {
     return (step: null, dataDropped: 0);
   }

@@ -10,10 +10,13 @@ import 'package:noticebird/noticebird.dart';
 /// popup` (a page is a `PageRoute`, a dialog a `RawDialogRoute`, a popup
 /// any other `PopupRoute`, such as a sheet or a menu; anything else a
 /// route) — with the action `route.push`, `route.pop`, `route.replace` or
-/// `route.remove`, and as data the route on top after the step (`route`)
-/// and the one on top before it (`from`), each by its name; a removed
-/// route is `route` alone. A route is named once, when it appears, and
-/// keeps that name until it goes:
+/// `route.remove`, and as data the route on top of the navigator after the
+/// step (`route`) and the one on top before it (`from`), each by its name,
+/// for every step alike. A step below the top — a route removed or
+/// replaced under another — leaves the top as it was, so `route` and
+/// `from` are the same; a step that leaves no route on top has no `route`.
+/// A route is named once, when it appears, and keeps that name until it
+/// goes:
 ///
 /// - by [describe], when the host gives one and it answers a name: the place
 ///   for a router's path pattern, which only the host's router knows;
@@ -78,21 +81,23 @@ class NoticebirdNavigatorObserver extends NavigatorObserver {
 
   @override
   void didRemove(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    final from = _stack.lastOrNull ?? route;
     _stack.remove(route);
-    _note('remove', 'Removed', route, top: route);
+    _note('remove', 'Removed', route, top: _stack.lastOrNull, from: from);
   }
 
   @override
   void didReplace({Route<dynamic>? newRoute, Route<dynamic>? oldRoute}) {
     if (newRoute == null) return;
     _names[newRoute] = _locate(newRoute);
+    final from = _stack.lastOrNull ?? oldRoute;
     final at = oldRoute == null ? -1 : _stack.indexOf(oldRoute);
     if (at < 0) {
       _stack.add(newRoute);
     } else {
       _stack[at] = newRoute;
     }
-    _note('replace', 'Replaced', newRoute, top: newRoute, from: oldRoute);
+    _note('replace', 'Replaced', newRoute, top: _stack.last, from: from);
   }
 
   /// Leaves the crumb of [step] (`push`, …) about [route], its message

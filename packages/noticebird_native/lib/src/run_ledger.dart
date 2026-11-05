@@ -89,6 +89,12 @@ final class RunLedger {
         ? <TypedBreadcrumb>[]
         : [..._state.breadcrumbs.take(CrashEvent.maxBreadcrumbs)];
     while (true) {
+      final drops = _strict
+          ? const BreadcrumbDrops()
+          : _state.breadcrumbDrops +
+                BreadcrumbDrops(
+                  stepsDropped: _state.breadcrumbs.length - breadcrumbs.length,
+                );
       final encoded = jsonEncode({
         'version': _version,
         'sessionId': _run.sessionId,
@@ -98,6 +104,7 @@ final class RunLedger {
         if (_state.routeTemplate != null) 'routeTemplate': _state.routeTemplate,
         if (_foreground != null) 'foreground': _foreground,
         'breadcrumbs': [for (final crumb in breadcrumbs) crumb.toJson()],
+        if (!drops.isEmpty) 'breadcrumbDrops': drops.toJson(),
         'updatedAtMs': _clock().toUtc().millisecondsSinceEpoch,
       });
       if (utf8.encode(encoded).length <= maxEngineFileBytes ||
@@ -190,7 +197,12 @@ NativeEngineRecord? _readEngine(File file) {
     if (sessionId is! String) return null;
     final routeTemplate = json['routeTemplate'];
     final foreground = json['foreground'];
-    final breadcrumbs = json['breadcrumbs'];
+    final written = json['breadcrumbs'] is List
+        ? (json['breadcrumbs']! as List).take(CrashEvent.maxBreadcrumbs)
+        : const <Object?>[];
+    final breadcrumbs = List<TypedBreadcrumb>.unmodifiable(
+      written.map(_readBreadcrumb).nonNulls,
+    );
     return NativeEngineRecord(
       sessionId: sessionId,
       app: _readApp(json['app']),
@@ -198,14 +210,11 @@ NativeEngineRecord? _readEngine(File file) {
       delivers: json['delivers'] == true,
       routeTemplate: routeTemplate is String ? routeTemplate : null,
       foreground: foreground is bool ? foreground : null,
-      breadcrumbs: breadcrumbs is List
-          ? List.unmodifiable(
-              breadcrumbs
-                  .take(CrashEvent.maxBreadcrumbs)
-                  .map(_readBreadcrumb)
-                  .nonNulls,
-            )
-          : const [],
+      breadcrumbs: breadcrumbs,
+      // A step that no longer reads (a 0.7.0 crumb) counts as dropped.
+      breadcrumbDrops:
+          _readDrops(json['breadcrumbDrops']) +
+          BreadcrumbDrops(stepsDropped: written.length - breadcrumbs.length),
     );
   } catch (_) {
     return null;
@@ -253,7 +262,8 @@ PlatformMetadata _readPlatform(Object? value) {
 /// not the engine's record. A crumb of the shape before protocol v2 of a
 /// breadcrumb (`occurredAt`, a fixed category and tags, written by
 /// noticebird 0.7.0) does not read: a crash from such a run arrives with an
-/// empty trail. The engine file keeps its `version` for it.
+/// empty trail, each such step counted in its `breadcrumbDrops`. The engine
+/// file keeps its `version` for it.
 TypedBreadcrumb? _readBreadcrumb(Object? value) {
   try {
     if (value case {'at': final String at, 'message': final String message}) {
@@ -275,6 +285,21 @@ TypedBreadcrumb? _readBreadcrumb(Object? value) {
     // Refused below.
   }
   return null;
+}
+
+/// The counts an engine file holds, as `BreadcrumbDrops.toJson` wrote them;
+/// none for anything else, which costs only the counts.
+BreadcrumbDrops _readDrops(Object? value) {
+  if (value case {
+    'dataDropped': final int dataDropped,
+    'stepsDropped': final int stepsDropped,
+  } when dataDropped >= 0 && stepsDropped >= 0) {
+    return BreadcrumbDrops(
+      dataDropped: dataDropped,
+      stepsDropped: stepsDropped,
+    );
+  }
+  return const BreadcrumbDrops();
 }
 
 Map<String, Object?>? _readJson(File file) {

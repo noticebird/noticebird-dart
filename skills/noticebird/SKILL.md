@@ -29,7 +29,7 @@ description: >
   FeedbackSettled, FeedbackOfflineStore, FileFeedbackOfflineStore, pendingFeedbackCount,
   shouldCapture, filtered, hostPlatformMetadata, processSessionId,
   uploadCrashes, platformReadFailures, PlatformReadFailure, tracksRouteTemplate, addBreadcrumb, TypedBreadcrumb,
-  BreadcrumbCategory, AllowedTag, setRouteTemplate, isRouteTemplate, setUser, setUserId,
+  BreadcrumbLevel, BreadcrumbFields, BreadcrumbField, AllowedTag, setRouteTemplate, isRouteTemplate, setUser, setUserId,
   CrashPrivacyProfile, regulatedStrict, CrashHttpTransport, noticebird_pk_, crash_pk_,
   CrashOfflineStore, FileCrashOfflineStore, flush, close, noticebird_native,
   NativeCrashCapture, nativeCrashes, reportNativeCrashes, NativeCrashCollector,
@@ -235,9 +235,9 @@ Set `handled: true` for anything you caught and turned into an error state. Leav
 A bounded buffer of the newest breadcrumbs (`breadcrumbBuffer`; the start keeps the 100 a
 feedback report's trail holds, at most 200). Each event carries the newest of those **no
 sent event carried yet**, at most 50 (the protocol's `CrashEvent.maxBreadcrumbs`), each
-value redacted (an id in a route or a bloc state becomes `[REDACTED]`) and shortened to
-the protocol's 100 characters. A sent event does not empty the buffer; it only moves the
-start of the next event's breadcrumbs past what it carried.
+step's message redacted (an id becomes `[REDACTED]`) and cut to the protocol's 200
+characters, each step at most 512 bytes. A sent event does not empty the buffer; it only
+moves the start of the next event's breadcrumbs past what it carried.
 
 ```dart
 Noticebird.addBreadcrumb(

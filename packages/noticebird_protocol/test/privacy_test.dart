@@ -116,6 +116,12 @@ void main() {
       'passport',
       'passportNumber',
       'socialSecurityNumber',
+      'phone',
+      'phoneNumber',
+      'telephone',
+      'mobile',
+      'Mobile',
+      'mobileNumber',
     ]) {
       expect(
         PrivacyPatterns.extraKeyViolation(key),
@@ -126,7 +132,13 @@ void main() {
   });
 
   test('a short personal number is a word of its own, not part of one', () {
-    for (final key in ['className', 'jobsNumber', 'subsName', 'Caribbean']) {
+    for (final key in [
+      'className',
+      'jobsNumber',
+      'subsName',
+      'Caribbean',
+      'isMobile',
+    ]) {
       expect(PrivacyPatterns.extraKeyViolation(key), isNull, reason: key);
     }
   });
