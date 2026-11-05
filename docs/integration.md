@@ -463,6 +463,12 @@ await NoticebirdFlutter.start(
 final waiting = await Noticebird.pendingFeedbackCount;
 ```
 
+### Code analysis of a report
+
+A project linked to the app's GitHub repository can have Claude Code look for each
+new report's cause in the code, in a workflow of that repository, and store the
+analysis with the report: [`feedback-code-analysis/`](feedback-code-analysis/README.md).
+
 ## 7. Live debug sessions
 
 While a live debug session is active, the deduplication window is bypassed

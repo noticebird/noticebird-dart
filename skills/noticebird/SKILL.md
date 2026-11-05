@@ -7,7 +7,8 @@ description: >
   route context, the offline queues, a feedback sheet (bug report, idea, screenshot),
   bloc and navigation breadcrumbs, or native crashes — and when an agent processes an
   app's feedback and crash reports over Noticebird's MCP server (the overview, triage,
-  routes and statuses: reference/processing-reports.md).
+  routes and statuses: reference/processing-reports.md), including the GitHub workflow
+  that analyses one new report in the app's repository.
   Reach for it for "set up Noticebird", "report this error", "why was my event
   dropped", "how do I add a breadcrumb", "attach the user to crashes", "Noticebird
   sends nothing", "capture a handled error", "test code that reports crashes", "send
@@ -36,7 +37,8 @@ description: >
   "process the feedback", "verwerk de feedback", "feedback inbox", FB-, ticket, triage,
   list_feedback, get_feedback, get_feedback_screenshot, set_feedback_status,
   set_feedback_analysis, list_issues, set_issue_status, whoami, "fix FB-12", "kijk FB-12", "akkoord FB-12",
-  "volg de voorstellen".
+  "volg de voorstellen", feedback analysis workflow, noticebird-feedback, repository_dispatch,
+  claude-code-action, NOTICEBIRD_MCP_TOKEN.
 user-invocable: true
 ---
 
@@ -475,7 +477,10 @@ report, every open report's screenshots shown with it), the order words (`kijk`,
 `dr`, `roadmap`, `later`, `weg`, `akkoord`, "volg de voorstellen"), statuses and notes,
 the read-only triage brief and its block written back as the report's analysis — is the same for every app and is in
 `reference/processing-reports.md`. An app's own skill keeps only its binding: its MCP
-servers and projects, and what *fix*, *design request* and *roadmap* mean there.
+servers and projects, and what *fix*, *design request* and *roadmap* mean there. A run
+of the GitHub workflow that analyses one new report in the app's repository writes
+exactly one block back and does nothing else (`reference/processing-reports.md`,
+"Analysis from a workflow"; its setup in the SDK's `docs/feedback-code-analysis/`).
 
 ## Bloc integration
 
