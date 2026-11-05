@@ -223,12 +223,12 @@ set_feedback_analysis(project, ticket_number,
               output language, each line that says nothing ("no", "unknown") left out
               (at most 12; a title at most 80 characters, a text at most 4000, all
               texts together at most 16000),
-  references: the places of Cause/place and the Points as {path, startLine, endLine,
+  references: the places of Cause/place and the Points as {path, start_line, end_line,
               note}: the path from the repository root, 1-based lines, a note of at
               most 120 characters saying what the place is (at most 20),
   revision:   the commit of the code you read, 40 hex characters — required with
               references,
-  runId:      the GitHub Actions run, only from a workflow)
+  run_id:     the GitHub Actions run, only from a workflow)
 ```
 
 Sections, notes and the summary are **plain text, no Markdown**: Noticebird shows them
@@ -265,7 +265,7 @@ report it was given, and nothing else:
   crashes are not there; say so in `Seen` only where a crash would decide the route.
   Step 4 (known work) only where the repository records it.
 - **Exactly one** `set_feedback_analysis` call, the block's fields as in "Writing the
-  block back" above, with the `revision` and the `runId` the prompt gives (the
+  block back" above, with the `revision` and the `run_id` the prompt gives (the
   checkout is that commit, unchanged). A report that does not exist or cannot be read: no call; say so
   in the run's answer.
 - Nothing else: no status, no notes, no file, no commit, no comment. The analysis is
