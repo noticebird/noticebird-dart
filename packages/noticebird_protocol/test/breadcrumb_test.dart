@@ -15,7 +15,7 @@ void main() {
         'action': 'route.push',
         'category': 'navigation',
         'level': 'info',
-        'data': {
+        'details': {
           'route': '/lists/:listId',
           'from': '/',
           'items.count': 3,
@@ -86,9 +86,9 @@ void main() {
 
     test('a character is a UTF-16 code unit', () {
       // 100 emoji are 200 code units: at the limit, and one more is over.
-      v6Breadcrumb(message: '😀' * 100, data: const {}).check();
+      v6Breadcrumb(message: '😀' * 100, details: const {}).check();
       refused(
-        v6Breadcrumb(message: '${'😀' * 100}a', data: const {}),
+        v6Breadcrumb(message: '${'😀' * 100}a', details: const {}),
         ProtocolViolation.invalidValue,
         r'$.breadcrumbs[].message',
       );
@@ -153,29 +153,29 @@ void main() {
       }
     });
 
-    test('at most 16 data entries', () {
+    test('at most 16 detail entries', () {
       Map<String, Object> entries(int count) => {
         for (var i = 0; i < count; i++) 'n$i': i,
       };
-      v6Breadcrumb(data: entries(TypedBreadcrumb.maxDataEntries)).check();
+      v6Breadcrumb(details: entries(TypedBreadcrumb.maxDetails)).check();
       refused(
-        v6Breadcrumb(data: entries(TypedBreadcrumb.maxDataEntries + 1)),
+        v6Breadcrumb(details: entries(TypedBreadcrumb.maxDetails + 1)),
         ProtocolViolation.oversized,
-        r'$.breadcrumbs[].data',
+        r'$.breadcrumbs[].details',
       );
     });
 
-    test('a data name of 1 to 48 characters by its pattern', () {
+    test('a detail name of 1 to 48 characters by its pattern', () {
       for (final name in [
         'status',
         'collections.count',
         'error.reason',
         'retryCount',
         'a_b.c_d.e',
-        'n' * TypedBreadcrumb.maxDataNameLength,
+        'n' * TypedBreadcrumb.maxDetailNameLength,
       ]) {
-        expect(TypedBreadcrumb.isDataName(name), isTrue, reason: name);
-        v6Breadcrumb(data: {name: 1}).check();
+        expect(TypedBreadcrumb.isDetailName(name), isTrue, reason: name);
+        v6Breadcrumb(details: {name: 1}).check();
       }
       for (final name in [
         '',
@@ -187,18 +187,18 @@ void main() {
         'a.B',
         'a-b',
         'a b',
-        'n' * (TypedBreadcrumb.maxDataNameLength + 1),
+        'n' * (TypedBreadcrumb.maxDetailNameLength + 1),
       ]) {
-        expect(TypedBreadcrumb.isDataName(name), isFalse, reason: name);
+        expect(TypedBreadcrumb.isDetailName(name), isFalse, reason: name);
         refused(
-          v6Breadcrumb(data: {name: 1}),
+          v6Breadcrumb(details: {name: 1}),
           ProtocolViolation.invalidValue,
-          '\$.breadcrumbs[].data.$name',
+          '\$.breadcrumbs[].details.$name',
         );
       }
     });
 
-    test('a data value is a finite number, a boolean or a data string', () {
+    test('a detail value is a finite number, a boolean or a detail string', () {
       for (final value in <Object>[
         0,
         -3.5,
@@ -209,12 +209,12 @@ void main() {
         'sync.write_held:collection_entries',
         '1.2.0+42',
         'id1',
-        'v' * TypedBreadcrumb.maxDataStringLength,
-        TypedBreadcrumb.maxDataNumber,
-        -TypedBreadcrumb.maxDataNumber,
+        'v' * TypedBreadcrumb.maxDetailStringLength,
+        TypedBreadcrumb.maxDetailNumber,
+        -TypedBreadcrumb.maxDetailNumber,
       ]) {
-        expect(TypedBreadcrumb.isDataValue(value), isTrue, reason: '$value');
-        v6Breadcrumb(data: {'value': value}).check();
+        expect(TypedBreadcrumb.isDetailValue(value), isTrue, reason: '$value');
+        v6Breadcrumb(details: {'value': value}).check();
       }
       for (final (value, violation) in <(Object, ProtocolViolation)>[
         ('', ProtocolViolation.invalidValue),
@@ -224,33 +224,33 @@ void main() {
         ('a@b', ProtocolViolation.invalidValue),
         ('line\nbreak', ProtocolViolation.invalidValue),
         (
-          'v' * (TypedBreadcrumb.maxDataStringLength + 1),
+          'v' * (TypedBreadcrumb.maxDetailStringLength + 1),
           ProtocolViolation.oversized,
         ),
         (double.nan, ProtocolViolation.invalidValue),
         (double.infinity, ProtocolViolation.invalidValue),
         // Past 2^53 a whole number is not exact on every platform.
-        (TypedBreadcrumb.maxDataNumber + 1, ProtocolViolation.invalidValue),
-        (-TypedBreadcrumb.maxDataNumber - 1, ProtocolViolation.invalidValue),
+        (TypedBreadcrumb.maxDetailNumber + 1, ProtocolViolation.invalidValue),
+        (-TypedBreadcrumb.maxDetailNumber - 1, ProtocolViolation.invalidValue),
         (1e300, ProtocolViolation.invalidValue),
         (const ['a'], ProtocolViolation.invalidType),
         (const {'a': 1}, ProtocolViolation.invalidType),
       ]) {
-        expect(TypedBreadcrumb.isDataValue(value), isFalse, reason: '$value');
+        expect(TypedBreadcrumb.isDetailValue(value), isFalse, reason: '$value');
         refused(
-          v6Breadcrumb(data: {'value': value}),
+          v6Breadcrumb(details: {'value': value}),
           violation,
-          r'$.breadcrumbs[].data.value',
+          r'$.breadcrumbs[].details.value',
         );
       }
     });
 
     test('a step takes at most 512 bytes encoded', () {
-      // A 200-character message of three-byte characters and full data
+      // A 200-character message of three-byte characters and full details
       // entries: every field within its own limit, the step over 512 bytes.
       final over = v6Breadcrumb(
         message: '€' * TypedBreadcrumb.maxMessageLength,
-        data: {for (var i = 0; i < 4; i++) 'name$i': 'v' * 64},
+        details: {for (var i = 0; i < 4; i++) 'name$i': 'v' * 64},
       );
       expect(over.encodedBytes, greaterThan(TypedBreadcrumb.maxEncodedBytes));
       refused(over, ProtocolViolation.oversized, r'$.breadcrumbs[]');
@@ -270,13 +270,16 @@ void main() {
     expect(TypedBreadcrumb.trailBytes([step, step]), 2 * step.encodedBytes + 3);
   });
 
-  test('dataEntryText reads a name and its value together', () {
-    expect(TypedBreadcrumb.dataEntryText('status', 'loaded'), 'status: loaded');
+  test('detailEntryText reads a name and its value together', () {
     expect(
-      TypedBreadcrumb.dataEntryText('contact', 31612345678),
+      TypedBreadcrumb.detailEntryText('status', 'loaded'),
+      'status: loaded',
+    );
+    expect(
+      TypedBreadcrumb.detailEntryText('contact', 31612345678),
       'contact: 31612345678',
     );
-    expect(TypedBreadcrumb.dataEntryText('ratio', 0.5), 'ratio: 0.5');
-    expect(TypedBreadcrumb.dataEntryText('busy', true), 'busy: true');
+    expect(TypedBreadcrumb.detailEntryText('ratio', 0.5), 'ratio: 0.5');
+    expect(TypedBreadcrumb.detailEntryText('busy', true), 'busy: true');
   });
 }

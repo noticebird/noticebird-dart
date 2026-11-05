@@ -9,7 +9,6 @@ environment:
 
 dependencies:
   noticebird_flutter: ^0.8.0
-  bloc: ^9.2.0
   flutter:
     sdk: flutter
 

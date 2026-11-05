@@ -6,7 +6,6 @@ import 'dart:typed_data';
 import 'package:noticebird_protocol/feedback.dart';
 import 'package:noticebird_protocol/noticebird_protocol.dart';
 
-import '../breadcrumbs/breadcrumb_fields.dart';
 import '../feedback/feedback_capture.dart';
 import '../feedback/feedback_config.dart';
 import '../feedback/feedback_draft.dart';
@@ -155,35 +154,32 @@ final class NoticebirdClient {
   List<TypedBreadcrumb> get recentBreadcrumbs =>
       List.unmodifiable(_breadcrumbs);
 
-  /// The run's id aliases ([BreadcrumbField.id]): every description of a
-  /// step this client records aliases its ids here, so the same row reads
-  /// as the same alias through the trail. In memory only.
-  final BreadcrumbIds breadcrumbIds = BreadcrumbIds();
-
   /// The longest message a buffered breadcrumb keeps. An event shortens it
   /// further, to the protocol's [TypedBreadcrumb.maxMessageLength].
   static const maxBufferedMessageLength = 1000;
 
   /// Records a step of the trail: [message] is the one line a human reads,
-  /// [data] the facts of the step, each a value one would want as a column
-  /// to compare, filter or count; a value is never in both. [action] is a
-  /// technical id of the kind of step (`checkout.submit`), [category] a
-  /// short group (`ui`), and [at] when it happened, by default now.
+  /// all a step needs (`addBreadcrumb('List opened', category: 'ui')`).
+  /// [details] are optional extra lines under the step, each `name: value`
+  /// (`items: 3`). [action] is a technical id of the kind of step
+  /// (`checkout.submit`), [category] a short group (`ui`), and [at] when it
+  /// happened, by default now.
   ///
-  /// Kept as given in [recentBreadcrumbs] (the message bounded at
+  /// [NoticebirdConfig.beforeBreadcrumb] sees the step first, and may
+  /// change it or leave it out. Kept as it answers in [recentBreadcrumbs] (the message bounded at
   /// [maxBufferedMessageLength]); an event or a report carries it sanitized
   /// by the protocol's rules, where what does not pass is left out and
   /// counted, never the event: a line break in [message] becomes a space, a
-  /// data name or value the protocol does not take or that reads as a
+  /// detail name or value the protocol does not take or that reads as a
   /// credential, a health value or an identifier goes, and under
-  /// [CrashPrivacyProfile.regulatedStrict] every string in [data] goes.
+  /// [CrashPrivacyProfile.regulatedStrict] every string in [details] goes.
   /// Never throws.
   void addBreadcrumb(
     String message, {
     String? action,
     String? category,
     BreadcrumbLevel? level,
-    Map<String, Object> data = const {},
+    Map<String, Object> details = const {},
     DateTime? at,
   }) {
     try {
@@ -191,14 +187,32 @@ final class NoticebirdClient {
       // records; sanitized to the wire's rules only when an event is built
       // (`_eventBreadcrumbs`), so a host reading the trail keeps the whole
       // step.
+      final given = TypedBreadcrumb(
+        at: (at ?? _clock()).toUtc(),
+        message: message,
+        action: action,
+        category: category,
+        level: level,
+        details: Map.unmodifiable(details),
+      );
+      final hook = _config.beforeBreadcrumb;
+      final TypedBreadcrumb? step;
+      try {
+        step = hook == null ? given : hook(given);
+      } catch (_) {
+        // A hook that throws leaves the step out: what it would have
+        // scrubbed must not go unscrubbed.
+        return;
+      }
+      if (step == null) return;
       _breadcrumbs.add(
         TypedBreadcrumb(
-          at: (at ?? _clock()).toUtc(),
-          message: cutText(message, maxBufferedMessageLength),
-          action: action,
-          category: category,
-          level: level,
-          data: Map.unmodifiable(data),
+          at: step.at.toUtc(),
+          message: cutText(step.message, maxBufferedMessageLength),
+          action: step.action,
+          category: step.category,
+          level: step.level,
+          details: Map.unmodifiable(step.details),
         ),
       );
       _recorded++;
@@ -436,7 +450,7 @@ final class NoticebirdClient {
             : null,
         user: strict ? null : _user,
         trail: trail.steps,
-        trailDropped: trail.drops.dataDropped + trail.drops.stepsDropped,
+        trailDropped: trail.drops.detailsDropped + trail.drops.stepsDropped,
         dropped: (count) {
           if (count > 0) _debugNote('$count feedback values left out');
         },

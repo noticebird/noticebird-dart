@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:io' show Directory;
 
-import 'package:bloc/bloc.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
@@ -12,7 +11,6 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path_provider/path_provider.dart';
 
 import 'error_handlers.dart' as handlers;
-import 'noticebird_bloc_observer.dart';
 
 /// Noticebird in a Flutter app, started once with [start]: the client,
 /// attached to the `Noticebird` facade so the app reports and sends
@@ -42,7 +40,6 @@ import 'noticebird_bloc_observer.dart';
 final class NoticebirdFlutter {
   NoticebirdFlutter._({
     required this.client,
-    required this.blocObserver,
     required this.platformReadFailures,
     required void Function() stop,
   }) : _stop = stop;
@@ -58,12 +55,6 @@ final class NoticebirdFlutter {
 
   /// The client, attached to the `Noticebird` facade.
   final NoticebirdClient client;
-
-  /// The bloc observer [start] made or was given: `Bloc.observer` unless
-  /// `observeBlocs` was off. A host that sets an observer of its own after [start] keeps
-  /// this one beside it: `MultiBlocObserver(observers: [blocObserver,
-  /// mine])`.
-  final NoticebirdBlocObserver blocObserver;
 
   /// The platform reads [start] went on without, because they threw or did
   /// not answer within [platformReadTimeout]: the installed version
@@ -91,16 +82,8 @@ final class NoticebirdFlutter {
   /// - names the app [appName], with the version and build the platform
   ///   reports (`unknown` when it does not answer);
   /// - installs the global error handlers ([installErrorHandlers]),
-  ///   chained to the ones they replace, and sets `Bloc.observer` to
-  ///   [blocObserver] beside the observer it found ([observeBlocs]); a
-  ///   host whose breadcrumbs say more passes a subclass of
-  ///   [NoticebirdBlocObserver] as [blocObserver]; a host with a zone of
-  ///   its own passes [reportZoneError] as its handler;
-  /// - writes the facts of a bloc's steps as their data by the app's tables:
-  ///   a change by [blocStateFields] (the next state), an event by
-  ///   [blocEventFields] ([NoticebirdBlocObserver.stateFields],
-  ///   [NoticebirdBlocObserver.eventFields]). A host that passes its own
-  ///   [blocObserver] gives it the tables itself;
+  ///   chained to the ones they replace; a host with a zone of its own
+  ///   passes [reportZoneError] as its handler;
   /// - keeps what does not get through in the app's support directory
   ///   (`noticebird/crashes` and `noticebird/feedback`), unless the host
   ///   passes [crashStore] or [feedbackStore]. None on the web, and none
@@ -110,12 +93,13 @@ final class NoticebirdFlutter {
   ///   [nativeCrashes] (`NativeCrashCapture()` of `noticebird_native`),
   ///   and what earlier runs left queued, now, each time the app comes
   ///   back to the foreground, and when the connection returns;
-  /// - fills each feedback report's `blocs` diagnostics group with the live
-  ///   blocs per type, and its locale with the platform's.
+  /// - fills each feedback report's locale with the platform's.
   ///
-  /// [privacyProfile], [pii], [shouldCapture] and [breadcrumbBuffer] are
-  /// the client's ([NoticebirdConfig]); [onFeedbackSettled] is its
-  /// feedback's ([FeedbackConfig.onSettled]).
+  /// [privacyProfile], [pii], [shouldCapture], [breadcrumbBuffer] and
+  /// [beforeBreadcrumb] are the client's ([NoticebirdConfig]);
+  /// [onFeedbackSettled] and [feedbackContextDiagnostics] are its
+  /// feedback's ([FeedbackConfig.onSettled],
+  /// [FeedbackConfig.contextDiagnostics]).
   ///
   /// [background] starts the client of a headless background engine: it
   /// reports, but delivers nothing of earlier runs, flushes nothing by
@@ -127,8 +111,7 @@ final class NoticebirdFlutter {
   /// [ArgumentError] only for arguments no start can work with, as
   /// [NoticebirdConfig] does: an [appName] the protocol refuses, a
   /// [breadcrumbBuffer] out of range, an unencrypted store passed under
-  /// `regulatedStrict`, [blocStateFields] or [blocEventFields] together with
-  /// a [blocObserver] or with [observeBlocs] off.
+  /// `regulatedStrict`.
   static Future<NoticebirdFlutter> start({
     required String appName,
     Uri? apiUrl,
@@ -143,11 +126,9 @@ final class NoticebirdFlutter {
     void Function(FeedbackSettled settled)? onFeedbackSettled,
     CrashOfflineStore? crashStore,
     FeedbackOfflineStore? feedbackStore,
+    TypedBreadcrumb? Function(TypedBreadcrumb breadcrumb)? beforeBreadcrumb,
+    Map<String, Map<String, Object?>> Function()? feedbackContextDiagnostics,
     bool installErrorHandlers = true,
-    bool observeBlocs = true,
-    NoticebirdBlocObserver? blocObserver,
-    BreadcrumbFields? blocStateFields,
-    BreadcrumbFields? blocEventFields,
     bool background = false,
   }) {
     final starting = _starting;
@@ -166,11 +147,9 @@ final class NoticebirdFlutter {
       onFeedbackSettled: onFeedbackSettled,
       crashStore: crashStore,
       feedbackStore: feedbackStore,
+      beforeBreadcrumb: beforeBreadcrumb,
+      feedbackContextDiagnostics: feedbackContextDiagnostics,
       installErrorHandlers: installErrorHandlers,
-      observeBlocs: observeBlocs,
-      blocObserver: blocObserver,
-      blocStateFields: blocStateFields,
-      blocEventFields: blocEventFields,
       background: background,
     );
     _starting = start;
@@ -198,27 +177,13 @@ final class NoticebirdFlutter {
     required void Function(FeedbackSettled settled)? onFeedbackSettled,
     required CrashOfflineStore? crashStore,
     required FeedbackOfflineStore? feedbackStore,
+    required TypedBreadcrumb? Function(TypedBreadcrumb breadcrumb)?
+    beforeBreadcrumb,
+    required Map<String, Map<String, Object?>> Function()?
+    feedbackContextDiagnostics,
     required bool installErrorHandlers,
-    required bool observeBlocs,
-    required NoticebirdBlocObserver? blocObserver,
-    required BreadcrumbFields? blocStateFields,
-    required BreadcrumbFields? blocEventFields,
     required bool background,
   }) async {
-    if (blocStateFields != null || blocEventFields != null) {
-      if (blocObserver != null) {
-        throw ArgumentError(
-          'A blocObserver of the host takes its tables itself: '
-          'NoticebirdBlocObserver(stateFields:, eventFields:)',
-        );
-      }
-      if (!observeBlocs) {
-        throw ArgumentError(
-          'With observeBlocs off, the host sets the observer: give it the '
-          'tables, NoticebirdBlocObserver(stateFields:, eventFields:)',
-        );
-      }
-    }
     final binding = WidgetsFlutterBinding.ensureInitialized();
 
     CrashHttpTransport? ingest;
@@ -258,12 +223,6 @@ final class NoticebirdFlutter {
     final defaultCrashStore = storeIn('crashes');
     final defaultFeedbackStore = storeIn('feedback');
 
-    final observer =
-        blocObserver ??
-        NoticebirdBlocObserver(
-          stateFields: blocStateFields,
-          eventFields: blocEventFields,
-        );
     final NoticebirdConfig config;
     try {
       config = NoticebirdConfig(
@@ -272,6 +231,7 @@ final class NoticebirdFlutter {
         pii: pii,
         shouldCapture: shouldCapture,
         breadcrumbBuffer: breadcrumbBuffer,
+        beforeBreadcrumb: beforeBreadcrumb,
         nativeCrashes: nativeCrashes,
         offlineStore:
             crashStore ??
@@ -289,9 +249,7 @@ final class NoticebirdFlutter {
                   ? null
                   : FileFeedbackOfflineStore(defaultFeedbackStore)),
           onSettled: onFeedbackSettled,
-          contextDiagnostics: observeBlocs || blocObserver != null
-              ? () => {'blocs': observer.liveBlocCounts()}
-              : null,
+          contextDiagnostics: feedbackContextDiagnostics,
         ),
       );
     } catch (_) {
@@ -307,11 +265,6 @@ final class NoticebirdFlutter {
     final restoreHandlers = installErrorHandlers
         ? handlers.installErrorHandlers(client)
         : null;
-    final previousObserver = Bloc.observer;
-    final observers = MultiBlocObserver(
-      observers: [observer, previousObserver],
-    );
-    if (observeBlocs) Bloc.observer = observers;
 
     AppLifecycleListener? lifecycle;
     StreamSubscription<List<ConnectivityResult>>? connectivity;
@@ -345,9 +298,6 @@ final class NoticebirdFlutter {
       lifecycle?.dispose();
       unawaited(connectivity?.cancel());
       restoreHandlers?.call();
-      if (identical(Bloc.observer, observers)) {
-        Bloc.observer = previousObserver;
-      }
       client.close();
       if (identical(Noticebird.instance, client)) Noticebird.detach();
       if (identical(_started, started)) {
@@ -361,7 +311,6 @@ final class NoticebirdFlutter {
 
     return _started = started = NoticebirdFlutter._(
       client: client,
-      blocObserver: observer,
       platformReadFailures: List.unmodifiable(missed),
       stop: stop,
     );
@@ -375,13 +324,12 @@ final class NoticebirdFlutter {
   static void reportZoneError(Object error, StackTrace stack) =>
       handlers.reportZoneError(Noticebird.instance, error, stack);
 
-  /// Stops what [start] set up: the handlers and the bloc observer it
-  /// installed go back to the ones it found, the foreground and connection
+  /// Stops what [start] set up: the handlers it installed go back to the
+  /// ones it found, the foreground and connection
   /// triggers and the client's own schedule stop, and the client is
   /// detached from the facade. A later [start] starts anew, with a client
   /// of its own on the same stores: do not use this [client] after it.
-  /// Idempotent; a handler or bloc observer the host set since [start]
-  /// stays.
+  /// Idempotent; a handler the host set since [start] stays.
   void close() => _stop();
 
   /// Closes what [start] started, a start still under way included, so the

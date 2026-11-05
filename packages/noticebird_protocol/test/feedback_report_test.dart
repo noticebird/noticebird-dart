@@ -31,13 +31,13 @@ TypedBreadcrumb _crumb({
   DateTime? at,
   String message = 'Toggled a record',
   String action = 'record.toggle',
-  Map<String, Object> data = const {},
+  Map<String, Object> details = const {},
 }) => TypedBreadcrumb(
   at: at ?? DateTime.utc(2026, 10, 29, 14, 3, 1, 903),
   message: message,
   action: action,
   category: 'ui',
-  data: data,
+  details: details,
 );
 
 void main() {
@@ -444,7 +444,7 @@ void main() {
     test('the trail takes at most 32 KiB encoded', () {
       final step = _crumb(
         message: 'm' * TypedBreadcrumb.maxMessageLength,
-        data: {'first': 'v' * 64, 'second': 'v' * 64},
+        details: {'first': 'v' * 64, 'second': 'v' * 64},
       );
       final fitting = FeedbackReport.maxTrailBytes ~/ (step.encodedBytes + 1);
       expect(fitting, lessThan(FeedbackReport.maxTrailItems));
@@ -559,11 +559,11 @@ void main() {
           full,
           trail: [
             _crumb(),
-            _crumb(data: const {'retryCount': double.infinity}),
+            _crumb(details: const {'retryCount': double.infinity}),
           ],
         ),
         ProtocolViolation.invalidValue,
-        r'$.trail[1].data.retryCount',
+        r'$.trail[1].details.retryCount',
       );
     });
   });
@@ -706,14 +706,14 @@ void main() {
             r'$.trail[0].at',
           ),
           (
-            _crumb(data: const {'component': 'tile\u0000'}),
+            _crumb(details: const {'component': 'tile\u0000'}),
             ProtocolViolation.invalidValue,
-            r'$.trail[0].data.component',
+            r'$.trail[0].details.component',
           ),
           (
-            _crumb(data: {'component': 'a' * 65}),
+            _crumb(details: {'component': 'a' * 65}),
             ProtocolViolation.oversized,
-            r'$.trail[0].data.component',
+            r'$.trail[0].details.component',
           ),
         ]) {
           expect(

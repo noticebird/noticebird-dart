@@ -250,13 +250,13 @@ void main() {
       action: 'list.save',
       category: 'ui',
       level: BreadcrumbLevel.warning,
-      data: const {'items.count': 3, 'userEmail': true},
+      details: const {'items.count': 3, 'userEmail': true},
       at: at,
     );
 
     final buffered = reporter.recentBreadcrumbs.single;
     expect(buffered.message, 'Saved\nthe list');
-    expect(buffered.data, {'items.count': 3, 'userEmail': true});
+    expect(buffered.details, {'items.count': 3, 'userEmail': true});
     expect(buffered.at, at);
 
     await capture(reporter, 'boom');
@@ -268,10 +268,10 @@ void main() {
         'action': 'list.save',
         'category': 'ui',
         'level': 'warning',
-        'data': {'items.count': 3},
+        'details': {'items.count': 3},
       },
     ]);
-    expect(event['breadcrumbDrops'], {'dataDropped': 1, 'stepsDropped': 0});
+    expect(event['breadcrumbDrops'], {'detailsDropped': 1, 'stepsDropped': 0});
   });
 
   test('a step without a time is stamped by the clock', () async {
@@ -295,7 +295,7 @@ void main() {
       reporter.addBreadcrumb(
         '${'m' * 190} $i',
         action: 'a.step$i',
-        data: {for (var e = 0; e < 3; e++) 'name$e': 'v' * 40},
+        details: {for (var e = 0; e < 3; e++) 'name$e': 'v' * 40},
       );
     }
 
@@ -311,7 +311,7 @@ void main() {
       lessThanOrEqualTo(CrashEvent.maxBreadcrumbsBytes),
     );
     expect(event['breadcrumbDrops'], {
-      'dataDropped': 0,
+      'detailsDropped': 0,
       'stepsDropped': CrashEvent.maxBreadcrumbs - kept,
     });
   });

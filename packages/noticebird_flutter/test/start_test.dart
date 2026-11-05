@@ -1,12 +1,11 @@
 // NoticebirdFlutter.start against fake platforms and a fake HTTP client: what
 // it wires (the client on the facade, the app's version, the default stores,
-// the handlers and the bloc observer, delivery when the connection returns),
+// the handlers, the breadcrumb hook, delivery when the connection returns),
 // a key that cannot work, a background start, and close.
 
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:bloc/bloc.dart';
 import 'package:connectivity_plus_platform_interface/connectivity_plus_platform_interface.dart';
 
 import 'package:flutter/foundation.dart';
@@ -68,7 +67,6 @@ void main() {
     String? publishableKey = _key,
     bool uploadCrashes = true,
     bool background = false,
-    bool observeBlocs = true,
   }) async => started = await NoticebirdFlutter.start(
     apiUrl: apiUrl ?? _api,
     publishableKey: publishableKey,
@@ -76,7 +74,6 @@ void main() {
     httpClient: httpClient,
     uploadCrashes: uploadCrashes,
     background: background,
-    observeBlocs: observeBlocs,
   );
 
   List<Map<String, Object?>> envelopes() => [
@@ -261,21 +258,6 @@ void main() {
     expect(collector.claims, 1);
   });
 
-  test('the bloc observer it found still gets every step', () async {
-    final previous = Bloc.observer;
-    final found = _RecordingObserver();
-    Bloc.observer = found;
-    addTearDown(() => Bloc.observer = previous);
-    final noticebird = await start();
-    final cubit = _Counter();
-    addTearDown(cubit.close);
-
-    cubit.emit(1);
-
-    expect(found.changes, 1);
-    expect(noticebird.client.recentBreadcrumbs.last.action, 'counter.change');
-  });
-
   test('a connection that goes away flushes nothing', () async {
     await start();
     requests.clear();
@@ -284,11 +266,9 @@ void main() {
     expect(requests, isEmpty);
   });
 
-  test('sends feedback with the live blocs and the platform\'s locale, also '
-      'with crash uploads off', () async {
+  test('sends feedback with the platform\'s locale, also with crash uploads '
+      'off, and no diagnostics of its own', () async {
     await start(uploadCrashes: false);
-    final cubit = _Counter();
-    addTearDown(cubit.close);
 
     expect(
       (await Noticebird.captureException(StateError('boom'), _stack))?.outcome,
@@ -307,10 +287,7 @@ void main() {
                   .body,
             )
             as Map<String, Object?>;
-    expect((report['diagnostics']! as Map)['blocs'], {
-      'count': 1,
-      'counter': 1,
-    });
+    expect(report, isNot(contains('diagnostics')));
     expect(
       (report['platform']! as Map)['locale'],
       WidgetsBindingLocale.languageTag,
@@ -378,98 +355,52 @@ void main() {
     expect(Noticebird.instance!.pendingCount, 1);
   });
 
-  test('close puts back the handlers and the bloc observer it found, and '
-      'detaches the client', () async {
+  test('close puts back the handlers it found, and detaches the '
+      'client', () async {
     final flutterHandler = FlutterError.onError;
     final platformHandler = PlatformDispatcher.instance.onError;
-    final blocObserver = Bloc.observer;
     final noticebird = await start();
     expect(FlutterError.onError, isNot(same(flutterHandler)));
     expect(PlatformDispatcher.instance.onError, isNot(same(platformHandler)));
-    expect(Bloc.observer, isNot(same(blocObserver)));
 
     noticebird.close();
     noticebird.close();
 
     expect(FlutterError.onError, same(flutterHandler));
     expect(PlatformDispatcher.instance.onError, same(platformHandler));
-    expect(Bloc.observer, same(blocObserver));
     expect(Noticebird.instance, isNull);
     expect(await start(), isNot(same(noticebird)));
   });
 
-  test(
-    'a blocObserver of the host\'s own is the one set and counted',
-    () async {
-      final mine = _DetailedObserver();
-      final noticebird = await NoticebirdFlutter.start(
-        apiUrl: _api,
-        publishableKey: _key,
-        appName: 'example_app',
-        httpClient: httpClient,
-        blocObserver: mine,
-      );
-      started = noticebird;
-      final cubit = _Counter();
-      addTearDown(cubit.close);
-      cubit.emit(1);
-
-      expect(noticebird.blocObserver, same(mine));
-      expect(mine.liveBlocCounts(), {'count': 1, 'counter': 1});
-      expect(mine.traced, 1);
-      expect(noticebird.client.recentBreadcrumbs.last.action, 'counter.change');
-    },
-  );
-
-  test('the bloc tables reach the observer the start makes', () async {
-    final states = BreadcrumbFields([
-      BreadcrumbField<int>.literal('value', (s) => s),
-    ]);
-    final events = BreadcrumbFields([]);
-    final noticebird = await NoticebirdFlutter.start(
+  test('beforeBreadcrumb and the feedback context reach the client the '
+      'start makes', () async {
+    started = await NoticebirdFlutter.start(
       apiUrl: _api,
       publishableKey: _key,
       appName: 'example_app',
       httpClient: httpClient,
-      blocStateFields: states,
-      blocEventFields: events,
+      beforeBreadcrumb: (step) => step.category == 'noise' ? null : step,
+      feedbackContextDiagnostics: () => {
+        'sync': {'pending': 2},
+      },
     );
-    started = noticebird;
-    expect(noticebird.blocObserver.stateFields, same(states));
-    expect(noticebird.blocObserver.eventFields, same(events));
+    Noticebird.addBreadcrumb('Ticked', category: 'noise');
+    Noticebird.addBreadcrumb('List opened', category: 'ui');
 
-    final cubit = _Counter();
-    addTearDown(cubit.close);
-    cubit.emit(1);
-    expect(noticebird.client.recentBreadcrumbs.last.data, {'value': 1});
-  });
+    await Noticebird.captureFeedback(kind: FeedbackKind.bug, message: 'x');
 
-  test('bloc tables beside a blocObserver of the host\'s own throw', () async {
-    await expectLater(
-      NoticebirdFlutter.start(
-        apiUrl: _api,
-        publishableKey: _key,
-        appName: 'example_app',
-        httpClient: httpClient,
-        blocObserver: NoticebirdBlocObserver(),
-        blocStateFields: BreadcrumbFields([]),
-      ),
-      throwsArgumentError,
+    final report =
+        jsonDecode(
+              requests
+                  .singleWhere((r) => r.url.path.endsWith('/v1/feedback'))
+                  .body,
+            )
+            as Map<String, Object?>;
+    expect(
+      [for (final step in report['trail']! as List) (step as Map)['message']],
+      ['List opened'],
     );
-  });
-
-  test('bloc tables with observeBlocs off throw', () async {
-    await expectLater(
-      NoticebirdFlutter.start(
-        apiUrl: _api,
-        publishableKey: _key,
-        appName: 'example_app',
-        httpClient: httpClient,
-        observeBlocs: false,
-        blocEventFields: BreadcrumbFields([]),
-      ),
-      throwsArgumentError,
-    );
+    expect((report['diagnostics']! as Map)['sync'], {'pending': 2});
   });
 
   test('a handler the host set after the start stays at close', () async {
@@ -482,24 +413,6 @@ void main() {
     noticebird.close();
 
     expect(FlutterError.onError, same(mine));
-  });
-
-  test('observeBlocs: false leaves Bloc.observer to the host, and sends no '
-      'blocs group', () async {
-    final blocObserver = Bloc.observer;
-    await start(observeBlocs: false);
-    expect(Bloc.observer, same(blocObserver));
-
-    await Noticebird.captureFeedback(kind: FeedbackKind.bug, message: 'x');
-
-    final report =
-        jsonDecode(
-              requests
-                  .singleWhere((r) => r.url.path.endsWith('/v1/feedback'))
-                  .body,
-            )
-            as Map<String, Object?>;
-    expect(report, isNot(contains('diagnostics')));
   });
 
   test('reportZoneError reports a fatal event to the started client', () async {
@@ -524,30 +437,6 @@ abstract final class WidgetsBindingLocale {
       .platformDispatcher
       .locale
       .toLanguageTag();
-}
-
-final class _Counter extends Cubit<int> {
-  _Counter() : super(0);
-}
-
-final class _DetailedObserver extends NoticebirdBlocObserver {
-  var traced = 0;
-
-  @override
-  bool traces(BlocBase<dynamic> bloc) {
-    traced++;
-    return super.traces(bloc);
-  }
-}
-
-final class _RecordingObserver extends BlocObserver {
-  var changes = 0;
-
-  @override
-  void onChange(BlocBase<dynamic> bloc, Change<dynamic> change) {
-    super.onChange(bloc, change);
-    changes++;
-  }
 }
 
 final class _Collector implements NativeCrashCollector {

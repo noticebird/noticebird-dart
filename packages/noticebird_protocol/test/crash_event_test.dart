@@ -344,9 +344,9 @@ void main() {
           r'$.breadcrumbs[].action',
         ),
         (
-          v6Breadcrumb(data: {'route': 'r' * 65}),
+          v6Breadcrumb(details: {'route': 'r' * 65}),
           ProtocolViolation.oversized,
-          r'$.breadcrumbs[].data.route',
+          r'$.breadcrumbs[].details.route',
         ),
       ]) {
         expect(breadcrumb.check, refusedWith(violation, path));
@@ -360,7 +360,7 @@ void main() {
       // bytes, already take more than 16 KiB together.
       final step = v6Breadcrumb(
         message: 'm' * 200,
-        data: {for (var i = 0; i < 3; i++) 'name$i': 'v' * 40},
+        details: {for (var i = 0; i < 3; i++) 'name$i': 'v' * 40},
       );
       expect(step.encodedBytes, lessThanOrEqualTo(512));
       final fitting =
@@ -388,11 +388,11 @@ void main() {
         v6Event(
           breadcrumbDrops: const BreadcrumbDrops(stepsDropped: 2),
         ).toJson()['breadcrumbDrops'],
-        {'dataDropped': 0, 'stepsDropped': 2},
+        {'detailsDropped': 0, 'stepsDropped': 2},
       );
       for (final drops in const [
         BreadcrumbDrops(),
-        BreadcrumbDrops(dataDropped: -1, stepsDropped: 2),
+        BreadcrumbDrops(detailsDropped: -1, stepsDropped: 2),
         BreadcrumbDrops(stepsDropped: -1),
       ]) {
         expectRefused(
@@ -402,9 +402,9 @@ void main() {
         );
       }
       expect(
-        const BreadcrumbDrops(dataDropped: 1) +
-            const BreadcrumbDrops(dataDropped: 2, stepsDropped: 3),
-        const BreadcrumbDrops(dataDropped: 3, stepsDropped: 3),
+        const BreadcrumbDrops(detailsDropped: 1) +
+            const BreadcrumbDrops(detailsDropped: 2, stepsDropped: 3),
+        const BreadcrumbDrops(detailsDropped: 3, stepsDropped: 3),
       );
     });
 

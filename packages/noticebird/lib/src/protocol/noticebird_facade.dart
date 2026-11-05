@@ -119,14 +119,14 @@ final class Noticebird {
     String? action,
     String? category,
     BreadcrumbLevel? level,
-    Map<String, Object> data = const {},
+    Map<String, Object> details = const {},
     DateTime? at,
   }) => _instance?.addBreadcrumb(
     message,
     action: action,
     category: category,
     level: level,
-    data: data,
+    details: details,
     at: at,
   );
 

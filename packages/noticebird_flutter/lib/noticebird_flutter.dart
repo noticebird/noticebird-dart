@@ -6,7 +6,5 @@ library;
 
 export 'package:noticebird/noticebird.dart';
 
-export 'src/bloc_error_report.dart';
-export 'src/noticebird_bloc_observer.dart';
 export 'src/noticebird_flutter.dart';
 export 'src/noticebird_navigator_observer.dart';

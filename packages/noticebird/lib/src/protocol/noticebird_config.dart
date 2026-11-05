@@ -65,6 +65,7 @@ final class NoticebirdConfig {
     this.maxPendingEvents = 50,
     this.maxBreadcrumbs = CrashEvent.maxBreadcrumbs,
     int? breadcrumbBuffer,
+    this.beforeBreadcrumb,
     this.maxDeduplicationEntries = 100,
     this.deduplicationWindow = const Duration(minutes: 1),
     this.offlineStore,
@@ -153,6 +154,17 @@ final class NoticebirdConfig {
   /// A larger buffer changes nothing on the wire: an event still carries at
   /// most [maxBreadcrumbs] of them, each shortened to the protocol's limits.
   final int breadcrumbBuffer;
+
+  /// The app's own look at every breadcrumb before the client keeps it —
+  /// one added by hand and one an integration (the navigator observer)
+  /// adds alike: it answers the breadcrumb, changed or as it is, or `null`
+  /// to leave it out. The place for an app's own scrubbing, of the message
+  /// too. What it answers is sanitized as every breadcrumb is.
+  ///
+  /// A breadcrumb it leaves out is the app's choice, so no count says so;
+  /// one that throws leaves the breadcrumb out too, and never reaches the
+  /// app. `null` (the default) keeps every breadcrumb.
+  final TypedBreadcrumb? Function(TypedBreadcrumb breadcrumb)? beforeBreadcrumb;
   final int maxDeduplicationEntries;
   final Duration deduplicationWindow;
   final CrashOfflineStore? offlineStore;
@@ -160,8 +172,7 @@ final class NoticebirdConfig {
 
   /// Whether an error is captured, asked once per capture on every channel:
   /// an explicit `captureException`, and every channel of
-  /// `noticebird_flutter`: its error handlers, its zone handler and its bloc
-  /// observer. `false` drops it as [CaptureOutcome.ignored].
+  /// `noticebird_flutter`: its error handlers and its zone handler. `false` drops it as [CaptureOutcome.ignored].
   ///
   /// It is how a host keeps errors it reports at a report point of its own
   /// from being reported again by whichever channel sees them next: set it

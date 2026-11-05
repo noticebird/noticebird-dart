@@ -1,4 +1,3 @@
-import 'package:bloc/bloc.dart';
 import 'package:flutter/material.dart';
 import 'package:noticebird_flutter/feedback.dart';
 import 'package:noticebird_flutter/noticebird_flutter.dart';
@@ -16,7 +15,7 @@ const _publishableKey = String.fromEnvironment(
 );
 
 Future<void> main() async {
-  // One start: the client, the error handlers, the bloc breadcrumbs, the
+  // One start: the client, the error handlers, the
   // offline stores in the support directory, and delivery at start, on
   // resume and when the connection returns. It never throws on the
   // platform, and the client never rethrows into the app.
@@ -26,13 +25,6 @@ Future<void> main() async {
     appName: 'noticebird_example',
   );
   runApp(ExampleApp(reporter: noticebird.client));
-}
-
-/// A trivial cubit whose transitions the observer records as breadcrumbs.
-final class CounterCubit extends Cubit<int> {
-  CounterCubit() : super(0);
-
-  void increment() => emit(state + 1);
 }
 
 class ExampleApp extends StatelessWidget {
@@ -63,15 +55,19 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
-  final CounterCubit _counter = CounterCubit();
+  int _count = 0;
   String? _status;
   bool _loggedIn = false;
   bool _liveSessionActive = false;
 
-  @override
-  void dispose() {
-    _counter.close();
-    super.dispose();
+  void _addBreadcrumb() {
+    // A breadcrumb is a message first; details are optional extra lines.
+    widget.reporter.addBreadcrumb(
+      'Counter increased',
+      category: 'ui',
+      details: {'count': _count + 1},
+    );
+    setState(() => _count++);
   }
 
   void _toggleLogin() {
@@ -162,19 +158,17 @@ class _HomePageState extends State<HomePage> {
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(title: const Text('noticebird example')),
     body: Center(
-      child: StreamBuilder<int>(
-        initialData: _counter.state,
-        stream: _counter.stream,
-        builder: (context, snapshot) => Column(
+      child: Builder(
+        builder: (context) => Column(
           mainAxisSize: MainAxisSize.min,
           spacing: 12,
           children: [
             Text(
-              'Breadcrumb count: ${snapshot.data}',
+              'Breadcrumb count: $_count',
               style: Theme.of(context).textTheme.titleMedium,
             ),
             FilledButton(
-              onPressed: _counter.increment,
+              onPressed: _addBreadcrumb,
               child: const Text('Add breadcrumb'),
             ),
             OutlinedButton(

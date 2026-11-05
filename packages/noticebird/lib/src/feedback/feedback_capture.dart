@@ -9,8 +9,8 @@ import 'feedback_transport.dart';
 /// `moment`. Without one, `captureFeedback` takes it when it is called.
 ///
 /// The trail is not part of it: a report carries the breadcrumbs up to its
-/// capture, and a sheet keeps its own typing out of them (the bloc observer
-/// of `noticebird_flutter` leaves an `UntracedBloc` out).
+/// capture, and a sheet keeps its own typing out of them (an observer the
+/// app writes leaves the sheet's state out).
 final class FeedbackMoment {
   const FeedbackMoment({
     required this.takenAt,

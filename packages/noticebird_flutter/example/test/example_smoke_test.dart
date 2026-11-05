@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
-import 'package:bloc/bloc.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:noticebird_example/main.dart';
 import 'package:noticebird_flutter/feedback.dart';
@@ -57,12 +56,6 @@ NoticebirdClient _buildReporter(
 );
 
 void main() {
-  // main() wires Bloc.observer to the live reporter; tests build ExampleApp
-  // directly (bypassing main()), so tests exercising the observer path must
-  // wire it themselves and restore the original afterwards.
-  final originalObserver = Bloc.observer;
-  tearDown(() => Bloc.observer = originalObserver);
-
   testWidgets('renders the demo actions', (tester) async {
     await tester.pumpWidget(
       ExampleApp(reporter: _buildReporter(RecordingCrashTransport())),
@@ -125,7 +118,6 @@ void main() {
   ) async {
     final transport = RecordingCrashTransport();
     final reporter = _buildReporter(transport);
-    Bloc.observer = NoticebirdBlocObserver(client: reporter);
     await tester.pumpWidget(ExampleApp(reporter: reporter));
 
     await tester.tap(find.text('Start live debug session'));

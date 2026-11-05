@@ -9,7 +9,7 @@ import 'support/privacy_matches.dart';
 /// [PrivacyPatterns] in a field the client redacts. A host's trail holds such
 /// values on purpose (a route with a list's id, a bloc state's ids): the
 /// buffer keeps them for [NoticebirdClient.recentBreadcrumbs], and the event
-/// carries a message redacted and leaves out a data entry, an action or a
+/// carries a message redacted and leaves out a detail entry, an action or a
 /// category that holds one, and counts what it left out.
 void main() {
   const uuid = '7d3f1c2a-9b4e-4f6a-8c1d-2e3f4a5b6c7d';
@@ -48,12 +48,15 @@ void main() {
       ..addBreadcrumb(
         'Opened /collections/$uuid',
         action: 'route.push',
-        data: const {'route': '/collections/:id', 'from': '/collections/$uuid'},
+        details: const {
+          'route': '/collections/:id',
+          'from': '/collections/$uuid',
+        },
       )
       ..addBreadcrumb(
         'CollectionCubit changed',
         action: 'collectionCubit.change',
-        data: const {'status': 'ready', 'id': uuid},
+        details: const {'status': 'ready', 'id': uuid},
       );
 
     final result = await reporter.captureException(
@@ -68,14 +71,16 @@ void main() {
       event['breadcrumbs'].first['message'],
       'Opened /collections/[REDACTED]',
     );
-    expect(event['breadcrumbs'].first['data'], {'route': '/collections/:id'});
-    expect(event['breadcrumbs'].last['data'], {'status': 'ready'});
-    expect(event['breadcrumbDrops'], {'dataDropped': 2, 'stepsDropped': 0});
+    expect(event['breadcrumbs'].first['details'], {
+      'route': '/collections/:id',
+    });
+    expect(event['breadcrumbs'].last['details'], {'status': 'ready'});
+    expect(event['breadcrumbDrops'], {'detailsDropped': 2, 'stepsDropped': 0});
     expect(
       reporter.recentBreadcrumbs.first.message,
       'Opened /collections/$uuid',
     );
-    expect(reporter.recentBreadcrumbs.last.data['id'], uuid);
+    expect(reporter.recentBreadcrumbs.last.details['id'], uuid);
   });
 
   test('the canary corpus: no name or value that reads as a credential, a '
@@ -84,7 +89,7 @@ void main() {
       ..addBreadcrumb(
         'Signed in',
         action: 'auth.sign_in',
-        data: const {
+        details: const {
           'password': 'x',
           'heartRate': 80,
           'userEmail': true,
@@ -108,11 +113,11 @@ void main() {
     expect(result.outcome, CaptureOutcome.sent);
     final event = transport.events.single;
     expect(privacyMatches(event), isEmpty);
-    expect(event['breadcrumbs'].single['data'], {
+    expect(event['breadcrumbs'].single['details'], {
       'phase': 'load',
       'attempt': 2,
     });
-    expect(event['breadcrumbDrops'], {'dataDropped': 8, 'stepsDropped': 0});
+    expect(event['breadcrumbDrops'], {'detailsDropped': 8, 'stepsDropped': 0});
   });
 
   group('every value a redaction pattern matches is redacted', () {
@@ -136,7 +141,7 @@ void main() {
     for (final MapEntry(key: name, value: value) in values.entries) {
       test('$name, in a breadcrumb message and a tag', () async {
         final reporter = client()
-          ..addBreadcrumb(value, data: const {'next': 'next'});
+          ..addBreadcrumb(value, details: const {'next': 'next'});
 
         final result = await reporter.captureException(
           StateError('boom'),
@@ -146,7 +151,7 @@ void main() {
 
         expect(result.outcome, CaptureOutcome.sent);
         expect(privacyMatches(transport.events.single), isEmpty);
-        expect(transport.events.single['breadcrumbs'].single['data'], {
+        expect(transport.events.single['breadcrumbs'].single['details'], {
           'next': 'next',
         });
         expect(reporter.recentBreadcrumbs.single.message, value);
@@ -211,25 +216,25 @@ void main() {
         'action': 'open.list',
       },
     ]);
-    expect(event['breadcrumbDrops'], {'dataDropped': 2, 'stepsDropped': 0});
+    expect(event['breadcrumbDrops'], {'detailsDropped': 2, 'stepsDropped': 0});
     expect(reporter.recentBreadcrumbs.first.action, 'open.$uuid');
   });
 
-  test('under regulatedStrict a data string never leaves', () async {
+  test('under regulatedStrict a detail string never leaves', () async {
     final reporter = client(profile: CrashPrivacyProfile.regulatedStrict)
       ..addBreadcrumb(
         'Loaded',
-        data: const {'status': 'loaded', 'items.count': 3, 'busy': false},
+        details: const {'status': 'loaded', 'items.count': 3, 'busy': false},
       );
 
     await reporter.captureException(StateError('boom'), StackTrace.empty);
 
     final event = transport.events.single;
-    expect(event['breadcrumbs'].single['data'], {
+    expect(event['breadcrumbs'].single['details'], {
       'items.count': 3,
       'busy': false,
     });
-    expect(event['breadcrumbDrops'], {'dataDropped': 1, 'stepsDropped': 0});
+    expect(event['breadcrumbDrops'], {'detailsDropped': 1, 'stepsDropped': 0});
   });
 
   test('a message with a health value or a credential is redacted', () async {

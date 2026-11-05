@@ -335,28 +335,28 @@ void _checkExtra(Object? value, String path, {required int depth}) {
 /// What a client left out of an event's breadcrumbs before it sent them
 /// (`breadcrumbDrops`, schema 6), so a loss of evidence is visible.
 final class BreadcrumbDrops {
-  const BreadcrumbDrops({this.dataDropped = 0, this.stepsDropped = 0});
+  const BreadcrumbDrops({this.detailsDropped = 0, this.stepsDropped = 0});
 
-  /// Values left out of steps that were kept: a data entry, an action or a
+  /// Values left out of steps that were kept: a detail entry, an action or a
   /// category the client's checks refused, and a message the client cut
   /// (to its length or to the step's bytes), one per message.
-  final int dataDropped;
+  final int detailsDropped;
 
   /// Steps left out whole: refused even after their values went, or past
   /// the event's [CrashEvent.maxBreadcrumbsBytes], the oldest first.
   final int stepsDropped;
 
   /// Whether nothing was left out.
-  bool get isEmpty => dataDropped == 0 && stepsDropped == 0;
+  bool get isEmpty => detailsDropped == 0 && stepsDropped == 0;
 
   /// These counts and [other]'s together.
   BreadcrumbDrops operator +(BreadcrumbDrops other) => BreadcrumbDrops(
-    dataDropped: dataDropped + other.dataDropped,
+    detailsDropped: detailsDropped + other.detailsDropped,
     stepsDropped: stepsDropped + other.stepsDropped,
   );
 
   Map<String, Object> toJson() => {
-    'dataDropped': dataDropped,
+    'detailsDropped': detailsDropped,
     'stepsDropped': stepsDropped,
   };
 
@@ -364,7 +364,7 @@ final class BreadcrumbDrops {
   /// `$.breadcrumbDrops`: each 0 or more, and not both 0 — an event that
   /// lost nothing carries none.
   void check() {
-    if (dataDropped < 0 || stepsDropped < 0 || isEmpty) {
+    if (detailsDropped < 0 || stepsDropped < 0 || isEmpty) {
       throw const ProtocolException(
         ProtocolViolation.invalidValue,
         r'$.breadcrumbDrops',
@@ -376,13 +376,13 @@ final class BreadcrumbDrops {
   @override
   bool operator ==(Object other) =>
       other is BreadcrumbDrops &&
-      other.dataDropped == dataDropped &&
+      other.detailsDropped == detailsDropped &&
       other.stepsDropped == stepsDropped;
 
   @override
-  int get hashCode => Object.hash(dataDropped, stepsDropped);
+  int get hashCode => Object.hash(detailsDropped, stepsDropped);
 
   @override
   String toString() =>
-      'BreadcrumbDrops(dataDropped: $dataDropped, stepsDropped: $stepsDropped)';
+      'BreadcrumbDrops(detailsDropped: $detailsDropped, stepsDropped: $stepsDropped)';
 }

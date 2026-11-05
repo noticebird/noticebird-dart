@@ -78,7 +78,7 @@ FeedbackReport fullReport({
             action: 'record.toggle',
             category: 'ui',
             level: BreadcrumbLevel.warning,
-            data: const {'component': 'record_tile', 'retryCount': 2},
+            details: const {'component': 'record_tile', 'retryCount': 2},
           ),
         ],
     diagnostics:

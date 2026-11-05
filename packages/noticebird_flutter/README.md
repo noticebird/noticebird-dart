@@ -22,11 +22,12 @@ Future<void> main() async {
 }
 
 // Anywhere in the app, through the facade:
+Noticebird.addBreadcrumb('List opened', category: 'ui');
 await Noticebird.captureException(error, stack, handled: true);
 ```
 
 The start makes the client and attaches it to the `Noticebird` facade,
-installs the global error handlers, sets `Bloc.observer`, keeps what does not
+installs the global error handlers, keeps what does not
 get through in the app's support directory, and sends what waits at start,
 each time the app comes back to the foreground and when the connection
 returns. It reads the app's version and build and the platform's locale
@@ -76,13 +77,9 @@ final outcome = await Noticebird.captureFeedback(
 );
 ```
 
-The sheet's bloc or cubit implements `UntracedBloc`, so the user's typing
-leaves no breadcrumbs and does not push out the steps that led to the report:
-
-```dart
-class FeedbackFormCubit extends Cubit<FeedbackFormState>
-    implements UntracedBloc { … }
-```
+Leave the sheet's own state out of the trail (an observer the app writes
+skips it), so the user's typing does not push out the steps that led to the
+report.
 
 `captureFeedback` never throws in a release build (in a debug build, input
 the report refuses throws an `ArgumentError`, to show it); its
@@ -103,15 +100,15 @@ The SDK never picks an API by itself.
 | Concern | Options |
 |---|---|
 | Where it sends | `apiUrl` and `publishableKey` (above), `httpClient` (the host's HTTP stack), `uploadCrashes` (`false`: crash events are discarded, feedback is still sent) |
-| What an event carries | `privacyProfile`, `pii`, `shouldCapture`, `breadcrumbBuffer` |
-| Feedback | `onFeedbackSettled` |
+| What an event carries | `privacyProfile`, `pii`, `shouldCapture`, `breadcrumbBuffer`, `beforeBreadcrumb` (the app's own scrubbing of every breadcrumb; `null` leaves one out) |
+| Feedback | `onFeedbackSettled`, `feedbackContextDiagnostics` (groups of the app's state taken with each report's moment) |
 | Native crashes | `nativeCrashes`: `NativeCrashCapture()` of `noticebird_native` |
 | Storage | `crashStore`, `feedbackStore`: the host's own stores in place of the default ones |
-| What it installs | `installErrorHandlers`, `observeBlocs`, `blocObserver` |
+| What it installs | `installErrorHandlers` |
 | Engine | `background` |
 
-`start` answers a `NoticebirdFlutter` with the `client`, the `blocObserver`,
-the `platformReadFailures` (each `PlatformReadFailure` a read it went on
+`start` answers a `NoticebirdFlutter` with the `client`, the
+`platformReadFailures` (each `PlatformReadFailure` a read it went on
 without — `packageInfo` or `supportDirectory` — with its `error` and
 `stackTrace`, for a host that reports them) and `close()`, which puts back
 what the start installed (only while it is still the start's) and detaches
@@ -148,30 +145,13 @@ each chained to the handler it replaces. A host whose own handlers stay in
 place passes `installErrorHandlers: false` and reports from them with
 `Noticebird.captureException`.
 
-### Bloc
+### State management
 
-The start sets `Bloc.observer` to bloc's `MultiBlocObserver` of its
-`NoticebirdBlocObserver` and the observer it found. A host that sets an
-observer after the start keeps the SDK's beside it:
-
-```dart
-final noticebird = await NoticebirdFlutter.start(…);
-Bloc.observer = MultiBlocObserver(
-  observers: [noticebird.blocObserver, MyObserver()],
-);
-```
-
-Each bloc event and state change becomes a breadcrumb named by its runtime
-type (`ProfileBloc changed`, `ProfileBloc got Reauthenticate`), a bloc's
-`addError` is captured as handled (wrap it in a `BlocErrorReport` to set its
-severity, tags or extra), and each feedback report's `blocs` diagnostics
-group counts the live blocs per type. A host's subclass of
-`NoticebirdBlocObserver` is passed as `blocObserver:`; the start sets and
-counts that one. A host
-with an untraced marker of its own overrides `traces(bloc)`
-(`super.traces(bloc) && bloc is! MyUntraced`); its errors are still captured.
-`observeBlocs: false` leaves `Bloc.observer` to the host, and the report goes
-without that group.
+The SDK knows no state-management library. An app turns its own state
+changes into breadcrumbs with a few lines in the observer its library has;
+see the `noticebird` skill or [`docs/integration.md`](../../docs/integration.md)
+for bloc, Riverpod and `ChangeNotifier`. `BreadcrumbNames.typeName` names a
+type the way a breadcrumb does, never by an object's text.
 
 ## On the web and under `regulatedStrict`
 
@@ -184,19 +164,15 @@ through is kept in memory only, and a feedback report is
 ## Testing
 
 `package:noticebird_flutter/testing.dart` holds `NoticebirdRecorder`, a real
-client that records its events instead of sending them. The SDK's bloc
-observer, or the app's subclass, reports to it as in the app:
+client that records its events instead of sending them. The app's own code
+reports to it as in the app:
 
 ```dart
 import 'package:noticebird_flutter/testing.dart';
 
 final recorder = NoticebirdRecorder(shouldCapture: myFilter);
-Bloc.observer = NoticebirdBlocObserver(client: recorder.client);
-
-// A bloc reads Bloc.observer when it is made: make it after the line above.
-final cubit = MyCubit(load: () => throw StateError('boom'));
-await cubit.load(); // catches the error into a state, and calls addError
-expect(recorder.events.single['tags'], containsPair('component', 'MyCubit'));
+await ListLoader(reporter: recorder.client).load(); // reports a handled error
+expect(recorder.events.single['handled'], isTrue);
 ```
 
 A test that calls `NoticebirdFlutter.start` ends with
@@ -205,7 +181,7 @@ way included; `Noticebird.detach()` resets the facade.
 
 ## Dependencies
 
-`noticebird` (the pure-Dart client, re-exported), `bloc`, `path_provider` (the
+`noticebird` (the pure-Dart client, re-exported), `path_provider` (the
 support directory), `package_info_plus` (the version and build),
 `connectivity_plus` (the connection's return) and `http`.
 

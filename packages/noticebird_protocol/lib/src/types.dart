@@ -201,13 +201,10 @@ TagScalar clampTagValue(TagScalar value, {int maxLength = maxTagValueLength}) {
 enum BreadcrumbLevel { debug, info, warning, error }
 
 /// One step of the trail that led to an event or a feedback report: when
-/// ([at]), what happened as one line a human reads ([message]), and,
-/// optionally, a technical id of the kind of step ([action]), a short group
-/// ([category]), a [level] and the facts of the step as a flat map
-/// ([data]).
-///
-/// The message is the sentence; data are the facts one would want as a
-/// column, to compare, filter or count. A value is never in both.
+/// ([at]) and what happened as one line a human reads ([message]) — all a
+/// step needs — and, optionally, a technical id of the kind of step
+/// ([action]), a short group ([category]), a [level] and [details]: extra
+/// lines under the step, each `name: value`.
 ///
 /// A character is a UTF-16 code unit (Dart's [String.length]) for every
 /// length limit here, and a byte a byte of the UTF-8 encoding of the
@@ -215,9 +212,9 @@ enum BreadcrumbLevel { debug, info, warning, error }
 /// [maxEncodedBytes], an event's `CrashEvent.maxBreadcrumbsBytes` and a
 /// feedback report's `FeedbackReport.maxTrailBytes`.
 ///
-/// [dataStringPattern] is a shape, not a privacy guarantee: a surname or a
+/// [detailStringPattern] is a shape, not a privacy guarantee: a surname or a
 /// postcode fits it. What keeps such values out is what the app puts in
-/// [data], and the per-entry checks of the client and the platform.
+/// [details], and the per-entry checks of the client and the platform.
 final class TypedBreadcrumb {
   const TypedBreadcrumb({
     required this.at,
@@ -225,7 +222,7 @@ final class TypedBreadcrumb {
     this.action,
     this.category,
     this.level,
-    this.data = const {},
+    this.details = const {},
   });
 
   /// When the step happened, on the device's clock.
@@ -237,7 +234,7 @@ final class TypedBreadcrumb {
   final String message;
 
   /// A technical id of the kind of step, such as `route.push` or
-  /// `profileBloc.change`: 1 to [maxActionLength] characters matching
+  /// `checkout.submit`: 1 to [maxActionLength] characters matching
   /// [actionPattern]. The key for grouping steps, and for comparing a step
   /// with the previous step of the same action.
   final String? action;
@@ -248,10 +245,11 @@ final class TypedBreadcrumb {
 
   final BreadcrumbLevel? level;
 
-  /// The facts of the step: at most [maxDataEntries] entries, each name 1
-  /// to [maxDataNameLength] characters matching [dataNamePattern], each
-  /// value an [isDataValue].
-  final Map<String, Object> data;
+  /// Extra lines under the step, each `name: value` (`items: 3`), flat:
+  /// at most [maxDetails] entries, each name 1
+  /// to [maxDetailNameLength] characters matching [detailNamePattern], each
+  /// value an [isDetailValue].
+  final Map<String, Object> details;
 
   static const maxMessageLength = 200;
 
@@ -284,52 +282,55 @@ final class TypedBreadcrumb {
   /// and `_`.
   static final categoryPattern = RegExp(r'^[a-z][a-z0-9_]*$');
 
-  static const maxDataEntries = 16;
+  static const maxDetails = 16;
 
-  static const maxDataNameLength = 48;
+  static const maxDetailNameLength = 48;
 
-  /// A data name: identifier-like parts joined by dots
+  /// A detail name: identifier-like parts joined by dots
   /// (`collections.count`).
-  static final dataNamePattern = RegExp(
+  static final detailNamePattern = RegExp(
     r'^[a-z][A-Za-z0-9_]*(\.[a-z][A-Za-z0-9_]*)*$',
   );
 
-  static const maxDataStringLength = 64;
+  static const maxDetailStringLength = 64;
 
-  /// A data string: identifier-like, no space, so never prose; `/` and `:`
+  /// A detail string: identifier-like, no space, so never prose; `/` and `:`
   /// for route templates (`/lists/:listId`) and sites
   /// (`sync.write_held:entries`).
-  static final dataStringPattern = RegExp(r'^[A-Za-z0-9/:][A-Za-z0-9_.:/+-]*$');
+  static final detailStringPattern = RegExp(
+    r'^[A-Za-z0-9/:][A-Za-z0-9_.:/+-]*$',
+  );
 
   /// The most bytes one step takes, encoded.
   static const maxEncodedBytes = 512;
 
-  /// The largest magnitude of a data number: 2^53, below which every whole
+  /// The largest magnitude of a detail number: 2^53, below which every whole
   /// number is exact as a double, on every platform.
-  static const maxDataNumber = 9007199254740992;
+  static const maxDetailNumber = 9007199254740992;
 
-  /// Whether [value] is a value [data] takes: a finite number of at most
-  /// [maxDataNumber] in magnitude, a boolean,
-  /// or a string of 1 to [maxDataStringLength] characters matching
-  /// [dataStringPattern].
-  static bool isDataValue(Object? value) => switch (value) {
-    num() => value.isFinite && value.abs() <= maxDataNumber,
+  /// Whether [value] is a value [details] takes: a finite number of at most
+  /// [maxDetailNumber] in magnitude, a boolean,
+  /// or a string of 1 to [maxDetailStringLength] characters matching
+  /// [detailStringPattern].
+  static bool isDetailValue(Object? value) => switch (value) {
+    num() => value.isFinite && value.abs() <= maxDetailNumber,
     bool() => true,
     String() =>
-      value.length <= maxDataStringLength && dataStringPattern.hasMatch(value),
+      value.length <= maxDetailStringLength &&
+          detailStringPattern.hasMatch(value),
     _ => false,
   };
 
-  /// Whether [name] is a name [data] takes: 1 to [maxDataNameLength]
-  /// characters matching [dataNamePattern].
-  static bool isDataName(String name) =>
-      name.length <= maxDataNameLength && dataNamePattern.hasMatch(name);
+  /// Whether [name] is a name [details] takes: 1 to [maxDetailNameLength]
+  /// characters matching [detailNamePattern].
+  static bool isDetailName(String name) =>
+      name.length <= maxDetailNameLength && detailNamePattern.hasMatch(name);
 
   /// The entry [name] → [value] as one text, `name: value`, a number and a
   /// boolean as Dart writes them: what a privacy check scans of an entry,
   /// on the client and on the platform alike, so a name and its value are
   /// read together (`contact: 31612345678`).
-  static String dataEntryText(String name, Object value) => '$name: $value';
+  static String detailEntryText(String name, Object value) => '$name: $value';
 
   Map<String, Object?> toJson() => {
     'at': at.toUtc().toIso8601String(),
@@ -337,7 +338,7 @@ final class TypedBreadcrumb {
     'action': ?action,
     'category': ?category,
     'level': ?level?.name,
-    if (data.isNotEmpty) 'data': data,
+    if (details.isNotEmpty) 'details': details,
   };
 
   /// The bytes [trail] takes encoded, as an event's
@@ -398,37 +399,37 @@ final class TypedBreadcrumb {
   }
 
   void _checkData() {
-    const path = r'$.breadcrumbs[].data';
-    if (data.length > maxDataEntries) {
+    const path = r'$.breadcrumbs[].details';
+    if (details.length > maxDetails) {
       throw const ProtocolException(
         ProtocolViolation.oversized,
         path,
-        'Maximum is $maxDataEntries entries',
+        'Maximum is $maxDetails entries',
       );
     }
-    for (final MapEntry(:key, :value) in data.entries) {
-      if (!isDataName(key)) {
+    for (final MapEntry(:key, :value) in details.entries) {
+      if (!isDetailName(key)) {
         throw ProtocolException(
           ProtocolViolation.invalidValue,
           '$path.$key',
-          'Invalid data name',
+          'Invalid detail name',
         );
       }
-      if (isDataValue(value)) continue;
+      if (isDetailValue(value)) continue;
       final (violation, message) = switch (value) {
-        String() when value.length > maxDataStringLength => (
+        String() when value.length > maxDetailStringLength => (
           ProtocolViolation.oversized,
-          'Data string exceeds $maxDataStringLength characters',
+          'Data string exceeds $maxDetailStringLength characters',
         ),
         String() => (
           ProtocolViolation.invalidValue,
-          'A data string is identifier-like',
+          'A detail string is identifier-like',
         ),
         num() => (
           ProtocolViolation.invalidValue,
-          'Data numbers are finite, at most $maxDataNumber in magnitude',
+          'Data numbers are finite, at most $maxDetailNumber in magnitude',
         ),
-        _ => (ProtocolViolation.invalidType, 'A data value is a scalar'),
+        _ => (ProtocolViolation.invalidType, 'A detail value is a scalar'),
       };
       throw ProtocolException(violation, '$path.$key', message);
     }

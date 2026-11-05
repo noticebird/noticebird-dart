@@ -1,23 +1,25 @@
 ## 0.8.0
 
 Moves with `noticebird` 0.8.0, `noticebird_flutter` 0.8.0 and
-`noticebird_native` 0.8.0. A breadcrumb is a message and data (protocol v2
-of a breadcrumb): the crash event's schema moves to 6, the feedback
+`noticebird_native` 0.8.0. A breadcrumb is a message first, with optional
+details (protocol v2 of a breadcrumb): the crash event's schema moves to 6, the feedback
 report's to 3.
 
 Breaking changes:
 
 - `TypedBreadcrumb({required at, required message, action, category,
-  level, data})`: `at` replaces `occurredAt`; `message` is one line of 1–200
+  level, details})`: `at` replaces `occurredAt`; `message` is one line of 1–200
   characters; `action` (now `^[a-z][A-Za-z0-9_.-]*$`, at most 100) and
   `category` (`^[a-z][a-z0-9_]*$`, at most 32) are optional strings;
   `level` is an optional `BreadcrumbLevel` (`debug`, `info`, `warning`,
-  `error`); `data` is a flat `Map<String, Object>` of at most 16 entries,
-  names by `dataNamePattern` (at most 48), values a finite number, a
-  boolean or a string by `dataStringPattern` (at most 64). A step takes at
-  most 512 bytes encoded. Every limit and pattern is a constant on
-  `TypedBreadcrumb`, with `isDataName`, `isDataValue`, `dataEntryText`,
-  `trailBytes` and `encodedBytes`. A character is a UTF-16 code unit, a
+  `error`); `details` (wire key `details`) are extra lines under the step,
+  a flat `Map<String, Object>` of at most `maxDetails` (16), names by
+  `detailNamePattern` (at most `maxDetailNameLength`, 48), values a finite
+  number of at most `maxDetailNumber` (2^53), a boolean or a string by
+  `detailStringPattern` (at most `maxDetailStringLength`, 64). A step takes
+  at most 512 bytes encoded. Every limit and pattern is a constant on
+  `TypedBreadcrumb`, with `isDetailName`, `isDetailValue`,
+  `detailEntryText`, `trailBytes` and `encodedBytes`. A character is a UTF-16 code unit, a
   byte a byte of the canonical JSON in UTF-8.
 - `PrivacyPatterns.extraKeyViolation` names more identifiers: a key that
   contains `passport`, `nationalid` or `socialsecurity`, and one with `bsn`,
@@ -26,8 +28,7 @@ Breaking changes:
 - A breadcrumb's message holds no control, invisible or bidirectional
   character (`TypedBreadcrumb.controlPattern`: C0 and C1, U+2028–U+2029,
   U+200B–U+200F, U+2060–U+2064, U+FEFF, U+061C, U+202A–U+202E,
-  U+2066–U+2069) and no unpaired surrogate. A data number is at most
-  `TypedBreadcrumb.maxDataNumber` (2^53) in magnitude.
+  U+2066–U+2069) and no unpaired surrogate.
   `cutText`, `hasUnpairedSurrogate` and `replaceUnpairedSurrogates` are the
   rules of a text's code units; `clampTagValue` never splits a surrogate
   pair.
@@ -41,8 +42,8 @@ Breaking changes:
   only.
 - `CrashEvent.schemaVersion` is 6: the breadcrumbs take at most
   `CrashEvent.maxBreadcrumbsBytes` (16 KiB) together, and an event may
-  carry `breadcrumbDrops` (`BreadcrumbDrops`: what the client left out of
-  its breadcrumbs).
+  carry `breadcrumbDrops` (`BreadcrumbDrops(detailsDropped:,
+  stepsDropped:)`: what the client left out of its breadcrumbs).
 - `FeedbackReport.schemaVersion` is 3: its trail takes at most
   `FeedbackReport.maxTrailBytes` (32 KiB), and `checkTrailItem` checks
   `at`.

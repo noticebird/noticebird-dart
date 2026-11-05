@@ -121,7 +121,7 @@ void main() {
           'Tapped a button',
           action: 'button.tap',
           category: 'ui',
-          data: const {'feature': 'lists'},
+          details: const {'feature': 'lists'},
           at: _capturedAt.subtract(const Duration(minutes: 1)),
         );
 
@@ -178,7 +178,7 @@ void main() {
             'message': 'Tapped a button',
             'action': 'button.tap',
             'category': 'ui',
-            'data': {'feature': 'lists'},
+            'details': {'feature': 'lists'},
           },
         ],
         'diagnostics': {
@@ -284,7 +284,7 @@ void main() {
           'x' * 1000,
           action: 'step.${index.toString().padLeft(3, '0')}',
           category: 'bloc',
-          data: {for (var e = 0; e < 4; e++) 'name$e': 'v' * 64},
+          details: {for (var e = 0; e < 4; e++) 'name$e': 'v' * 64},
           at: _capturedAt.subtract(Duration(seconds: 150 - index)),
         );
       }
@@ -292,7 +292,7 @@ void main() {
         'Signed in as ada@example.com',
         action: 'login.ada@example.com',
         category: 'auth',
-        data: const {'feature': 'lists', 'userEmail': true},
+        details: const {'feature': 'lists', 'userEmail': true},
         at: _capturedAt,
       );
 
@@ -306,7 +306,7 @@ void main() {
         'at': '2026-10-30T12:00:00.000Z',
         'message': 'Signed in as [REDACTED]',
         'category': 'auth',
-        'data': {'feature': 'lists'},
+        'details': {'feature': 'lists'},
       });
       expect(trail[trail.length - 2]['action'], 'step.149');
       for (final item in trail) {
@@ -329,7 +329,7 @@ void main() {
       // action and e-mail flag.
       final entriesLost = [
         for (final item in trail.take(trail.length - 1))
-          4 - (item['data']! as Map).length,
+          4 - (item['details']! as Map).length,
       ].fold(0, (sum, lost) => sum + lost);
       expect(entriesLost, greaterThan(0));
       expect((report['diagnostics']! as Map)['noticebird'], {
@@ -347,7 +347,7 @@ void main() {
           reporter.addBreadcrumb(
             'm' * 200,
             action: 'step.$index',
-            data: {'value': 'v' * 64},
+            details: {'value': 'v' * 64},
             at: _capturedAt.subtract(Duration(seconds: 100 - index)),
           );
         }
@@ -1163,7 +1163,7 @@ void main() {
               (random.nextBool() ? '' : '.ada@example.com'),
           category: pick(['ui', 'bloc', 'Not A Category', 'token']),
           level: BreadcrumbLevel.values[random.nextInt(4)],
-          data: {
+          details: {
             'feature': pick([
               'lists',
               'two words',

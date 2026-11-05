@@ -268,15 +268,15 @@ TypedBreadcrumb? _readBreadcrumb(Object? value) {
   try {
     if (value case {'at': final String at, 'message': final String message}) {
       final level = value['level'] as String?;
-      final data = value['data'] as Map? ?? const {};
+      final details = value['details'] as Map? ?? const {};
       return TypedBreadcrumb(
         at: DateTime.parse(at).toUtc(),
         message: message,
         action: value['action'] as String?,
         category: value['category'] as String?,
         level: level == null ? null : BreadcrumbLevel.values.byName(level),
-        data: {
-          for (final MapEntry(:key, :value) in data.entries)
+        details: {
+          for (final MapEntry(:key, :value) in details.entries)
             key as String: value as Object,
         },
       )..check();
@@ -291,11 +291,11 @@ TypedBreadcrumb? _readBreadcrumb(Object? value) {
 /// none for anything else, which costs only the counts.
 BreadcrumbDrops _readDrops(Object? value) {
   if (value case {
-    'dataDropped': final int dataDropped,
+    'detailsDropped': final int detailsDropped,
     'stepsDropped': final int stepsDropped,
-  } when dataDropped >= 0 && stepsDropped >= 0) {
+  } when detailsDropped >= 0 && stepsDropped >= 0) {
     return BreadcrumbDrops(
-      dataDropped: dataDropped,
+      detailsDropped: detailsDropped,
       stepsDropped: stepsDropped,
     );
   }

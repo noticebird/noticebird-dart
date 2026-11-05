@@ -437,7 +437,7 @@ void main() {
             at: _t0,
             message: 'Opened /lists/$id',
             action: 'route.push',
-            data: const {'route': '/lists/:id', 'list': id},
+            details: const {'route': '/lists/:id', 'list': id},
           ),
         ],
       ),
@@ -445,8 +445,8 @@ void main() {
     )!;
 
     expect(event.breadcrumbs.single.message, 'Opened /lists/[REDACTED]');
-    expect(event.breadcrumbs.single.data, {'route': '/lists/:id'});
-    expect(event.breadcrumbDrops, const BreadcrumbDrops(dataDropped: 1));
+    expect(event.breadcrumbs.single.details, {'route': '/lists/:id'});
+    expect(event.breadcrumbDrops, const BreadcrumbDrops(detailsDropped: 1));
   });
 
   test('what the run left out of its trail counts with what goes now', () {
@@ -458,17 +458,17 @@ void main() {
           TypedBreadcrumb(
             at: _t0,
             message: 'Opened',
-            data: const {'password': 'x'},
+            details: const {'password': 'x'},
           ),
         ],
-        uiDrops: const BreadcrumbDrops(dataDropped: 2, stepsDropped: 3),
+        uiDrops: const BreadcrumbDrops(detailsDropped: 2, stepsDropped: 3),
       ),
       privacyProfile: CrashPrivacyProfile.privacyDefault,
     )!;
 
     expect(
       event.breadcrumbDrops,
-      const BreadcrumbDrops(dataDropped: 3, stepsDropped: 3),
+      const BreadcrumbDrops(detailsDropped: 3, stepsDropped: 3),
     );
   });
 
@@ -1119,16 +1119,16 @@ void main() {
       reporter.addBreadcrumb(
         'Opened /lists/$id',
         action: 'route.push',
-        data: const {'route': '/lists/:id', 'list': id},
+        details: const {'route': '/lists/:id', 'list': id},
       );
 
       final kept = collector.updates.last.breadcrumbs.single;
       expect(kept.message, 'Opened /lists/[REDACTED]');
-      expect(kept.data, {'route': '/lists/:id'});
-      expect(reporter.recentBreadcrumbs.single.data['list'], id);
+      expect(kept.details, {'route': '/lists/:id'});
+      expect(reporter.recentBreadcrumbs.single.details['list'], id);
       expect(
         collector.updates.last.breadcrumbDrops,
-        const BreadcrumbDrops(dataDropped: 1),
+        const BreadcrumbDrops(detailsDropped: 1),
         reason: 'what the run left out travels with its trail',
       );
     });

@@ -483,6 +483,6 @@ void main() {
     final event = await deliveredEvent();
 
     expect(event, isNot(contains('breadcrumbs')));
-    expect(event['breadcrumbDrops'], {'dataDropped': 0, 'stepsDropped': 1});
+    expect(event['breadcrumbDrops'], {'detailsDropped': 0, 'stepsDropped': 1});
   });
 }

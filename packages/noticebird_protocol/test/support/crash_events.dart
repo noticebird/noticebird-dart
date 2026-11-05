@@ -36,7 +36,7 @@ TypedBreadcrumb v6Breadcrumb({
   String? action = 'route.push',
   String? category = 'navigation',
   BreadcrumbLevel? level = BreadcrumbLevel.info,
-  Map<String, Object> data = const {
+  Map<String, Object> details = const {
     'route': '/lists/:listId',
     'from': '/',
     'items.count': 3,
@@ -48,7 +48,7 @@ TypedBreadcrumb v6Breadcrumb({
   action: action,
   category: category,
   level: level,
-  data: data,
+  details: details,
 );
 
 /// The fixture's second step: a time and a message, nothing else.
@@ -74,7 +74,7 @@ CrashEvent v6Event({
   List<TypedBreadcrumb>? breadcrumbs,
   NativeCrashInfo? nativeCrash,
   List<String>? groupingKey = const ['sync-refusal', '23505', 'collections'],
-  BreadcrumbDrops? breadcrumbDrops = const BreadcrumbDrops(dataDropped: 1),
+  BreadcrumbDrops? breadcrumbDrops = const BreadcrumbDrops(detailsDropped: 1),
 }) => CrashEvent(
   eventId: eventId,
   occurredAt: DateTime.utc(2026, 7, 11, 10, 15),

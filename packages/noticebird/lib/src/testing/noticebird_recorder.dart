@@ -23,9 +23,9 @@ final class RecordingCrashTransport implements CrashTransport {
 }
 
 /// A client that records what it reports instead of sending it, for a
-/// host's tests: its [client] goes wherever the host's code takes one — a
-/// `NoticebirdBlocObserver(client: …)`, the host's own adapter, the
-/// `Noticebird` facade ([attach]) — and [events] are the reports as the
+/// host's tests: its [client] goes wherever the host's code takes one — an
+/// observer the host writes, the host's own adapter, the `Noticebird`
+/// facade ([attach]) — and [events] are the reports as the
 /// client would post them: built, sanitized and encoded by the real client,
 /// as in the app. It does not stand in for the platform, which checks every
 /// event again when it arrives.
@@ -37,10 +37,8 @@ final class RecordingCrashTransport implements CrashTransport {
 ///
 /// ```dart
 /// final recorder = NoticebirdRecorder(shouldCapture: shouldCaptureError);
-/// Bloc.observer = NoticebirdBlocObserver(client: recorder.client);
-/// // Made after the observer is set, a cubit that calls addError when its
-/// // load fails:
-/// await ListCubit(load: () => throw StateError('boom')).load();
+/// // The code under test reports to the recorder's client:
+/// await ListLoader(reporter: recorder.client).load();
 /// expect(recorder.events.single['handled'], isTrue);
 /// ```
 final class NoticebirdRecorder {

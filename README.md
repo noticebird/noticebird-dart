@@ -28,8 +28,8 @@ shows.
 This workspace contains the Noticebird packages:
 
 - `packages/noticebird_flutter` — the package a Flutter app depends on: one
-  start wires the client, the error handlers, bloc and navigation
-  breadcrumbs, the offline stores and their delivery;
+  start wires the client, the error handlers, navigation breadcrumbs, the
+  offline stores and their delivery;
 - `packages/noticebird` — the pure-Dart client it starts: capture,
   breadcrumbs, identity, the offline queues and user feedback;
 - `packages/noticebird_protocol` — the pure-Dart, versioned event protocol it

@@ -39,8 +39,9 @@ The publish dry-runs need a clean tree.
   compatibility/property coverage; SDK changes need capture, privacy, queue,
   retry, or handler coverage as appropriate.
 - Keep the boundary intact: `noticebird_protocol` and `noticebird` stay pure
-  Dart (no Flutter import), everything that needs Flutter or `bloc` lives in
-  `noticebird_flutter`, and no package depends on a service-side package.
+  Dart (no Flutter import), everything that needs Flutter lives in
+  `noticebird_flutter`, no package knows a state-management library, and no
+  package depends on a service-side package.
 - Preserve the privacy and reliability invariants:
   - the SDK must never crash or hang the host application;
   - never capture secrets, tokens, or regulated/health data — extend the

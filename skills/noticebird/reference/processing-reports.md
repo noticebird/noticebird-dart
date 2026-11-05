@@ -148,7 +148,7 @@ You change nothing: no code, no files, no commits, no report status.
    report that does not exist, or a server without the feedback tools: say so in its
    block and go on.
 3. Find where it lives in the code when that decides the route: the route template
-   names the screen, the trail the blocs and routes before the report, the diagnostics
+   names the screen, the trail the steps and routes before the report, the diagnostics
    the app's state. Read only what you need. A screen can live in a library the app
    depends on; read it there, and a cause there is fixed there.
 4. Check whether it is already known, in the places the app's binding names.

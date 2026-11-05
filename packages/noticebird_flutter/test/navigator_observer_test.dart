@@ -1,6 +1,6 @@
 // NoticebirdNavigatorObserver: a breadcrumb per step — a message of what
 // happened to which kind of route, an action per step, and the routes on top
-// after and before it as data — named by the host's describe, a route name
+// after and before it as details — named by the host's describe, a route name
 // that is a template, or the route's kind, so a raw path never reaches the
 // trail by default.
 
@@ -62,7 +62,7 @@ void main() {
 
   List<(String?, Object?, Object?)> trail() => [
     for (final crumb in client.recentBreadcrumbs)
-      (crumb.action, crumb.data['route'], crumb.data['from']),
+      (crumb.action, crumb.details['route'], crumb.details['from']),
   ];
 
   test('records push, replace, pop and remove, the route on top after the '
@@ -132,6 +132,39 @@ void main() {
     ]);
   });
 
+  test('beforeBreadcrumb sees the observer\'s steps as the app\'s own', () {
+    final hooked = NoticebirdClient(
+      config: NoticebirdConfig(
+        privacyProfile: CrashPrivacyProfile.privacyDefault,
+        app: const AppMetadata(
+          name: 'test',
+          version: '1.0.0',
+          build: '1',
+          release: 'test@1.0.0+1',
+        ),
+        platform: const PlatformMetadata(
+          platform: CrashPlatform.unknown,
+          osVersion: 'test',
+          deviceClass: 'test',
+        ),
+        beforeBreadcrumb: (step) => step.action == 'route.pop' ? null : step,
+      ),
+    );
+    final observer = NoticebirdNavigatorObserver(client: hooked);
+    final home = _Route('/home');
+    final list = _Route('/lists/:listId');
+
+    observer
+      ..didPush(home, null)
+      ..didPush(list, home)
+      ..didPop(list, home);
+
+    expect(
+      [for (final step in hooked.recentBreadcrumbs) step.action],
+      ['route.push', 'route.push'],
+    );
+  });
+
   test('the message names the kind of route', () {
     final observer = NoticebirdNavigatorObserver(client: client);
     final home = _Route('/home');
@@ -157,11 +190,11 @@ void main() {
         'Closed dialog',
       ],
     );
-    expect(client.recentBreadcrumbs[1].data, {
+    expect(client.recentBreadcrumbs[1].details, {
       'route': '_Sheet',
       'from': '/home',
     });
-    expect(client.recentBreadcrumbs[2].data, {
+    expect(client.recentBreadcrumbs[2].details, {
       'route': '/home',
       'from': '_Sheet',
     });

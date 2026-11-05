@@ -71,7 +71,7 @@ void main() {
         'PatientCubit changed for user@example.com, glucose=12.4',
         action: 'patientCubit.change',
         category: 'bloc',
-        data: const {'status': 'loaded', 'items.count': 3},
+        details: const {'status': 'loaded', 'items.count': 3},
       );
 
       await reporter.captureException(
@@ -109,7 +109,7 @@ void main() {
       final breadcrumb = transport.events.single['breadcrumbs'].single;
       expect(breadcrumb['message'], startsWith('PatientCubit changed for '));
       expect(breadcrumb['message'], contains('[REDACTED]'));
-      expect(breadcrumb['data'], {'items.count': 3});
+      expect(breadcrumb['details'], {'items.count': 3});
       expect(
         transport.events.single,
         isNot(contains('extra')),
@@ -211,10 +211,10 @@ void main() {
 
   // The rule the feedback trail follows: a breadcrumb the protocol refuses
   // used to fail validation at capture time and drop the whole event.
-  for (final (name, message, data, keptData) in [
+  for (final (name, message, details, keptDetails) in [
     ('a message left empty', '\u0000', const <String, Object>{}, null),
     (
-      'a NaN data value',
+      'a NaN detail value',
       'Loaded',
       const <String, Object>{'ratio': double.nan, 'attempt': 2},
       const {'attempt': 2},
@@ -224,7 +224,7 @@ void main() {
         'value, not the event', () async {
       reporter
         ..addBreadcrumb('Opened page', action: 'route.push')
-        ..addBreadcrumb(message, action: 'list.load', data: data)
+        ..addBreadcrumb(message, action: 'list.load', details: details)
         ..addBreadcrumb('Closed page', action: 'route.pop');
 
       final result = await reporter.captureException(
@@ -236,12 +236,12 @@ void main() {
       final breadcrumbs = transport.events.single['breadcrumbs'] as List;
       expect(
         [for (final breadcrumb in breadcrumbs) breadcrumb['action']],
-        ['route.push', if (keptData != null) 'list.load', 'route.pop'],
+        ['route.push', if (keptDetails != null) 'list.load', 'route.pop'],
       );
-      if (keptData != null) expect(breadcrumbs[1]['data'], keptData);
+      if (keptDetails != null) expect(breadcrumbs[1]['details'], keptDetails);
       expect(transport.events.single['breadcrumbDrops'], {
-        'dataDropped': keptData == null ? 0 : 1,
-        'stepsDropped': keptData == null ? 1 : 0,
+        'detailsDropped': keptDetails == null ? 0 : 1,
+        'stepsDropped': keptDetails == null ? 1 : 0,
       });
     });
   }

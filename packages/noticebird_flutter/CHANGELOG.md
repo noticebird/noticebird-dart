@@ -4,30 +4,25 @@ Moves with `noticebird` 0.8.0 and `noticebird_protocol` 0.8.0.
 
 Breaking changes:
 
-- `NoticebirdBlocObserver` writes a step as a message: `ProfileBloc
-  changed` (action `profileBloc.change`) and `ProfileBloc got
-  Reauthenticate` (action `profileBloc.event`), category `bloc`, without
-  data; a type's name loses its type arguments, its leading underscores
-  and a freezed `_$…Impl` wrapper, and a character outside
-  `[A-Za-z0-9_]` becomes `_`. `describeEvent`, `describeChange` and
-  `describeState` are removed. The `blocs` diagnostics group counts a type
-  under the same name its actions start with.
+- No state management in the SDK: the `bloc` dependency goes, and with it
+  `NoticebirdBlocObserver`, `UntracedBloc`, `BlocErrorReport`,
+  `captureBlocError`, the start's `observeBlocs` and `blocObserver`,
+  `NoticebirdFlutter.blocObserver` and the feedback report's `blocs`
+  diagnostics group. An app turns its state changes into breadcrumbs in
+  the observer its library has (the `noticebird` skill shows bloc,
+  Riverpod and `ChangeNotifier`), with `BreadcrumbNames.typeName` for a
+  type's name, and reports a caught error with `captureException`.
 - `NoticebirdNavigatorObserver` writes `Opened page`, `Closed dialog`, …
   (actions `route.push`, `route.pop`, `route.replace`, `route.remove`,
-  category `navigation`), with the route on top after the step as `route`
-  and the one before it as `from`, for every step alike: a route removed
-  or replaced below the top leaves both the top.
+  category `navigation`), with the route on top after the step as the
+  detail `route` and the one before it as `from`, for every step alike: a
+  route removed or replaced below the top leaves both the top.
 
 Changes:
 
-- `NoticebirdBlocObserver(stateFields:, eventFields:)` and
-  `NoticebirdFlutter.start(blocStateFields:, blocEventFields:)`: a change
-  step's data describes the next state, an event step's the event, by the
-  app's `BreadcrumbFields`. A change whose next state describes as the
-  state before it leaves no step; a state the table describes as nothing
-  still leaves its step by name; the descriptions are compared before the
-  client sanitizes the step. Passing the tables beside a `blocObserver` of
-  the host's own, or with `observeBlocs: false`, is an `ArgumentError`.
+- `NoticebirdFlutter.start(beforeBreadcrumb:)` (the client's
+  `NoticebirdConfig.beforeBreadcrumb`) and
+  `start(feedbackContextDiagnostics:)` (`FeedbackConfig.contextDiagnostics`).
 
 ## 0.7.0
 

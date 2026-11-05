@@ -3,9 +3,9 @@
 A minimal Flutter app on `noticebird_flutter`:
 
 - `NoticebirdFlutter.start` in `main`, before `runApp`: the client, the error
-  handlers, the bloc breadcrumbs, the offline stores and their delivery;
+  handlers, the offline stores and their delivery;
 - `NoticebirdNavigatorObserver` in the app's `navigatorObservers`;
-- a cubit whose changes become breadcrumbs;
+- a button that adds a breadcrumb, a message with a detail;
 - a handled error (`captureException(..., handled: true)`), an uncaught one
   that the start's handlers capture so the app keeps running, a feedback
   report sent with its moment (`feedbackMoment`, `captureFeedback`), a login

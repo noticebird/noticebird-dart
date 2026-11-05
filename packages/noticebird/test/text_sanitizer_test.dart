@@ -14,13 +14,13 @@ void main() {
     String message, {
     String? action,
     String? category,
-    Map<String, Object> data = const {},
+    Map<String, Object> details = const {},
   }) => TypedBreadcrumb(
     at: at,
     message: message,
     action: action,
     category: category,
-    data: data,
+    details: details,
   );
 
   SanitizedBreadcrumb sanitized(TypedBreadcrumb step, {bool strict = false}) =>
@@ -32,19 +32,23 @@ void main() {
         'Opened page',
         action: 'route.push',
         category: 'navigation',
-        data: const {'route': '/lists/:listId', 'items.count': 3, 'busy': true},
+        details: const {
+          'route': '/lists/:listId',
+          'items.count': 3,
+          'busy': true,
+        },
       );
-      final (:step, :dataDropped) = sanitized(given);
+      final (:step, :detailsDropped) = sanitized(given);
       expect(step!.toJson(), given.toJson());
-      expect(dataDropped, 0);
+      expect(detailsDropped, 0);
     });
 
     test('a line break in the message becomes a space, U+0000 goes', () {
-      final (:step, :dataDropped) = sanitized(
+      final (:step, :detailsDropped) = sanitized(
         crumb('one\ntwo\r\nthree\rfour five\u0000'),
       );
       expect(step!.message, 'one two three four five');
-      expect(dataDropped, 0);
+      expect(detailsDropped, 0);
     });
 
     test('a control, zero-width or bidirectional character in the message '
@@ -63,55 +67,57 @@ void main() {
         '\u2064',
         '\uFEFF',
       ]) {
-        final (:step, :dataDropped) = sanitized(crumb('a${control}b'));
+        final (:step, :detailsDropped) = sanitized(crumb('a${control}b'));
         expect(step!.message, 'a b', reason: control.codeUnits.toString());
-        expect(dataDropped, 0);
+        expect(detailsDropped, 0);
       }
     });
 
     test('the message is redacted and cut to 200 characters, the cut '
         'counted once', () {
-      final (:step, :dataDropped) = sanitized(
+      final (:step, :detailsDropped) = sanitized(
         crumb('Invited person@example.com ${'x' * 300}'),
       );
       expect(step!.message, startsWith('Invited [REDACTED] '));
       expect(step.message.length, TypedBreadcrumb.maxMessageLength);
-      expect(dataDropped, 1);
-      expect(sanitized(crumb('x' * 200)).dataDropped, 0);
+      expect(detailsDropped, 1);
+      expect(sanitized(crumb('x' * 200)).detailsDropped, 0);
     });
 
     test('a cut never ends inside a surrogate pair', () {
       // 'a' and 100 emoji: 201 code units, whose 200th is the first half of
       // a pair.
-      final (:step, :dataDropped) = sanitized(crumb('a${'😀' * 100}'));
+      final (:step, :detailsDropped) = sanitized(crumb('a${'😀' * 100}'));
       expect(step, isNotNull);
       expect(step!.message, 'a${'😀' * 99}');
       expect(hasUnpairedSurrogate(step.message), isFalse);
-      expect(dataDropped, 1);
+      expect(detailsDropped, 1);
     });
 
     test('an unpaired surrogate in a message becomes U+FFFD', () {
-      final (:step, dataDropped: _) = sanitized(crumb('a\ud83db\ude00c'));
+      final (:step, detailsDropped: _) = sanitized(crumb('a\ud83db\ude00c'));
       expect(step!.message, 'a\uFFFDb\uFFFDc');
     });
 
     test('a step whose message is left empty is refused, its values not '
         'counted', () {
-      final result = sanitized(crumb('\u0000', data: const {'password': 'x'}));
+      final result = sanitized(
+        crumb('\u0000', details: const {'password': 'x'}),
+      );
       expect(result.step, isNull);
-      expect(result.dataDropped, 0);
+      expect(result.detailsDropped, 0);
     });
 
     test('an action or a category outside its pattern is left out and '
         'counted', () {
-      final (:step, :dataDropped) = sanitized(
+      final (:step, :detailsDropped) = sanitized(
         crumb('Tapped', action: 'Tap Button', category: 'UI'),
       );
       expect(step!.toJson(), {
         'at': '2026-11-05T09:00:00.000Z',
         'message': 'Tapped',
       });
-      expect(dataDropped, 2);
+      expect(detailsDropped, 2);
     });
 
     test('the canary corpus: no name or value that reads as personal data or '
@@ -126,18 +132,18 @@ void main() {
         'host': '10.20.30.40',
         'mode': 'bearer',
       };
-      final (:step, :dataDropped) = sanitized(
-        crumb('Signed in', data: {...corpus, 'phase': 'load'}),
+      final (:step, :detailsDropped) = sanitized(
+        crumb('Signed in', details: {...corpus, 'phase': 'load'}),
       );
-      expect(step!.data, {'phase': 'load'});
-      expect(dataDropped, corpus.length);
+      expect(step!.details, {'phase': 'load'});
+      expect(detailsDropped, corpus.length);
     });
 
     test('a name or a value the protocol does not take is left out', () {
-      final (:step, :dataDropped) = sanitized(
+      final (:step, :detailsDropped) = sanitized(
         crumb(
           'Loaded',
-          data: const {
+          details: const {
             'Status': 'loaded',
             'note': 'two words',
             'ratio': double.nan,
@@ -146,48 +152,48 @@ void main() {
           },
         ),
       );
-      expect(step!.data, {'kept': 'yes'});
-      expect(dataDropped, 4);
+      expect(step!.details, {'kept': 'yes'});
+      expect(detailsDropped, 4);
     });
 
-    test('under strict every data string is left out', () {
-      final (:step, :dataDropped) = sanitized(
+    test('under strict every detail string is left out', () {
+      final (:step, :detailsDropped) = sanitized(
         crumb(
           'Loaded',
-          data: const {'status': 'loaded', 'count': 3, 'busy': true},
+          details: const {'status': 'loaded', 'count': 3, 'busy': true},
         ),
         strict: true,
       );
-      expect(step!.data, {'count': 3, 'busy': true});
-      expect(dataDropped, 1);
+      expect(step!.details, {'count': 3, 'busy': true});
+      expect(detailsDropped, 1);
     });
 
     test('entries past 16 are left out, the first ones kept', () {
-      final (:step, :dataDropped) = sanitized(
-        crumb('Loaded', data: {for (var i = 0; i < 20; i++) 'n$i': i}),
+      final (:step, :detailsDropped) = sanitized(
+        crumb('Loaded', details: {for (var i = 0; i < 20; i++) 'n$i': i}),
       );
-      expect(step!.data.keys, [for (var i = 0; i < 16; i++) 'n$i']);
-      expect(dataDropped, 4);
+      expect(step!.details.keys, [for (var i = 0; i < 16; i++) 'n$i']);
+      expect(detailsDropped, 4);
     });
 
-    test('a step over 512 bytes loses its last data entries first, then the '
+    test('a step over 512 bytes loses its last detail entries first, then the '
         'end of its message', () {
       // A whole message of 200 characters and four 64-character values
       // are over 512 bytes; the first entries are kept, as many as fit.
-      final data = {for (var i = 0; i < 4; i++) 'name$i': 'v' * 64};
-      final dataFirst = sanitized(crumb('m' * 200, data: data));
-      final kept = 4 - dataFirst.dataDropped;
-      expect(dataFirst.dataDropped, greaterThan(0));
-      expect(dataFirst.step!.message, 'm' * 200);
-      expect(dataFirst.step!.data.keys, data.keys.take(kept));
+      final details = {for (var i = 0; i < 4; i++) 'name$i': 'v' * 64};
+      final detailsFirst = sanitized(crumb('m' * 200, details: details));
+      final kept = 4 - detailsFirst.detailsDropped;
+      expect(detailsFirst.detailsDropped, greaterThan(0));
+      expect(detailsFirst.step!.message, 'm' * 200);
+      expect(detailsFirst.step!.details.keys, details.keys.take(kept));
       expect(
-        dataFirst.step!.encodedBytes,
+        detailsFirst.step!.encodedBytes,
         lessThanOrEqualTo(TypedBreadcrumb.maxEncodedBytes),
       );
       expect(
         crumb(
           'm' * 200,
-          data: Map.fromEntries(data.entries.take(kept + 1)),
+          details: Map.fromEntries(details.entries.take(kept + 1)),
         ).encodedBytes,
         greaterThan(TypedBreadcrumb.maxEncodedBytes),
       );
@@ -195,10 +201,10 @@ void main() {
       // A message of 200 characters of three bytes each (`€`) is over 512
       // bytes alone: every entry goes, then its end, the cut counted once.
       final messageToo = sanitized(
-        crumb('€' * 200, data: const {'phase': 'load'}),
+        crumb('€' * 200, details: const {'phase': 'load'}),
       );
-      expect(messageToo.step!.data, isEmpty);
-      expect(messageToo.dataDropped, 2);
+      expect(messageToo.step!.details, isEmpty);
+      expect(messageToo.detailsDropped, 2);
       expect(messageToo.step!.message.length, lessThan(200));
       expect(
         messageToo.step!.encodedBytes,
@@ -220,7 +226,7 @@ void main() {
       final given = crumb(
         '€' * 200,
         action: 'a.b',
-        data: {for (var i = 0; i < 16; i++) 'name$i': 'v' * 30},
+        details: {for (var i = 0; i < 16; i++) 'name$i': 'v' * 30},
       );
       expect(sanitized(given).step!.toJson(), sanitized(given).step!.toJson());
     });
@@ -230,14 +236,14 @@ void main() {
     TypedBreadcrumb sized(int index) => crumb(
       '${'m' * 190} $index',
       action: 'a.step$index',
-      data: {for (var e = 0; e < 3; e++) 'name$e': 'v' * 40},
+      details: {for (var e = 0; e < 3; e++) 'name$e': 'v' * 40},
     );
 
     test('refused steps go, and the oldest until the trail fits', () {
       final steps = [for (var i = 0; i < 50; i++) sized(i)];
       final (steps: kept, :drops) = sanitizeTrail([
-        (step: null, dataDropped: 0),
-        for (final step in steps) (step: step, dataDropped: 1),
+        (step: null, detailsDropped: 0),
+        for (final step in steps) (step: step, detailsDropped: 1),
       ], maxBytes: CrashEvent.maxBreadcrumbsBytes);
       expect(
         TypedBreadcrumb.trailBytes(kept),
@@ -251,12 +257,12 @@ void main() {
       expect(kept.last.action, 'a.step49');
       expect(drops.stepsDropped, 1 + 50 - kept.length);
       // Only the kept steps' values count.
-      expect(drops.dataDropped, kept.length);
+      expect(drops.detailsDropped, kept.length);
     });
 
     test('a trail that fits loses nothing', () {
       final (steps: kept, :drops) = sanitizeTrail([
-        for (var i = 0; i < 3; i++) (step: sized(i), dataDropped: 0),
+        for (var i = 0; i < 3; i++) (step: sized(i), detailsDropped: 0),
       ], maxBytes: FeedbackReport.maxTrailBytes);
       expect(kept, hasLength(3));
       expect(drops.isEmpty, isTrue);

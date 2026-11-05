@@ -33,7 +33,7 @@ TypedBreadcrumb _crumb(int index) => TypedBreadcrumb(
   action: 'tap.button_$index',
   category: 'ui',
   level: BreadcrumbLevel.info,
-  data: {'feature': 'f' * 40, 'operation': 'o' * 40, 'component': 'c' * 40},
+  details: {'feature': 'f' * 40, 'operation': 'o' * 40, 'component': 'c' * 40},
 );
 
 void main() {
@@ -159,7 +159,7 @@ void main() {
     expect(crumbs.length, lessThan(50));
     expect((crumbs.last as Map)['action'], 'tap.button_49');
     expect(json['breadcrumbDrops'], {
-      'dataDropped': 0,
+      'detailsDropped': 0,
       'stepsDropped': 50 - crumbs.length,
     });
   });
@@ -172,7 +172,7 @@ void main() {
         NativeRunState(
           breadcrumbs: [_crumb(1)],
           breadcrumbDrops: const BreadcrumbDrops(
-            dataDropped: 2,
+            detailsDropped: 2,
             stepsDropped: 1,
           ),
         ),
@@ -180,7 +180,7 @@ void main() {
       ..flush();
 
     expect(engineJson('run-current', 'e1')['breadcrumbDrops'], {
-      'dataDropped': 2,
+      'detailsDropped': 2,
       'stepsDropped': 1,
     });
     writeRun('run-current', startedAtMs: 1000);
@@ -191,7 +191,7 @@ void main() {
     ).single.engines.single;
     expect(
       engine.breadcrumbDrops,
-      const BreadcrumbDrops(dataDropped: 2, stepsDropped: 1),
+      const BreadcrumbDrops(detailsDropped: 2, stepsDropped: 1),
     );
   });
 

@@ -37,9 +37,9 @@ final class FeedbackConfig {
   final void Function(FeedbackSettled settled)? onSettled;
 
   /// Diagnostics groups of the app's state the client takes itself with
-  /// each report's [FeedbackMoment], before the host's own: what a
-  /// framework integration knows, such as the live blocs per type
-  /// (`noticebird_flutter` fills it). Asked when the moment is taken; one
+  /// each report's [FeedbackMoment], before the host's own: what the app's
+  /// integration knows of its state, such as the open screens or a sync
+  /// queue (`NoticebirdFlutter.start(feedbackContextDiagnostics:)`). Asked when the moment is taken; one
   /// that throws adds nothing. Its values are sanitised as the host's are.
   final Map<String, Map<String, Object?>> Function()? contextDiagnostics;
 }

@@ -5,7 +5,8 @@ description: >
   that depends on `noticebird_flutter` (or a Dart program on the `noticebird` client) —
   starting Noticebird, capturing errors, adding breadcrumbs, attaching identity or
   route context, the offline queues, a feedback sheet (bug report, idea, screenshot),
-  bloc and navigation breadcrumbs, or native crashes — and when an agent processes an
+  navigation breadcrumbs, state changes as breadcrumbs (bloc, Riverpod,
+  ChangeNotifier), or native crashes — and when an agent processes an
   app's feedback and crash reports over Noticebird's MCP server (the overview, triage,
   routes and statuses: reference/processing-reports.md), including the GitHub workflow
   that analyses one new report in the app's repository.
@@ -14,22 +15,22 @@ description: >
   sends nothing", "capture a handled error", "test code that reports crashes", "send
   user feedback", "add a report-a-bug button", "attach a screenshot to feedback",
   "who sent this report", "my own zone", "my own bloc observer", "show what a report
-  sends", "my own untraced marker", "reset Noticebird between tests".
+  sends", "scrub a breadcrumb", "reset Noticebird between tests".
   Triggers on: noticebird_flutter, NoticebirdFlutter, NoticebirdFlutter.start,
-  reportZoneError, installErrorHandlers, observeBlocs, background start,
-  apiUrl, hostedApiUrl, NoticebirdNavigatorObserver, NoticebirdBlocObserver, traces,
-  UntracedBloc, MultiBlocObserver, reportedContext, ReportedContext, testing.dart,
+  reportZoneError, installErrorHandlers, background start,
+  apiUrl, hostedApiUrl, NoticebirdNavigatorObserver, BlocObserver, ProviderObserver,
+  ChangeNotifier, reportedContext, ReportedContext, testing.dart,
   NoticebirdRecorder, RecordingCrashTransport, resetForTesting,
-  BlocErrorReport, captureBlocError, NoticebirdClient, Noticebird, captureException,
+  beforeBreadcrumb, BreadcrumbNames, details, NoticebirdClient, Noticebird, captureException,
   CaptureOutcome, CaptureResult, discarded, eventIdOf, captureFeedback,
   feedbackMoment, FeedbackMoment, feedback.dart, FeedbackConfig, FeedbackHttpTransport,
   FeedbackKind, FeedbackOutcome, FeedbackDelivered, FeedbackQueued, FeedbackRejected,
   FeedbackRejection, FeedbackContact, FeedbackUserContext, FeedbackDiagnostics,
-  contextDiagnostics, onSettled, onFeedbackSettled,
+  contextDiagnostics, feedbackContextDiagnostics, onSettled, onFeedbackSettled,
   FeedbackSettled, FeedbackOfflineStore, FileFeedbackOfflineStore, pendingFeedbackCount,
   shouldCapture, filtered, hostPlatformMetadata, processSessionId,
   uploadCrashes, platformReadFailures, PlatformReadFailure, tracksRouteTemplate, addBreadcrumb, TypedBreadcrumb,
-  BreadcrumbLevel, BreadcrumbFields, BreadcrumbField, AllowedTag, setRouteTemplate, isRouteTemplate, setUser, setUserId,
+  BreadcrumbLevel, AllowedTag, setRouteTemplate, isRouteTemplate, setUser, setUserId,
   CrashPrivacyProfile, regulatedStrict, CrashHttpTransport, noticebird_pk_, crash_pk_,
   CrashOfflineStore, FileCrashOfflineStore, flush, close, noticebird_native,
   NativeCrashCapture, nativeCrashes, reportNativeCrashes, NativeCrashCollector,
@@ -109,10 +110,9 @@ repository's `docs/integration.md`, §1 "Depend on the SDK".
 
 The start makes the client and attaches it to the `Noticebird` facade, installs
 `FlutterError.onError` and `PlatformDispatcher.onError` (each chained to the one it
-replaces), sets `Bloc.observer`, fills each feedback report's locale and `blocs`
-diagnostics group, keeps unsent events and reports in the support directory, and sends
+replaces), fills each feedback report's locale, keeps unsent events and reports in the support directory, and sends
 what waits at start, on resume and when the connection returns. A second `start` answers
-the first. It answers a `NoticebirdFlutter`: its `client`, its `blocObserver`, its
+the first. It answers a `NoticebirdFlutter`: its `client`, its
 `platformReadFailures` (each `PlatformReadFailure` a read it went on without —
 `packageInfo` or `supportDirectory` — with its `error` and `stackTrace`, for a host that
 reports them), and `close()`, which puts back what it installed (each only while it is
@@ -129,9 +129,10 @@ feedback; the SDK never picks an API by itself.
 
 The other options: `httpClient` (the host's HTTP stack),
 `uploadCrashes: false` (crash events `discarded`, feedback still sent), `privacyProfile`,
-`pii`, `breadcrumbBuffer`, `onFeedbackSettled`,
-`crashStore` and `feedbackStore` (your own stores), `installErrorHandlers`, `observeBlocs`,
-`blocObserver` (a subclass of your own), `background`.
+`pii`, `breadcrumbBuffer`, `beforeBreadcrumb` (*Breadcrumbs*), `onFeedbackSettled`,
+`feedbackContextDiagnostics` (groups of the app's state taken with each report's
+moment), `crashStore` and `feedbackStore` (your own stores), `installErrorHandlers`,
+`background`.
 
 - **A zone of your own.** The start installs none; `PlatformDispatcher.onError` catches
   what nothing else does. A host with its own guarded zone starts inside it and passes
@@ -200,14 +201,14 @@ or an `extra` key left out), and an event it cannot write is `dropped` on the de
 ### One report per failure: one filter, one bypass
 
 Deduplication recognises a repeat of the *same* capture. It cannot tell that a
-repository's capture, a bloc observer's and a caller's are one failure — each carries a
+repository's capture, a state holder's and a caller's are one failure — each carries a
 different stack and often a different object — and the SDK does not try to.
 
 When the host already reports some errors at a report point of its own — an error library
 that reports at the conversion into its own error type, say — every other channel must
 leave them alone. That is `shouldCapture`, the capture filter every crash SDK offers:
 asked once per capture on **every** channel — an explicit `captureException`, the
-`NoticebirdBlocObserver`, the handlers the start installs and `reportZoneError` — and
+handlers the start installs and `reportZoneError` — and
 `false` drops the capture as `ignored`. The report point itself captures with
 `filtered: false`:
 
@@ -221,7 +222,7 @@ await NoticebirdFlutter.start(
 Noticebird.captureException(error, stack, handled: true, filtered: false);
 ```
 
-Set it once and the stock observer and handlers need no type check of their own, and a
+Set it once and the handlers need no type check of their own, and a
 channel added later cannot report such an error twice. The live-debug sync is never
 filtered; a filter that throws counts as `true`, so a failing filter never costs a report.
 The SDK stays generic: the predicate is the host's, the SDK only asks it. A user's own
@@ -239,21 +240,57 @@ step's message redacted (an id becomes `[REDACTED]`) and cut to the protocol's 2
 characters, each step at most 512 bytes. A sent event does not empty the buffer; it only
 moves the start of the next event's breadcrumbs past what it carried.
 
+A breadcrumb is a message first — the one line a human reads, at most 200 characters,
+is all it needs:
+
+```dart
+Noticebird.addBreadcrumb('List opened', category: 'ui');
+```
+
+Everything else is optional:
+
 ```dart
 Noticebird.addBreadcrumb(
-  'Confirmed the checkout',      // the one line a human reads, at most 200 characters
-  action: 'checkout.confirm',    // optional, ^[a-z][A-Za-z0-9_.-]*$
-  category: 'ui',                // optional short token, ^[a-z][a-z0-9_]*$
-  data: {'items.count': 3},      // optional facts: numbers, bools, short identifier-like strings
+  'Confirmed the checkout',
+  action: 'checkout.confirm',            // a technical id, ^[a-z][A-Za-z0-9_.-]*$
+  category: 'ui',                        // a short group, ^[a-z][a-z0-9_]*$
+  level: BreadcrumbLevel.info,           // debug, info, warning, error
+  details: {'items': 3, 'express': true}, // extra lines under the step
 );
 ```
 
-A value the protocol refuses or that reads as a credential, a health value or an
-identifier — a data name or value, an action, a category — is left out alone and
-counted; a step left without a message is left out whole. The event, a feedback report's
-trail and a native crash's trail go without it, never the whole event.
-Navigation and bloc breadcrumbs come from the observers (*Route context*, *Bloc
-integration*); do not add them by hand on top.
+`details` are extra lines under the step, each shown as `name: value`. They are flat,
+at most 16; a name is identifier-like (`items`, `sync.pending`, at most 48 characters);
+a value is a number (finite, at most 2^53), a boolean or a short identifier-like string
+(at most 64 characters, no spaces — never prose, never what a user typed). A name that
+names a credential, a health measure or an identity (`password`, `heartRate`, `userId`,
+`email`, `phone`, `bsn`, `iban`) is left out whatever its value, and so is a value that
+reads as one together with its name; under `regulatedStrict` every string goes. A step
+takes at most 512 bytes: its last details go first, then the end of its message. An
+action or category the protocol refuses is left out, the step kept. Each of these is
+counted, never the event; a step left without a message is left out whole.
+
+Every breadcrumb — yours and the navigator observer's — passes `beforeBreadcrumb`
+(`NoticebirdFlutter.start(beforeBreadcrumb:)`, `NoticebirdConfig.beforeBreadcrumb`)
+before the client keeps it: the place for the app's own scrubbing, of the message too.
+It answers the step, changed or as it is, or `null` to leave it out (the app's choice,
+not counted); a hook that throws leaves the step out and costs the app nothing:
+
+```dart
+beforeBreadcrumb: (step) => step.category == 'noise'
+    ? null
+    : TypedBreadcrumb(
+        at: step.at,
+        message: step.message.replaceAll(customerNumber, '…'),
+        action: step.action,
+        category: step.category,
+        level: step.level,
+        details: step.details,
+      ),
+```
+
+Navigation breadcrumbs come from the navigator observer (*Route context*); state
+changes from an observer you write (*State changes as breadcrumbs*).
 
 Call `clearBreadcrumbs()` on logout: the trail leading to the next event should not carry
 the previous user's session.
@@ -338,13 +375,14 @@ depth limit and per-value caps, all applied silently before send. See
 | `exception.sanitizedMessage` | sanitized `error.toString()` | the exception **type** only |
 | `extra` | sanitized | dropped entirely |
 | `user` | filtered by `pii` | never sent |
-| tags / breadcrumb data | strings redacted | strings redacted |
+| tag strings | redacted | redacted |
+| breadcrumb details | redacted per entry | strings left out |
 | offline stores | the start's, in the support directory | none by default; your own must report `isEncrypted`, or the start throws |
 
 Sanitization is regex-based redaction of emails, JWTs, `bearer`/`token`/`secret`/
 `password`/`api_key`/`authorization` assignments, UUIDs, phone numbers, IPv4 addresses and
 a set of health terms, built from the protocol's `PrivacyPatterns`. It runs on messages,
-tag strings, breadcrumb data and `extra` values in every profile, when an event is built.
+tag strings, breadcrumb details and `extra` values in every profile, when an event is built.
 
 ## Offline queues and flush
 
@@ -380,7 +418,7 @@ never deduplicated or filtered. Errors the app catches stay `captureException`.
 The sheet is the app's own; the SDK has no widgets. Its types live in their own library,
 so they cannot clash with an app's own feedback classes; import it where you mean them.
 Take the **moment** when the sheet opens — the route template, the context diagnostics
-(the live blocs), your own diagnostics and when — so the report is about the screen and
+(`feedbackContextDiagnostics`), your own diagnostics and when — so the report is about the screen and
 the state the user was in, not the sheet, and send it with the report:
 
 ```dart
@@ -404,8 +442,8 @@ final outcome = await Noticebird.captureFeedback(
 );
 ```
 
-The sheet's bloc or cubit implements `UntracedBloc`, so the user's typing leaves no
-breadcrumbs and does not push out the steps that led to the report: the trail is taken at
+Leave the sheet's own state out of the trail (the observer you write skips it), so the
+user's typing does not push out the steps that led to the report: the trail is taken at
 the capture. `relatedEventId` is a `CaptureResult.eventId`, or
 `await Noticebird.eventIdOf(error)` for the error an error screen shows.
 `Noticebird.reportedContext` answers the app, the platform (operating system, its
@@ -433,7 +471,7 @@ the report: a screenshot of no known type or too large, and a diagnostics key, v
 or size the report does not take, is left out, and the report says so in the client's own
 diagnostics group `noticebird` (`dropped_values`, `screenshot_dropped`, and
 `moment_taken_at` for a moment passed in and taken before the capture); a debug build
-prints it. Do not name a group `noticebird`, or after a context group (`blocs`): it is left
+prints it. Do not name a group `noticebird`, or after a context group: it is left
 out. An enum goes as its name, a `DateTime` in UTC. What *is* refused — an empty message, a
 contact address, a user context, a related event id — throws `ArgumentError` in a **debug
 build only**, and is `FeedbackRejected(invalidInput, path)` in release, `path` naming the
@@ -481,58 +519,59 @@ of the GitHub workflow that analyses one new report in the app's repository writ
 exactly one block back and does nothing else (`reference/processing-reports.md`,
 "Analysis from a workflow"; its setup in the SDK's `docs/feedback-code-analysis/`).
 
-## Bloc integration
+## State changes as breadcrumbs
 
-The start sets `Bloc.observer` to bloc's `MultiBlocObserver` of its
-`NoticebirdBlocObserver` and the observer it found. It turns every bloc event and state
-change into a breadcrumb named by runtime types (never content), captures a bloc's
-`addError` as `handled: true`, and counts the live blocs per type for each feedback report's `blocs`
-group. The capture goes through `shouldCapture`, so an error the host reports elsewhere
-is not reported here again. An error thrown in a bloc's event handler reaches `onError`
-too, and bloc rethrows it after: the platform handler's later capture of it is
-deduplicated against the handled one.
-
-A host with an observer of its own sets it after the start, beside the SDK's:
+The SDK knows no state-management library. A few lines in the observer
+your library has turn its changes into breadcrumbs; `BreadcrumbNames.typeName`
+names a type as a breadcrumb does (no type arguments, no leading `_`, a
+freezed `_$…Impl` reduced to its case), never by an object's text. Put in
+`details` only what you chose to show — a status enum's name, a count — never
+a state's `toString()`:
 
 ```dart
-final noticebird = await NoticebirdFlutter.start(…);
-Bloc.observer = MultiBlocObserver(
-  observers: [noticebird.blocObserver, MyObserver()],
-);
+// bloc: set once, after the start.
+final class TrailObserver extends BlocObserver {
+  @override
+  void onChange(BlocBase<dynamic> bloc, Change<dynamic> change) {
+    super.onChange(bloc, change);
+    if (bloc is FeedbackFormCubit) return; // the sheet's own typing stays out
+    final state = change.nextState;
+    Noticebird.addBreadcrumb(
+      '${BreadcrumbNames.typeName('${bloc.runtimeType}')} changed',
+      category: 'bloc',
+      details: {if (state is ListState) 'status': state.status.name},
+    );
+  }
+}
+// Bloc.observer = TrailObserver();
+
+// Riverpod 2 (Riverpod 3 passes a ProviderObserverContext instead):
+// ProviderScope(observers: [TrailProviderObserver()], …)
+final class TrailProviderObserver extends ProviderObserver {
+  @override
+  void didUpdateProvider(ProviderBase<Object?> provider, Object? previous,
+      Object? next, ProviderContainer container) {
+    Noticebird.addBreadcrumb(
+      '${provider.name ?? BreadcrumbNames.typeName('${provider.runtimeType}')} changed',
+      category: 'state',
+    );
+  }
+}
+
+// ChangeNotifier: in the notifier, where it changes.
+void select(Mode mode) {
+  _mode = mode;
+  Noticebird.addBreadcrumb('Mode selected', category: 'ui', details: {'mode': mode.name});
+  notifyListeners();
+}
 ```
 
-A subclass of `NoticebirdBlocObserver` (one that overrides `traces`) is passed as
-`blocObserver:`; the start sets and counts that one. `observeBlocs: false` leaves `Bloc.observer` to the host
-entirely; reports then go without the `blocs` group. A bloc that implements `UntracedBloc` leaves no breadcrumbs (its errors
-are still captured, and it is still counted): use it for a bloc that changes with every
-keystroke, such as a feedback sheet's. The observer asks `traces(bloc)`: a subclass with
-an untraced marker of its own overrides it (`super.traces(bloc) && bloc is! MyUntraced`)
-rather than `onEvent`/`onChange`.
+An error a bloc or a notifier catches is reported where it is caught, with
+`Noticebird.captureException(error, stack, handled: true)`.
 
-A bloc reports a caught error through `addError`, never with `captureException` beside
-the observer — that is a second path, and it skips the bloc's tag. When the failure
-deserves more than the default (`CrashSeverity.error`, tagged with the bloc), wrap it:
-
-```dart
-addError(
-  BlocErrorReport(
-    error,
-    severity: CrashSeverity.warning,
-    tags: const {AllowedTag.operation: 'sync.pull'},
-    extra: {'pending': pending},
-  ),
-  stack,
-);
-```
-
-The observer captures the cause, so the event groups as the error itself and the filter
-judges the cause. A host that starts with `observeBlocs: false` and reports bloc errors
-from an observer of its own calls `client.captureBlocError(bloc, error, stack)` there, so
-a report reads the same either way.
-
-Note the cost: every event **and** every state change writes a breadcrumb, so a chatty
-bloc can push the 50 breadcrumbs an event carries over before the actual crash. Make such
-a bloc an `UntracedBloc`, and do not add manual `bloc.*` breadcrumbs on top.
+Mind the cost: a state holder that changes with every keystroke pushes the 50 breadcrumbs
+an event carries out before the crash. Skip it in the observer, or only record the
+changes a reader needs.
 
 ## Live debug sessions
 
@@ -580,8 +619,8 @@ Test support is in `package:noticebird_flutter/testing.dart` (`package:noticebir
 outside Flutter). `NoticebirdRecorder` is a real client whose events are recorded instead
 of sent: built, sanitized and encoded as the app's client does, without a network, and
 without deduplication, so a report made twice shows as two. Hand its `client` to what the test
-pumps — `NoticebirdBlocObserver(client: …)` (or the app's subclass) as `Bloc.observer`,
-`NoticebirdNavigatorObserver(client: …)` in the navigator, the app's own adapter — or
+pumps — `NoticebirdNavigatorObserver(client: …)` in the navigator, the app's own
+observer or adapter — or
 `attach()` it to the facade, so code that calls `Noticebird.*` reports to it.
 
 ```dart
@@ -589,12 +628,9 @@ import 'package:noticebird_flutter/testing.dart';
 
 final recorder = NoticebirdRecorder(shouldCapture: myCaptureFilter)..attach();
 addTearDown(recorder.close);                 // closes it and detaches it from the facade
-Bloc.observer = NoticebirdBlocObserver(client: recorder.client);
 
-// A bloc reads Bloc.observer when it is made: make it after the line above.
 final error = StateError('boom');
-final cubit = ListCubit(load: () => throw error);
-await cubit.load();                          // catches into a state, calls addError
+await ListLoader(load: () => throw error).load(); // reports through Noticebird.*
 expect(recorder.events.single['handled'], isTrue); // the event as the client posts it
 expect(await recorder.eventOf(error), isNotNull);  // by eventIdOf
 ```
@@ -630,13 +666,13 @@ Native capture: implement `NativeCrashCollector` with a fake that emits
 | The same failure arrives twice | No `shouldCapture` declines the type the host reports elsewhere, so a channel (observer, handler, explicit capture) reports it again. |
 | Every event is `dropped` | A `sessionIdFactory` or `eventIdFactory` whose id the protocol refuses. |
 | Nothing sends, no error | No client attached to the facade — every `Noticebird.*` call is a silent no-op until the start. |
-| My own `Bloc.observer` lost the breadcrumbs | It replaced the start's: compose with `MultiBlocObserver(observers: [noticebird.blocObserver, mine])`. |
+| A breadcrumb never arrives | `beforeBreadcrumb` answered `null` or threw for it. |
 | A route shows as `MaterialPageRoute` | Its name is a raw path or none: give the observer a `describe`, or name routes by their template. |
-| A feedback report names the sheet's route, or the trail is full of typing | The moment was taken at send rather than when the sheet opened; the sheet's bloc is not an `UntracedBloc`. |
+| A feedback report names the sheet's route, or the trail is full of typing | The moment was taken at send rather than when the sheet opened; the observer you wrote does not skip the sheet's state. |
 | Stack trace is `<no-app-frames>` | Only app frames are kept — `package:` frames and, on the web, the frames of the compiled `<name>.dart.js` and its parts — and the trace held none, such as one from the engine or `canvaskit.js` alone. |
 | A tag or `extra` key vanished | Not in `AllowedTag`, or caught by the forbidden-key list. |
 | `setRouteTemplate` throws | A raw route with an id, a query or a fragment in it — pass the template. |
-| Breadcrumbs missing from an event | A previous event carried them, a chatty bloc pushed them out (make it an `UntracedBloc`), or the protocol refused one (an action such as `Route.Push`): it is left out alone. |
+| Breadcrumbs missing from an event | A previous event carried them, a chatty state holder pushed them out (skip it in your observer), or the protocol refused one (an action such as `Route.Push`): it is left out alone. |
 | The start throws | Deliberate: an unencrypted store under `regulatedStrict`, an `appName` the protocol refuses, or a cap outside its range. |
 | A report's diagnostics or screenshot are missing | Left out by the sanitising; its `noticebird` group says what (`dropped_values`, `screenshot_dropped`). |
 | `FeedbackConfig` or `FeedbackKind` is not found | They are in `package:noticebird_flutter/feedback.dart`, not the main library. |

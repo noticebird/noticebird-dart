@@ -1,46 +1,47 @@
 ## 0.8.0
 
-Moves with `noticebird_protocol` 0.8.0: a breadcrumb is a message and data;
-crash events are of schema 6, feedback reports of schema 3.
+Moves with `noticebird_protocol` 0.8.0: a breadcrumb is a message first,
+with optional details; crash events are of schema 6, feedback reports of
+schema 3.
 
 Breaking changes:
 
 - `NoticebirdClient.addBreadcrumb(String message, {action, category, level,
-  data, at})`, and the facade's the same; `recentBreadcrumbs` holds the
-  steps as recorded, each message bounded at
+  details, at})`, and the facade's the same: the message is all a step
+  needs (`addBreadcrumb('List opened', category: 'ui')`); `details` are
+  extra lines under the step, each `name: value`. `recentBreadcrumbs`
+  holds the steps as recorded, each message bounded at
   `NoticebirdClient.maxBufferedMessageLength` (1000), which replaces
   `maxBufferedTagValueLength`.
-- An event or a report carries a step sanitized per entry: a line break in
-  the message becomes a space and the message is redacted and cut to 200
-  characters; an action, a category, or a data entry the protocol does not
+- An event or a report carries a step sanitized per entry: a line break or
+  a control, invisible or bidirectional character in the message becomes a
+  space, and the message is redacted and cut to 200 characters (a cut never
+  splits a surrogate pair; an unpaired surrogate in a sanitized text
+  becomes U+FFFD); an action, a category, or a detail the protocol does not
   take, or that reads as a credential, a health value or an identifier
   (its name on its own, or `name: value` read together), is left out, and
-  the step kept; under `regulatedStrict` every data string is left out. A
-  step over 512 bytes loses its last data entries first, then the end of
-  its message; a trail over its budget loses its oldest steps. What went
-  is counted — a cut message as one value, the steps a feedback report
-  leaves out to fit 64 KiB too: an event's `breadcrumbDrops`, a report's
-  `noticebird.dropped_values`. A control, zero-width or bidirectional
-  character in a message becomes a space; a cut never splits a surrogate
-  pair, and an unpaired surrogate in a sanitized text becomes U+FFFD.
+  the step kept; under `regulatedStrict` every detail string is left out.
+  A step over 512 bytes loses its last details first, then the end of its
+  message; a trail over its budget loses its oldest steps. What went is
+  counted — a cut message as one value, the steps a feedback report leaves
+  out to fit 64 KiB too: an event's `breadcrumbDrops` (`detailsDropped`,
+  `stepsDropped`), a report's `noticebird.dropped_values`.
 - `NativeRunState.breadcrumbDrops` and `NativeEngineRecord.breadcrumbDrops`:
   what a run left out of its trail reaches its native crash's
   `breadcrumbDrops`.
 
 Changes:
 
-- `BreadcrumbFields` and `BreadcrumbField` describe a subject (a bloc's
-  state, an event) as a step's data by a table the app gives: per field a
-  name, a reader and a kind — `literal` (an enum's name, a bool, a finite
-  number, anything else its presence), `vocabulary` (a word of a closed
-  set, anything else `true`), `count` (`<name>.count`), `type` (the
-  runtime type's name), `presence` and `id` (a run-local alias `id1`,
-  `id2`, … from `NoticebirdClient.breadcrumbIds`, a `BreadcrumbIds`).
-  Never an object's `toString()`; a reader that fails is skipped; an enum
-  name or a number the protocol does not take is its presence; an id is a
-  `String` or an `int` only. A field whose name the privacy check drops
-  (`userId`, `phone`, `password`) is an `ArgumentError` when it is made.
-  `BreadcrumbFields.typeName` is the name rule of a type in a breadcrumb.
+- `NoticebirdConfig.beforeBreadcrumb`: the app's own look at every
+  breadcrumb, by hand or from an integration, before the client keeps it;
+  it answers the step, changed or as it is, or `null` to leave it out (not
+  counted: the app's choice); one that throws leaves the step out.
+- `BreadcrumbNames.typeName` names a type as a breadcrumb does (no type
+  arguments or leading underscores, a freezed `_$…Impl` reduced to its
+  case, a character outside `[A-Za-z0-9_]` a `_`), for an observer an app
+  writes.
+- `FeedbackConfig.contextDiagnostics` is the app's own hook; the SDK fills
+  no group itself.
 - An event kept offline by 0.7.0 (schema 5) and a feedback report kept by
   0.7.0 (schema 2) are still sent as they were written.
 

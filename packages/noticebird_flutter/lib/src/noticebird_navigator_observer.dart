@@ -10,7 +10,7 @@ import 'package:noticebird/noticebird.dart';
 /// popup` (a page is a `PageRoute`, a dialog a `RawDialogRoute`, a popup
 /// any other `PopupRoute`, such as a sheet or a menu; anything else a
 /// route) — with the action `route.push`, `route.pop`, `route.replace` or
-/// `route.remove`, and as data the route on top of the navigator after the
+/// `route.remove`, and as its details the route on top of the navigator after the
 /// step (`route`) and the one on top before it (`from`), each by its name,
 /// for every step alike. A step below the top — a route removed or
 /// replaced under another — leaves the top as it was, so `route` and
@@ -25,8 +25,8 @@ import 'package:noticebird/noticebird.dart';
 ///   segment of digits or of a long hex id. A router that names its pages
 ///   by their path pattern (`/lists/:listId`) passes; so does a raw path
 ///   whose segments are words, such as `/users/jdoe`: an app that pushes
-///   such names gives a [describe]. A name that is no breadcrumb data value
-///   (`TypedBreadcrumb.isDataValue`, such as one with a space or more than
+///   such names gives a [describe]. A name that is no breadcrumb detail value
+///   (`TypedBreadcrumb.isDetailValue`, such as one with a space or more than
 ///   64 characters), or that reads as an identifier, is left out of the
 ///   step before it is sent, as in every breadcrumb;
 /// - else by its kind (`MaterialPageRoute`).
@@ -128,7 +128,7 @@ class NoticebirdNavigatorObserver extends NavigatorObserver {
         action: 'route.$step',
         category: 'navigation',
         level: BreadcrumbLevel.info,
-        data: {'route': ?_nameOf(top), 'from': ?_nameOf(from)},
+        details: {'route': ?_nameOf(top), 'from': ?_nameOf(from)},
         at: _clock(),
       );
     } catch (_) {

@@ -39,7 +39,7 @@
       "action": "route.push",
       "category": "navigation",
       "level": "info",
-      "data": {
+      "details": {
         "route": "/lists/:listId",
         "from": "/",
         "items.count": 3,
@@ -57,7 +57,7 @@
     "collections"
   ],
   "breadcrumbDrops": {
-    "dataDropped": 1,
+    "detailsDropped": 1,
     "stepsDropped": 0
   }
 }
