@@ -228,8 +228,9 @@ there: say so and leave the block in the chat.
 ## Analysis from a workflow
 
 A project linked to a GitHub repository can have each new report analysed there: a
-`repository_dispatch` (`noticebird-feedback`, payload `{project, ticket}`: the
-project's id and the ticket number, no content) starts the repository's workflow,
+`workflow_dispatch` of `noticebird-feedback-analysis.yml` (inputs `project` and
+`ticket`: the project's id and the ticket number, no content) starts the
+repository's workflow,
 which runs Claude Code on the checkout with `get_feedback`, `get_feedback_screenshot`,
 `set_feedback_analysis` and the read-only file tools. Its setup and the example
 workflow are `docs/feedback-code-analysis/` in the SDK repository.

@@ -37,7 +37,7 @@ description: >
   "process the feedback", "verwerk de feedback", "feedback inbox", FB-, ticket, triage,
   list_feedback, get_feedback, get_feedback_screenshot, set_feedback_status,
   set_feedback_analysis, list_issues, set_issue_status, whoami, "fix FB-12", "kijk FB-12", "akkoord FB-12",
-  "volg de voorstellen", feedback analysis workflow, noticebird-feedback, repository_dispatch,
+  "volg de voorstellen", feedback analysis workflow, noticebird-feedback-analysis, workflow_dispatch,
   claude-code-action, NOTICEBIRD_MCP_TOKEN.
 user-invocable: true
 ---

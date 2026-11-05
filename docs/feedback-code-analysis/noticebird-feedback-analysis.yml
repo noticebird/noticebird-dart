@@ -5,9 +5,10 @@
 # to; the setup (the GitHub App, the secrets) is in
 # https://github.com/noticebird/noticebird-dart/blob/main/docs/feedback-code-analysis/README.md
 #
-# Noticebird starts it with a repository dispatch when a project with the
-# code analysis on receives a report. The payload carries only the project's
-# id and the report's ticket number, never the report itself; the agent
+# Noticebird starts it with a workflow dispatch when a project with the code
+# analysis on receives a report; keep this file's name, which Noticebird
+# dispatches by. The inputs carry only the project's id and the report's
+# ticket number, never the report itself; the agent
 # fetches the report over Noticebird's MCP server with a token that can read
 # feedback and write an analysis, and nothing more is needed.
 #
@@ -21,17 +22,25 @@
 name: Noticebird feedback analysis
 
 on:
-  repository_dispatch:
-    types: [noticebird-feedback]
+  workflow_dispatch:
+    inputs:
+      project:
+        description: The Noticebird project's id
+        required: true
+        type: string
+      ticket:
+        description: The report's ticket number
+        required: true
+        type: string
 
-run-name: Noticebird feedback FB-${{ github.event.client_payload.ticket }}
+run-name: Noticebird feedback FB-${{ inputs.ticket }}
 
 permissions:
   contents: read
 
 concurrency:
   # One run per report; a second dispatch of the same report waits.
-  group: noticebird-feedback-${{ github.event.client_payload.project }}-${{ github.event.client_payload.ticket }}
+  group: noticebird-feedback-${{ inputs.project }}-${{ inputs.ticket }}
   cancel-in-progress: false
 
 jobs:
@@ -44,12 +53,12 @@ jobs:
       - name: Check the payload
         id: payload
         env:
-          PROJECT: ${{ github.event.client_payload.project }}
-          TICKET: ${{ github.event.client_payload.ticket }}
+          PROJECT: ${{ inputs.project }}
+          TICKET: ${{ inputs.ticket }}
         run: |
           uuid='^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
           if [[ ! "$PROJECT" =~ $uuid || ! "$TICKET" =~ ^[1-9][0-9]{0,9}$ ]]; then
-            echo "::error::The dispatch names no Noticebird project id and ticket number."
+            echo "::error::The inputs name no Noticebird project id and ticket number."
             exit 1
           fi
           echo "project=$PROJECT" >> "$GITHUB_OUTPUT"

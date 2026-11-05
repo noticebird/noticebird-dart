@@ -13,10 +13,12 @@ next to this page.
 ## What it does
 
 1. A report comes in for a project whose code analysis is on.
-2. Noticebird sends your repository a `repository_dispatch` of type
-   `noticebird-feedback`, through the Noticebird GitHub App. Its payload is
-   `{"project": "<project id>", "ticket": <ticket number>}`: no message, no
-   screenshot, nothing the user wrote.
+2. Noticebird starts the workflow `noticebird-feedback-analysis.yml` on your
+   default branch with a `workflow_dispatch`, through the Noticebird GitHub
+   App. Its inputs are `project` (the project's id) and `ticket` (the ticket
+   number): no message, no screenshot, nothing the user wrote. The App may
+   only start workflows (Actions) and read the repository's metadata: it
+   cannot read or change your code.
 3. The workflow starts on a GitHub-hosted runner, checks out your default
    branch, and runs Claude Code (`anthropics/claude-code-action`) with
    Noticebird's MCP server.
@@ -41,8 +43,9 @@ The run changes nothing else: no status, no notes, no file, no commit.
    this). There you also turn the code analysis on and set how long the mail
    waits for it.
 2. **Add the workflow.** Copy `noticebird-feedback-analysis.yml` to
-   `.github/workflows/` on the repository's default branch (a repository
-   dispatch runs the default branch's workflows only). Set the SDK `ref` in
+   `.github/workflows/` on the repository's default branch, under that
+   name: Noticebird dispatches the workflow by its file name, on the default
+   branch. Set the SDK `ref` in
    it to the release your app depends on.
 3. **Add the repository secrets** (Settings › Secrets and variables ›
    Actions):
