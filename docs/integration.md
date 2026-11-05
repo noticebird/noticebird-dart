@@ -199,8 +199,14 @@ final class TrailObserver extends BlocObserver {
     super.onChange(bloc, change);
     if (bloc is FeedbackFormCubit) return; // the sheet's own typing stays out
     final state = change.nextState;
+    final name = BreadcrumbNames.typeName('${bloc.runtimeType}');
     Noticebird.addBreadcrumb(
-      '${BreadcrumbNames.typeName('${bloc.runtimeType}')} changed',
+      '$name changed',
+      // One action per bloc type, so the trail shows what changed since its last step;
+      // an action the protocol refuses (a name that starts with a digit) is left out.
+      action: name.isEmpty
+          ? null
+          : '${name[0].toLowerCase()}${name.substring(1)}.change',
       category: 'bloc',
       details: {if (state is ListState) 'status': state.status.name},
     );
@@ -301,6 +307,21 @@ value; so is a value that reads as one together with its name. Under
 details go first, then the end of its message. What goes is counted, never
 the event; an action or category outside its pattern is left out and the step
 kept.
+
+The rule for what goes where: the message is the sentence a human reads;
+details are the facts you would want as a column — to compare, filter or
+count; a value is never in both (`'Loaded the list'` with `{'status':
+'loaded', 'items': 6}`, not `'Loaded 6 items'`). Give the steps of one kind
+the same `action`: the console, the mail and the MCP then show what changed in
+a step's details since the previous step with that action (`status: loading
+→ loaded`). The details' shape is no privacy guarantee — a surname or a
+postcode fits an identifier-like string — so keep user content out of a
+breadcrumb, or scrub it in `beforeBreadcrumb`.
+
+A build still on 0.7.0 keeps sending its old breadcrumbs (crash schema 5,
+feedback schema 2); the platform converts them on arrival, the message from
+the old `component` and `operation` tags, and shows them without change
+markers.
 
 Every breadcrumb, also the navigator's, passes the app's own
 `beforeBreadcrumb` first: the place for its own scrubbing, of the message too.
@@ -574,19 +595,22 @@ in between loses nothing. `regulatedStrict` refuses an unencrypted store.
 
 ## 9. Privacy profiles
 
-Every profile sanitizes on the device. Messages, tag strings, breadcrumbs,
-`extra` string values and the grouping key lose emails, JWTs,
+Every profile sanitizes on the device. Messages, breadcrumb messages, tag
+strings, `extra` string values and the grouping key lose emails, JWTs,
 bearer/token/secret/password/api-key/authorization patterns, UUIDs, phone
 numbers, IPv4 addresses and health values (the protocol's
-`PrivacyPatterns`); tag and breadcrumb strings are cut to 100 characters;
+`PrivacyPatterns`); a breadcrumb detail that holds one is left out instead
+(§4); tag strings are cut to 100 characters, breadcrumb messages to 200;
 and only the app's stack frames are kept: `package:` frames and, in a web
 build, the frames of the compiled dart2js script with its file name alone,
 never its host or path.
 
 - `privacyDefault` is that.
-- `regulatedStrict` changes three things in an event, and only those: the
-  exception message is the error type alone, `extra` is empty, and no user
-  is sent. It also refuses an unencrypted store (§8), sends no user, user
+- `regulatedStrict` changes four things in an event, and only those: the
+  exception message is the error type alone, `extra` is empty, no user is
+  sent, and no breadcrumb detail that is a string. The platform, by the
+  project's own profile, refuses an event whose breadcrumb message still
+  holds a match, and leaves such a step out of a feedback report. It also refuses an unencrypted store (§8), sends no user, user
   context or locale with a feedback report (§6), and keeps no trail for a
   native crash (§11).
 - `custom` supports project-specific privacy policies, but still never permits

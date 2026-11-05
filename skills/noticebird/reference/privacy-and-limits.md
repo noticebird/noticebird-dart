@@ -61,10 +61,11 @@ is built, and never drops the event over them:
 
 ## Redaction
 
-Applied by the client to messages, the route template, tag strings, grouping key parts,
-breadcrumb detail strings, `extra` string values and native image names in **every**
-privacy profile, when an event is built (the breadcrumb buffer behind `recentBreadcrumbs`
-keeps the values as recorded). Each match becomes `[REDACTED]`:
+Applied by the client to messages, breadcrumb messages, the route template, tag strings,
+grouping key parts, `extra` string values and native image names in **every** privacy
+profile, when an event is built (the breadcrumb buffer behind `recentBreadcrumbs` keeps
+the values as recorded). Each match becomes `[REDACTED]`; a breadcrumb detail is not
+redacted but left out, when its entry read as `name: value` holds a match:
 
 - email addresses
 - JWTs (`eyJ…`.`…`.`…`)
@@ -75,7 +76,13 @@ keeps the values as recorded). Each match becomes `[REDACTED]`:
   `diagnosis`, `observation` followed by `:` or `=`
 
 The patterns are built from the protocol's `PrivacyPatterns`. A breadcrumb `action` or
-`category` that matches one is left out of its step, and counted. A native image name, whose characters allow no
+`category` that matches one is left out of its step, and counted. The platform checks a
+breadcrumb again on arrival, by the same rules and the project's privacy profile, and
+also reads an id joined by `_` (`row_<uuid>`) as one; under `regulatedStrict` a crash
+event whose breadcrumb message still holds a match is refused, and a feedback report
+leaves that step out. A pattern sees only what has a recognizable form: a surname, a
+postcode or an unnamed 9-digit number passes it, so keep user content out of a
+breadcrumb, or scrub it in `beforeBreadcrumb`. A native image name, whose characters allow no
 `[REDACTED]`, has each match replaced by `redacted`. The route template is redacted when
 it is set, then cut to its 200 characters.
 

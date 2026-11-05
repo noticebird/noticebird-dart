@@ -12,7 +12,8 @@ single value (`AppMetadata.check`, `PlatformMetadata.check`,
 `CrashUser.check`, `TypedBreadcrumb.check`, `NativeCrashInfo.check`), and
 the `PrivacyPatterns` a client redacts by.
 
-A crash event carries allowlisted scalar tags, typed breadcrumbs, bounded
+A crash event carries allowlisted scalar tags, breadcrumbs (a message first,
+with optional details: `TypedBreadcrumb`, schema 6), bounded
 free-form `extra` context, a bounded explicit `user` object, an optional,
 fully enumerated `native` block for crashes the operating system reported
 about an earlier run (frames as image offsets, never absolute addresses),

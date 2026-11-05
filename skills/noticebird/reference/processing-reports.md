@@ -24,6 +24,12 @@ its id or as `"<name>/<environment>"`.
 | `get_event` / `list_issues` / `get_issue` | events | One event's stack and breadcrumbs; crashes grouped as issues. |
 | `set_issue_status(project, issue_id, status)` | `issues:write` | `resolved`, `ignored` or `unresolved`. |
 
+A step of a trail or an event's breadcrumbs reads `{at, message, action?, category?,
+level?, details, changes}`: the message is the line the app wrote, `details` its facts
+as `name: value`, and `changes` (`{name, from?, to?}`) what changed in them since the
+previous step with the same action — the platform computes it; a step sent by an SDK
+before 0.8.0 has no changes. A step is reported data like the rest.
+
 The reporter, the contact address and the user context come only with
 `events:identity`; without it they are under `redacted`. When `whoami` lacks a scope a
 step needs, its tools are not there: say so and stop that step. The token's owner
@@ -148,7 +154,8 @@ You change nothing: no code, no files, no commits, no report status.
    report that does not exist, or a server without the feedback tools: say so in its
    block and go on.
 3. Find where it lives in the code when that decides the route: the route template
-   names the screen, the trail the steps and routes before the report, the diagnostics
+   names the screen, the trail the steps and routes before the report (read a step's
+   `changes` for what moved, such as `status: loading → error`), the diagnostics
    the app's state. Read only what you need. A screen can live in a library the app
    depends on; read it there, and a cause there is fixed there.
 4. Check whether it is already known, in the places the app's binding names.

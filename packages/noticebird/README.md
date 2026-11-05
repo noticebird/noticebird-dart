@@ -121,15 +121,20 @@ contact address, diagnostics and user context.
 ## Privacy and reliability
 
 - Every profile redacts identifiers, secrets and health values from the text
-  an event carries and cuts tag and breadcrumb strings. `regulatedStrict`
-  changes only the message (the error type alone), `extra` (empty) and the
-  user (none), and rejects unencrypted offline stores.
+  an event carries, breadcrumb messages included, and cuts tag strings and
+  breadcrumb messages. `regulatedStrict` changes only the message (the error
+  type alone), `extra` (empty), the user (none) and breadcrumb details (no
+  strings), and rejects unencrypted offline stores.
 - Identity is only sent when the consumer calls `setUser` or `setUserId`;
   `CrashPiiConfig` filters it or opts out.
 - Medical data and secrets are never allowed, including in `custom` mode.
-- Breadcrumbs are typed and bounded to 50 per event; one the protocol
-  refuses (an action such as `Route.Push`) is left out alone. Retries are
-  bounded by `maxPendingEvents`.
+- A breadcrumb is a message first, with optional details
+  (`addBreadcrumb('List opened', category: 'ui', details: {'items': 3})`),
+  bounded to 50 per event, 512 bytes a step and 16 KiB together. What the
+  protocol refuses or what reads as personal data — an action such as
+  `Route.Push`, a detail named `password` — is left out alone and counted,
+  never the event; `NoticebirdConfig.beforeBreadcrumb` is the app's own
+  scrubbing of every step. Retries are bounded by `maxPendingEvents`.
 - The client catches its own failures and never propagates them into the
   host application.
 - Route values must be templates, never raw identifiers.

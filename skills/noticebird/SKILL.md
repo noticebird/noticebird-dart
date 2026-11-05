@@ -270,6 +270,20 @@ takes at most 512 bytes: its last details go first, then the end of its message.
 action or category the protocol refuses is left out, the step kept. Each of these is
 counted, never the event; a step left without a message is left out whole.
 
+**The rule for what goes where: the message is the sentence a human reads; details are
+the facts you would want as a column — to compare, filter or count; a value is never in
+both.** `'Loaded the list'` with `{'status': 'loaded', 'items': 6}`, not
+`'Loaded 6 items'`, and never `'List changed · status: loaded'`. Give the steps of one
+kind the same `action`: the console, the mail and the MCP show what changed in a step's
+details since the previous step with that action (`status: loading → loaded`, an added
+`— → value`, a removed `value → —`), computed by the platform. A step without an action
+has no such markers.
+
+The details' shape is no privacy guarantee: a surname or a postcode fits an
+identifier-like string, and a 9-digit number under a harmless name is just a number. What
+you put in a breadcrumb is yours to decide; `beforeBreadcrumb` (below) is where you scrub
+what you know about.
+
 Every breadcrumb — yours and the navigator observer's — passes `beforeBreadcrumb`
 (`NoticebirdFlutter.start(beforeBreadcrumb:)`, `NoticebirdConfig.beforeBreadcrumb`)
 before the client keeps it: the place for the app's own scrubbing, of the message too.
@@ -289,8 +303,20 @@ beforeBreadcrumb: (step) => step.category == 'noise'
       ),
 ```
 
-Navigation breadcrumbs come from the navigator observer (*Route context*); state
-changes from an observer you write (*State changes as breadcrumbs*).
+Navigation breadcrumbs come from the navigator observer (*Route context*): `Opened page`,
+`Closed dialog`, … with the action `route.push` / `route.pop` / `route.remove` /
+`route.replace`, the category `navigation` and the details `route` and `from`. State
+changes come from an observer you write (*State changes as breadcrumbs*).
+
+**Upgrading from 0.7.** `addBreadcrumb` takes the message first, and the client sets
+the time: a 0.7 step of a category enum, an action and tag data becomes
+`addBreadcrumb('List opened', action: 'list.open', category: 'ui', details: {'feature':
+'lists'})` — the category a free short token, the tags plain details. The bloc observer,
+its start options and its error report are gone: write the few lines of *State changes
+as breadcrumbs*. Each package's `CHANGELOG.md` lists what was removed. A build still on 0.7.0
+keeps working: it sends crash schema 5 and feedback schema 2 with the old breadcrumbs,
+which the platform converts on arrival (the message from the old `component` and
+`operation` tags, the other tags as details) and shows without change markers.
 
 Call `clearBreadcrumbs()` on logout: the trail leading to the next event should not carry
 the previous user's session.
@@ -376,13 +402,14 @@ depth limit and per-value caps, all applied silently before send. See
 | `extra` | sanitized | dropped entirely |
 | `user` | filtered by `pii` | never sent |
 | tag strings | redacted | redacted |
-| breadcrumb details | redacted per entry | strings left out |
+| breadcrumb details | an entry that reads as personal data left out | every string left out |
 | offline stores | the start's, in the support directory | none by default; your own must report `isEncrypted`, or the start throws |
 
 Sanitization is regex-based redaction of emails, JWTs, `bearer`/`token`/`secret`/
 `password`/`api_key`/`authorization` assignments, UUIDs, phone numbers, IPv4 addresses and
 a set of health terms, built from the protocol's `PrivacyPatterns`. It runs on messages,
-tag strings, breadcrumb details and `extra` values in every profile, when an event is built.
+breadcrumb messages, tag strings and `extra` values in every profile, when an event is
+built; a breadcrumb detail that holds a match is left out rather than redacted.
 
 ## Offline queues and flush
 
@@ -536,8 +563,14 @@ final class TrailObserver extends BlocObserver {
     super.onChange(bloc, change);
     if (bloc is FeedbackFormCubit) return; // the sheet's own typing stays out
     final state = change.nextState;
+    final name = BreadcrumbNames.typeName('${bloc.runtimeType}');
     Noticebird.addBreadcrumb(
-      '${BreadcrumbNames.typeName('${bloc.runtimeType}')} changed',
+      '$name changed',
+      // One action per bloc type, so the trail shows what changed since its last step;
+      // an action the protocol refuses (a name that starts with a digit) is left out.
+      action: name.isEmpty
+          ? null
+          : '${name[0].toLowerCase()}${name.substring(1)}.change',
       category: 'bloc',
       details: {if (state is ListState) 'status': state.status.name},
     );
@@ -672,7 +705,8 @@ Native capture: implement `NativeCrashCollector` with a fake that emits
 | Stack trace is `<no-app-frames>` | Only app frames are kept — `package:` frames and, on the web, the frames of the compiled `<name>.dart.js` and its parts — and the trace held none, such as one from the engine or `canvaskit.js` alone. |
 | A tag or `extra` key vanished | Not in `AllowedTag`, or caught by the forbidden-key list. |
 | `setRouteTemplate` throws | A raw route with an id, a query or a fragment in it — pass the template. |
-| Breadcrumbs missing from an event | A previous event carried them, a chatty state holder pushed them out (skip it in your observer), or the protocol refused one (an action such as `Route.Push`): it is left out alone. |
+| Breadcrumbs missing from an event | A previous event carried them, a chatty state holder pushed them out (skip it in your observer), or the step went over the event's 16 KiB of breadcrumbs (the oldest go first). An action or category the protocol refuses (`Route.Push`) costs only that field, never the step. |
+| A breadcrumb detail vanished | Its name names a credential, a health measure or an identity (`password`, `heartRate`, `userId`), it reads as one together with its value, it is no detail value (a space, a nested map, a number past 2^53), it is past the 16th, the step went over 512 bytes, or it is a string under `regulatedStrict`. |
 | The start throws | Deliberate: an unencrypted store under `regulatedStrict`, an `appName` the protocol refuses, or a cap outside its range. |
 | A report's diagnostics or screenshot are missing | Left out by the sanitising; its `noticebird` group says what (`dropped_values`, `screenshot_dropped`). |
 | `FeedbackConfig` or `FeedbackKind` is not found | They are in `package:noticebird_flutter/feedback.dart`, not the main library. |
