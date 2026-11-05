@@ -36,6 +36,11 @@ next to this page.
    leaves the mail without it (or with Noticebird's own first reading, when
    the project has that on), and the analysis still lands on the report.
 
+A run that could not write its analysis (Noticebird unreachable, a field
+refused) ends red: its last step checks that exactly one
+`set_feedback_analysis` call succeeded, so a failed analysis shows in the
+Actions tab instead of passing as a green run.
+
 The run changes nothing else: no status, no notes, no file, no commit.
 
 ## Setup
