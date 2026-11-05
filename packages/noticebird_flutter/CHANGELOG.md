@@ -25,8 +25,9 @@ Changes:
   step's data describes the next state, an event step's the event, by the
   app's `BreadcrumbFields`. A change whose next state describes as the
   state before it leaves no step; a state the table describes as nothing
-  still leaves its step by name. Passing the tables beside a `blocObserver`
-  of the host's own is an `ArgumentError`.
+  still leaves its step by name; the descriptions are compared before the
+  client sanitizes the step. Passing the tables beside a `blocObserver` of
+  the host's own, or with `observeBlocs: false`, is an `ArgumentError`.
 
 ## 0.7.0
 

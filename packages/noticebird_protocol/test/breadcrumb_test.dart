@@ -69,6 +69,10 @@ void main() {
         'zero\u200Bwidth',
         'bidi\u202Eoverride',
         'isolate\u2066',
+        'arabic\u061Cmark',
+        'joiner\u2060',
+        'invisible\u2064',
+        'bom\uFEFF',
         'lone \ud83d',
         'lone \ude00 low',
       ]) {
@@ -206,6 +210,8 @@ void main() {
         '1.2.0+42',
         'id1',
         'v' * TypedBreadcrumb.maxDataStringLength,
+        TypedBreadcrumb.maxDataNumber,
+        -TypedBreadcrumb.maxDataNumber,
       ]) {
         expect(TypedBreadcrumb.isDataValue(value), isTrue, reason: '$value');
         v6Breadcrumb(data: {'value': value}).check();
@@ -223,6 +229,10 @@ void main() {
         ),
         (double.nan, ProtocolViolation.invalidValue),
         (double.infinity, ProtocolViolation.invalidValue),
+        // Past 2^53 a whole number is not exact on every platform.
+        (TypedBreadcrumb.maxDataNumber + 1, ProtocolViolation.invalidValue),
+        (-TypedBreadcrumb.maxDataNumber - 1, ProtocolViolation.invalidValue),
+        (1e300, ProtocolViolation.invalidValue),
         (const ['a'], ProtocolViolation.invalidType),
         (const {'a': 1}, ProtocolViolation.invalidType),
       ]) {

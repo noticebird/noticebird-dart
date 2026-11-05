@@ -458,6 +458,20 @@ void main() {
     );
   });
 
+  test('bloc tables with observeBlocs off throw', () async {
+    await expectLater(
+      NoticebirdFlutter.start(
+        apiUrl: _api,
+        publishableKey: _key,
+        appName: 'example_app',
+        httpClient: httpClient,
+        observeBlocs: false,
+        blocEventFields: BreadcrumbFields([]),
+      ),
+      throwsArgumentError,
+    );
+  });
+
   test('a handler the host set after the start stays at close', () async {
     final noticebird = await start();
     void mine(FlutterErrorDetails _) {}

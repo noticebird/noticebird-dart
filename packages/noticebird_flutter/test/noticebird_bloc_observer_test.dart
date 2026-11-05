@@ -275,7 +275,7 @@ void main() {
         ]),
         eventFields: BreadcrumbFields([
           BreadcrumbField.id('spaceId', (s) => s.spaceId),
-          BreadcrumbField.presence('password', (s) => s.password),
+          BreadcrumbField.presence('answer', (s) => s.password),
         ]),
       );
     });
@@ -302,14 +302,14 @@ void main() {
     });
 
     test('an event step\'s data is the event, by the event table; a '
-        'password is its presence only', () {
+        'typed answer is its presence only', () {
       final bloc = _CounterBloc();
       addTearDown(bloc.close);
       described.onEvent(bloc, _$ReauthenticateWithPasswordImpl('hunter2'));
 
       final step = reporter.recentBreadcrumbs.single;
       expect(step.message, 'CounterBloc got ReauthenticateWithPassword');
-      expect(step.data, {'password': true});
+      expect(step.data, {'answer': true});
       expect('${step.data}', isNot(contains('hunter2')));
     });
 

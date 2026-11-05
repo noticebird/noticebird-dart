@@ -127,8 +127,8 @@ final class NoticebirdFlutter {
   /// [ArgumentError] only for arguments no start can work with, as
   /// [NoticebirdConfig] does: an [appName] the protocol refuses, a
   /// [breadcrumbBuffer] out of range, an unencrypted store passed under
-  /// `regulatedStrict`, a [blocObserver] together with [blocStateFields] or
-  /// [blocEventFields].
+  /// `regulatedStrict`, [blocStateFields] or [blocEventFields] together with
+  /// a [blocObserver] or with [observeBlocs] off.
   static Future<NoticebirdFlutter> start({
     required String appName,
     Uri? apiUrl,
@@ -205,12 +205,19 @@ final class NoticebirdFlutter {
     required BreadcrumbFields? blocEventFields,
     required bool background,
   }) async {
-    if (blocObserver != null &&
-        (blocStateFields != null || blocEventFields != null)) {
-      throw ArgumentError(
-        'A blocObserver of the host takes its tables itself: '
-        'NoticebirdBlocObserver(stateFields:, eventFields:)',
-      );
+    if (blocStateFields != null || blocEventFields != null) {
+      if (blocObserver != null) {
+        throw ArgumentError(
+          'A blocObserver of the host takes its tables itself: '
+          'NoticebirdBlocObserver(stateFields:, eventFields:)',
+        );
+      }
+      if (!observeBlocs) {
+        throw ArgumentError(
+          'With observeBlocs off, the host sets the observer: give it the '
+          'tables, NoticebirdBlocObserver(stateFields:, eventFields:)',
+        );
+      }
     }
     final binding = WidgetsFlutterBinding.ensureInitialized();
 

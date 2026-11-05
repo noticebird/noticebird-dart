@@ -3,11 +3,16 @@
 // values the protocol takes.
 
 import 'package:noticebird/noticebird.dart';
+import 'package:noticebird/src/protocol/text_sanitizer.dart';
 import 'package:test/test.dart';
 
 enum _Status { loading, loaded }
 
 enum _Mode { grid, list, board }
+
+// An enum value whose name a data string does not take: it starts with `_`.
+// ignore: constant_identifier_names
+enum _Hidden { _internal }
 
 final class _State {
   _State({
@@ -230,12 +235,74 @@ void main() {
   test('a freezed-like event holding a password yields its type only', () {
     final events = BreadcrumbFields([
       BreadcrumbField.type('event', (s) => s),
-      BreadcrumbField.literal('password', (s) => s.password),
+      BreadcrumbField.literal('answer', (s) => s.password),
       BreadcrumbField.literal('query', (s) => s.query),
     ]);
     final data = events.describe(_$ReauthenticateImpl('hunter2'), ids: ids);
-    expect(data, {'event': 'Reauthenticate', 'password': true});
+    expect(data, {'event': 'Reauthenticate', 'answer': true});
     expect('$data', isNot(contains('hunter2')));
+  });
+
+  test('a field whose name the privacy check always drops is refused when '
+      'it is made', () {
+    for (final make in <BreadcrumbField<dynamic> Function()>[
+      () => BreadcrumbField.literal('password', (s) => s),
+      () => BreadcrumbField.id('userId', (s) => s),
+      () => BreadcrumbField.presence('phone', (s) => s),
+      () => BreadcrumbField.type('patientId', (s) => s),
+      () => BreadcrumbField.count('userIds', (s) => s),
+      () => BreadcrumbField.vocabulary('heartRate', (s) => s, {'high'}),
+    ]) {
+      expect(make, throwsArgumentError);
+    }
+  });
+
+  test('an enum whose name is no data value is its presence', () {
+    expect(
+      describe([BreadcrumbField.literal('kind', (s) => s)], _Hidden._internal),
+      {'kind': true},
+    );
+  });
+
+  test('a number past 2^53 is its presence, as the protocol refuses it', () {
+    final value = BreadcrumbField.literal('total', (s) => s);
+    expect(describe([value], 9007199254740992), {'total': 9007199254740992});
+    expect(describe([value], 9007199254740993), {'total': true});
+    expect(describe([value], 1e300), {'total': true});
+  });
+
+  test('an id is a String or an int: any other value is skipped, and the '
+      'table refuses it', () {
+    final id = BreadcrumbField.id('rowId', (s) => s);
+    expect(describe([id], 42), {'rowId': 'id1'});
+    expect(describe([id], 'row-a'), {'rowId': 'id2'});
+    expect(describe([id], <String>['row-a']), isEmpty);
+    expect(describe([id], _Secretive()), isEmpty);
+    expect(describe([id], 4.2), isEmpty);
+    expect(() => ids.aliasOf(_Secretive()), throwsArgumentError);
+    expect(
+      () => ids.aliasOf(_Secretive()),
+      throwsA(
+        isA<ArgumentError>().having(
+          (error) => '$error',
+          'text',
+          isNot(contains('hunter2')),
+        ),
+      ),
+    );
+  });
+
+  test('an alias is a string, so regulatedStrict drops it, counted', () {
+    final data = describe([
+      BreadcrumbField.id('rowId', (s) => s),
+      BreadcrumbField.literal('total', (s) => 3),
+    ], 'row-a');
+    final (:step, :dataDropped) = sanitizeBreadcrumb(
+      TypedBreadcrumb(at: DateTime.utc(2026, 11, 5), message: 'm', data: data),
+      strict: true,
+    );
+    expect(step!.data, {'total': 3});
+    expect(dataDropped, 1);
   });
 
   test('a reader that does not fit the subject, or throws, is skipped', () {

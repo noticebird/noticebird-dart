@@ -259,13 +259,17 @@ final class TypedBreadcrumb {
   /// a space.
   static final lineBreakPattern = RegExp('\r\n|[\n\r\u000B\u000C\u0085  ]');
 
-  /// A character a message never holds: a C0 or C1 control (a line break
-  /// among them), a zero-width character (U+200B–U+200F) or a
-  /// bidirectional override or isolate (U+202A–U+202E, U+2066–U+2069),
-  /// which hide or reorder what a reader sees. The client turns each into a
-  /// space, U+0000 excepted, which it leaves out.
+  /// A character a message never holds, the one list of them: a C0 or C1
+  /// control (every line break among them), a line or paragraph separator
+  /// (U+2028, U+2029), an invisible character (zero-width U+200B–U+200F,
+  /// U+2060–U+2064, the byte order mark U+FEFF) or a bidirectional mark,
+  /// override or isolate (U+061C, U+202A–U+202E, U+2066–U+2069), which hide
+  /// or reorder what a reader sees. The client turns each into a space,
+  /// U+0000 excepted, which it leaves out; a reader of text that is shown
+  /// (a mail) uses the same list.
   static final controlPattern = RegExp(
-    r'[\u0000-\u001F\u007F-\u009F\u200B-\u200F\u202A-\u202E\u2066-\u2069]',
+    r'[\u0000-\u001F\u007F-\u009F\u061C\u200B-\u200F\u2028\u2029'
+    r'\u202A-\u202E\u2060-\u2064\u2066-\u2069\uFEFF]',
   );
 
   static const maxActionLength = 100;
@@ -300,11 +304,16 @@ final class TypedBreadcrumb {
   /// The most bytes one step takes, encoded.
   static const maxEncodedBytes = 512;
 
-  /// Whether [value] is a value [data] takes: a finite number, a boolean,
+  /// The largest magnitude of a data number: 2^53, below which every whole
+  /// number is exact as a double, on every platform.
+  static const maxDataNumber = 9007199254740992;
+
+  /// Whether [value] is a value [data] takes: a finite number of at most
+  /// [maxDataNumber] in magnitude, a boolean,
   /// or a string of 1 to [maxDataStringLength] characters matching
   /// [dataStringPattern].
   static bool isDataValue(Object? value) => switch (value) {
-    num() => value.isFinite,
+    num() => value.isFinite && value.abs() <= maxDataNumber,
     bool() => true,
     String() =>
       value.length <= maxDataStringLength && dataStringPattern.hasMatch(value),
@@ -415,7 +424,10 @@ final class TypedBreadcrumb {
           ProtocolViolation.invalidValue,
           'A data string is identifier-like',
         ),
-        num() => (ProtocolViolation.invalidValue, 'Data numbers are finite'),
+        num() => (
+          ProtocolViolation.invalidValue,
+          'Data numbers are finite, at most $maxDataNumber in magnitude',
+        ),
         _ => (ProtocolViolation.invalidType, 'A data value is a scalar'),
       };
       throw ProtocolException(violation, '$path.$key', message);

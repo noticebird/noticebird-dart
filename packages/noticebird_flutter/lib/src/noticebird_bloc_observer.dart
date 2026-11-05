@@ -35,7 +35,10 @@ import 'bloc_names.dart';
 /// table a step has no data. A change whose next state describes as the
 /// state before it — an emit that changed nothing the trail can show —
 /// leaves no step; one whose states describe as nothing at all (a state the
-/// table has no field for) still does, by its name.
+/// table has no field for) still does, by its name. The descriptions are
+/// compared as the table makes them, before the client sanitizes the step:
+/// a change in a value the client then drops (a string under
+/// `regulatedStrict`) still leaves a step, without that value.
 ///
 /// A bloc [traces] declines leaves no breadcrumb — by default one that is an
 /// [UntracedBloc]; its errors are still captured, and it is still counted. A

@@ -58,6 +58,10 @@ void main() {
         '\u200F',
         '\u202E',
         '\u2066',
+        '\u061C',
+        '\u2060',
+        '\u2064',
+        '\uFEFF',
       ]) {
         final (:step, :dataDropped) = sanitized(crumb('a${control}b'));
         expect(step!.message, 'a b', reason: control.codeUnits.toString());

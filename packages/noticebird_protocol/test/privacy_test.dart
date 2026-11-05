@@ -122,6 +122,8 @@ void main() {
       'mobile',
       'Mobile',
       'mobileNumber',
+      'mobilePhone',
+      'phone_number',
     ]) {
       expect(
         PrivacyPatterns.extraKeyViolation(key),
@@ -138,7 +140,16 @@ void main() {
       'subsName',
       'Caribbean',
       'isMobile',
+      'isPhone',
+      'phoneLayout',
+      'microphonePermission',
     ]) {
+      expect(PrivacyPatterns.extraKeyViolation(key), isNull, reason: key);
+    }
+  });
+
+  test('a run-on spelling of a short personal number passes: accepted', () {
+    for (final key in ['bsnnr', 'customerbsn', 'IBANnumber']) {
       expect(PrivacyPatterns.extraKeyViolation(key), isNull, reason: key);
     }
   });

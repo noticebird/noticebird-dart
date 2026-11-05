@@ -83,8 +83,8 @@ abstract final class PrivacyPatterns {
   /// so `User_ID`, `user-id` and `userId` read alike. A key that contains a
   /// credential word is a [PrivacyViolation.secret], one that contains a
   /// health measure (or `medical`) a [PrivacyViolation.medicalData], and one
-  /// that is `name` or `mobile`, contains an identity (`email`, `userid`,
-  /// `phone`, `passport`, `nationalid`, …) or has a short personal number as a word of its own
+  /// that is `name`, `phone`, `telephone` or `mobile`, contains an identity
+  /// (`email`, `userid`, `phonenumber`, `passport`, `nationalid`, …) or has a short personal number as a word of its own
   /// (`bsn`, `ssn`, `iban`: `customerBsn`, `ssn_last4`, `IBAN`, but not
   /// `className`) a [PrivacyViolation.identifier]. Words are split at
   /// anything outside `A-Za-z0-9` and where a capital starts a word.
@@ -127,16 +127,20 @@ abstract final class PrivacyPatterns {
     'nationalid',
     'passport',
     'socialsecurity',
-    'phone',
+    'phonenumber',
     'mobilenumber',
+    'mobilephone',
   ];
 
-  // Identities only as the whole key: `mobile` names a phone number, but
-  // `isMobile` a layout.
-  static const _identifierNames = {'name', 'mobile'};
+  // Identities only as the whole key: `phone` and `mobile` name a number,
+  // but `isPhone`, `phoneLayout`, `microphonePermission` and `isMobile` do
+  // not.
+  static const _identifierNames = {'name', 'mobile', 'phone', 'telephone'};
 
   // Too short to look for inside a key (`className` holds `ssn`): a word of
-  // the key's own.
+  // the key's own. A run-on spelling (`bsnnr`, `customerbsn`, `IBANnumber`)
+  // is not split into words and passes: accepted, since a key test cannot
+  // tell it from an ordinary word without false hits.
   static const _identifierWords = {'bsn', 'ssn', 'iban'};
 
   static String _group(List<String> terms, String separator) =>

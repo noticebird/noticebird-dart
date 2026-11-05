@@ -37,8 +37,10 @@ enum _FieldKind { literal, vocabulary, count, type, presence, id }
 /// message, which can quote the input that caused it.
 final class BreadcrumbField<S> {
   /// [name] as the value itself when it cannot carry typed text: an enum as
-  /// its `name`, a bool, a finite number. Any other value, a string
-  /// included, as its presence ([BreadcrumbField.presence]).
+  /// its `name`, a bool, a number, each when it is a data value
+  /// ([TypedBreadcrumb.isDataValue]: an enum's name of its pattern, a finite
+  /// number of at most [TypedBreadcrumb.maxDataNumber]). Any other value, a
+  /// string included, as its presence ([BreadcrumbField.presence]).
   BreadcrumbField.literal(String name, Object? Function(S subject) read)
     : this._(name, read, _FieldKind.literal);
 
@@ -71,7 +73,9 @@ final class BreadcrumbField<S> {
   /// [name] as a run-local alias of the value (`id1`, `id2`, …,
   /// [BreadcrumbIds]): the same value reads as the same alias through the
   /// run, so a reader of the trail sees the same row again and when it
-  /// changed, and the value itself never leaves the device.
+  /// changed, and the value itself never leaves the device. A `String` or
+  /// an `int` only: any other value is skipped, so the table holds no
+  /// mutable key and keeps no entity alive.
   BreadcrumbField.id(String name, Object? Function(S subject) read)
     : this._(name, read, _FieldKind.id);
 
@@ -86,6 +90,16 @@ final class BreadcrumbField<S> {
         name,
         'name',
         'Not a breadcrumb data name (TypedBreadcrumb.isDataName)',
+      );
+    }
+    // The client's checks would drop every value of such a field: the app
+    // learns it here, on the first run, rather than never.
+    if (PrivacyPatterns.extraKeyViolation(dataName) case final violation?) {
+      throw ArgumentError.value(
+        name,
+        'name',
+        'Names ${violation.name} (PrivacyPatterns.extraKeyViolation): '
+            'every value of it would be dropped',
       );
     }
     for (final word in _vocabulary) {
@@ -128,7 +142,10 @@ final class BreadcrumbField<S> {
         },
         _FieldKind.type => _typeName(value),
         _FieldKind.presence => _presence(value),
-        _FieldKind.id => ids.aliasOf(value),
+        _FieldKind.id => switch (value) {
+          String() || int() => ids.aliasOf(value),
+          _ => null,
+        },
       };
     } catch (_) {
       // A reader that does not fit the subject, or one that fails, writes
@@ -138,9 +155,9 @@ final class BreadcrumbField<S> {
   }
 
   Object _literal(Object value) => switch (value) {
-    Enum() => value.name,
+    Enum() when TypedBreadcrumb.isDataValue(value.name) => value.name,
     bool() => value,
-    num() when value.isFinite => value,
+    num() when TypedBreadcrumb.isDataValue(value) => value,
     _ => _presence(value),
   };
 
@@ -256,8 +273,16 @@ final class BreadcrumbIds {
   final _aliases = <Object, String>{};
   int _issued = 0;
 
-  /// The alias of [value], by `==`: the one it was given, or the next one.
+  /// The alias of [value], a `String` or an `int`, by `==`: the one it was
+  /// given, or the next one. Any other value is an [ArgumentError]: a key
+  /// of another type may change under the table or keep an entity alive.
   String aliasOf(Object value) {
+    if (value is! String && value is! int) {
+      // Never the value itself in the message: its text may be anything.
+      throw ArgumentError(
+        'An id is a String or an int, not a ${value.runtimeType}',
+      );
+    }
     // Taken out and put back, so the order is the order of last sight.
     final known = _aliases.remove(value);
     if (known != null) return _aliases[value] = known;

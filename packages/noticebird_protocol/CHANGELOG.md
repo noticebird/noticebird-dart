@@ -23,15 +23,19 @@ Breaking changes:
   contains `passport`, `nationalid` or `socialsecurity`, and one with `bsn`,
   `ssn` or `iban` as a word of its own (`customerBsn`, `IBAN`; not
   `className`).
-- A breadcrumb's message holds no control, zero-width or bidirectional
-  character (`TypedBreadcrumb.controlPattern`) and no unpaired surrogate.
+- A breadcrumb's message holds no control, invisible or bidirectional
+  character (`TypedBreadcrumb.controlPattern`: C0 and C1, U+2028–U+2029,
+  U+200B–U+200F, U+2060–U+2064, U+FEFF, U+061C, U+202A–U+202E,
+  U+2066–U+2069) and no unpaired surrogate. A data number is at most
+  `TypedBreadcrumb.maxDataNumber` (2^53) in magnitude.
   `cutText`, `hasUnpairedSurrogate` and `replaceUnpairedSurrogates` are the
   rules of a text's code units; `clampTagValue` never splits a surrogate
   pair.
 - `canonicalJsonEncode` writes a whole double within ±2^53 as an integer
   (`1.0` as `1`, `-0.0` as `0`), as the web does.
 - `PrivacyPatterns.extraKeyViolation` also names a key that contains
-  `phone` or `mobilenumber`, and the key `mobile`.
+  `phonenumber`, `mobilenumber` or `mobilephone`, and the keys `phone`,
+  `telephone` and `mobile` (not `isPhone` or `microphonePermission`).
 - `BreadcrumbCategory` and `TypedBreadcrumb.clamped` are removed;
   `AllowedTag`, `isTagValue` and `clampTagValue` are an event's `tags`
   only.

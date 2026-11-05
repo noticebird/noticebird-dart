@@ -36,7 +36,10 @@ Changes:
   set, anything else `true`), `count` (`<name>.count`), `type` (the
   runtime type's name), `presence` and `id` (a run-local alias `id1`,
   `id2`, … from `NoticebirdClient.breadcrumbIds`, a `BreadcrumbIds`).
-  Never an object's `toString()`; a reader that fails is skipped.
+  Never an object's `toString()`; a reader that fails is skipped; an enum
+  name or a number the protocol does not take is its presence; an id is a
+  `String` or an `int` only. A field whose name the privacy check drops
+  (`userId`, `phone`, `password`) is an `ArgumentError` when it is made.
   `BreadcrumbFields.typeName` is the name rule of a type in a breadcrumb.
 - An event kept offline by 0.7.0 (schema 5) and a feedback report kept by
   0.7.0 (schema 2) are still sent as they were written.
