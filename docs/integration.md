@@ -19,24 +19,24 @@ dependencies:
   noticebird_flutter:
     git:
       url: https://github.com/noticebird/noticebird-dart.git
-      ref: v0.7.0
+      ref: v0.8.0
       path: packages/noticebird_flutter
   noticebird_native: # only for native crashes, §11
     git:
       url: https://github.com/noticebird/noticebird-dart.git
-      ref: v0.7.0
+      ref: v0.8.0
       path: packages/noticebird_native
 
 dependency_overrides:
   noticebird:
     git:
       url: https://github.com/noticebird/noticebird-dart.git
-      ref: v0.7.0
+      ref: v0.8.0
       path: packages/noticebird
   noticebird_protocol:
     git:
       url: https://github.com/noticebird/noticebird-dart.git
-      ref: v0.7.0
+      ref: v0.8.0
       path: packages/noticebird_protocol
 ```
 
