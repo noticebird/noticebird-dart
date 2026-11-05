@@ -26,9 +26,12 @@ next to this page.
    searches your code for the cause (Read, Grep, Glob), and writes one triage
    block back with `set_feedback_analysis`: a summary, a severity (`low`,
    `medium`, `high`), a proposed route (`fix`, `design`, `roadmap`, `reject`)
-   and the reason, by the triage rules of the
+   and the reason; the rest of its reasoning as sections, the places in your
+   code it read (path and lines at the commit of the run) and the run itself,
+   by the triage rules of the
    [`noticebird` skill](../../skills/noticebird/reference/processing-reports.md#analysis-from-a-workflow).
-5. Noticebird shows it as the report's newest analysis. The mail about the
+5. Noticebird shows it as the report's newest analysis, the places as links
+   to those lines at that commit and the run as a link to its log. The mail about the
    report waits for it, up to the project's wait; a run that takes longer
    leaves the mail without it (or with Noticebird's own first reading, when
    the project has that on), and the analysis still lands on the report.
