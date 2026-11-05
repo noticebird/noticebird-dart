@@ -39,14 +39,18 @@ The run changes nothing else: no status, no notes, no file, no commit.
 
 1. **Install the Noticebird GitHub App** on the repository that holds the
    app's code, and link it to the project in the Noticebird console under
-   **Project › Integration** (a person with admin rights on the project does
-   this). There you also turn the code analysis on and set how long the mail
+   **Project › Code analysis** (a person with admin rights on the project
+   does this). GitHub asks you to authorize the App once: that is how
+   Noticebird checks the installation is yours before it lists or links its
+   repositories. There you also turn the code analysis on and set how long the mail
    waits for it.
 2. **Add the workflow.** Copy `noticebird-feedback-analysis.yml` to
    `.github/workflows/` on the repository's default branch, under that
    name: Noticebird dispatches the workflow by its file name, on the default
    branch. Set the SDK `ref` in
-   it to the release your app depends on.
+   it to the commit of the release your app depends on. Every action in it
+   is pinned to a commit, as the job holds your tokens; keep it that way
+   when you update them.
 3. **Add the repository secrets** (Settings › Secrets and variables ›
    Actions):
    - `CLAUDE_CODE_OAUTH_TOKEN` — a token of your Claude subscription, made
@@ -104,4 +108,9 @@ The workflow names the App's bot in `allowed_bots`, because
 - **The MCP token reads your feedback.** At Handle, `get_feedback` also
   names the reporter and their contact address; the triage rules keep both
   out of the analysis. Keep the token on the one project, and revoke it in
-  the console when you stop using the workflow.
+  the console when you stop using the workflow. A report that steers the
+  agent could make it write an analysis on another report of that project;
+  the token reaches no other project.
+- **Keep the repository private.** The run's log in the Actions tab can
+  show what the agent read, report text included, and on a public
+  repository anyone can read that log.

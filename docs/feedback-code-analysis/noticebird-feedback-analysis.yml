@@ -46,7 +46,7 @@ concurrency:
 jobs:
   analyse:
     runs-on: ubuntu-latest
-    # Keep it below the project's mail wait (Project › Integration in the
+    # Keep it below the project's mail wait (Project › Code analysis in the
     # Noticebird console), so the analysis reaches the mail.
     timeout-minutes: 15
     steps:
@@ -64,17 +64,20 @@ jobs:
           echo "project=$PROJECT" >> "$GITHUB_OUTPUT"
           echo "ticket=$TICKET" >> "$GITHUB_OUTPUT"
 
-      - uses: actions/checkout@v5
+      # Every action is pinned to a commit: the job holds your Claude and MCP
+      # tokens, and a tag can be moved.
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
         with:
           fetch-depth: 1
           persist-credentials: false
 
       # The noticebird skill's triage rules, at the SDK release your app
-      # depends on. Inside the workspace, so the agent can read it.
-      - uses: actions/checkout@v5
+      # depends on, by its commit. Inside the workspace, so the agent can
+      # read it.
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
         with:
           repository: noticebird/noticebird-dart
-          ref: v0.7.0
+          ref: 8b4982e21376630b0b8edc23dfc1bf6c617b3f75 # main after v0.7.0: the skill with its workflow mode
           path: .noticebird-sdk
           sparse-checkout: skills/noticebird
           persist-credentials: false
@@ -99,7 +102,7 @@ jobs:
             }
           }' > "$RUNNER_TEMP/noticebird-mcp.json"
 
-      - uses: anthropics/claude-code-action@v1
+      - uses: anthropics/claude-code-action@c3d45e8e941e1b2ad7b278c57482d9c5bf1f35b3 # v1.0.99
         with:
           # One of the two: a Claude subscription's token (`claude setup-token`)
           # or an Anthropic API key.
