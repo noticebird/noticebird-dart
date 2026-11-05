@@ -83,8 +83,11 @@ abstract final class PrivacyPatterns {
   /// so `User_ID`, `user-id` and `userId` read alike. A key that contains a
   /// credential word is a [PrivacyViolation.secret], one that contains a
   /// health measure (or `medical`) a [PrivacyViolation.medicalData], and one
-  /// that is `name` or contains an identity (`email`, `userid`, …) a
-  /// [PrivacyViolation.identifier].
+  /// that is `name`, contains an identity (`email`, `userid`, `passport`,
+  /// `nationalid`, …) or has a short personal number as a word of its own
+  /// (`bsn`, `ssn`, `iban`: `customerBsn`, `ssn_last4`, `IBAN`, but not
+  /// `className`) a [PrivacyViolation.identifier]. Words are split at
+  /// anything outside `A-Za-z0-9` and where a capital starts a word.
   static PrivacyViolation? extraKeyViolation(String key) {
     for (final violation in PrivacyViolation.values) {
       if (_isKeyOf(violation, key)) return violation;
@@ -121,7 +124,14 @@ abstract final class PrivacyPatterns {
     'patientid',
     'userid',
     'username',
+    'nationalid',
+    'passport',
+    'socialsecurity',
   ];
+
+  // Too short to look for inside a key (`className` holds `ssn`): a word of
+  // the key's own.
+  static const _identifierWords = {'bsn', 'ssn', 'iban'};
 
   static String _group(List<String> terms, String separator) =>
       '(?:${terms.map((term) => term.replaceAll(' ', '$separator?')).join('|')})';
@@ -141,8 +151,20 @@ bool _isKeyOf(PrivacyViolation violation, String key) {
     ),
     PrivacyViolation.identifier =>
       normalized == 'name' ||
-          PrivacyPatterns._identifierKeys.any(normalized.contains),
+          PrivacyPatterns._identifierKeys.any(normalized.contains) ||
+          _keyWords
+              .allMatches(key)
+              .any(
+                (word) => PrivacyPatterns._identifierWords.contains(
+                  word[0]!.toLowerCase(),
+                ),
+              ),
   };
 }
 
 final _outsideKey = RegExp('[^a-z0-9]');
+
+/// A word of a key: a run of capitals not followed by a lowercase letter
+/// (`IBAN`, the `BSN` of `BSNNumber`), a lowercase word that may start with
+/// a capital (`Bsn`, `Number`), or a run of digits.
+final _keyWords = RegExp('[A-Z]+(?![a-z])|[A-Z]?[a-z]+|[0-9]+');

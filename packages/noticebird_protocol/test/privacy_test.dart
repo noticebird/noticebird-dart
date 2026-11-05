@@ -99,6 +99,38 @@ void main() {
     expect(PrivacyPatterns.extraKeyViolation('retry_count'), isNull);
   });
 
+  test('a key that names a personal number is an identifier', () {
+    for (final key in [
+      'bsn',
+      'BSN',
+      'customerBsn',
+      'bsn_number',
+      'BSNNumber',
+      'ssn',
+      'ssnLast4',
+      'iban',
+      'IBAN',
+      'payout.iban',
+      'nationalId',
+      'national_id',
+      'passport',
+      'passportNumber',
+      'socialSecurityNumber',
+    ]) {
+      expect(
+        PrivacyPatterns.extraKeyViolation(key),
+        PrivacyViolation.identifier,
+        reason: key,
+      );
+    }
+  });
+
+  test('a short personal number is a word of its own, not part of one', () {
+    for (final key in ['className', 'jobsNumber', 'subsName', 'Caribbean']) {
+      expect(PrivacyPatterns.extraKeyViolation(key), isNull, reason: key);
+    }
+  });
+
   test('a key of two categories is the first, in the order of the enum', () {
     expect(
       PrivacyPatterns.extraKeyViolation('emailPassword'),

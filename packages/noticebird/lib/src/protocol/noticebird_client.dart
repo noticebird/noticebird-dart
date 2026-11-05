@@ -6,6 +6,7 @@ import 'dart:typed_data';
 import 'package:noticebird_protocol/feedback.dart';
 import 'package:noticebird_protocol/noticebird_protocol.dart';
 
+import '../breadcrumbs/breadcrumb_fields.dart';
 import '../feedback/feedback_capture.dart';
 import '../feedback/feedback_config.dart';
 import '../feedback/feedback_draft.dart';
@@ -153,6 +154,11 @@ final class NoticebirdClient {
   /// after them. Only [clearBreadcrumbs] forgets the trail.
   List<TypedBreadcrumb> get recentBreadcrumbs =>
       List.unmodifiable(_breadcrumbs);
+
+  /// The run's id aliases ([BreadcrumbField.id]): every description of a
+  /// step this client records aliases its ids here, so the same row reads
+  /// as the same alias through the trail. In memory only.
+  final BreadcrumbIds breadcrumbIds = BreadcrumbIds();
 
   /// The longest message a buffered breadcrumb keeps. An event shortens it
   /// further, to the protocol's [TypedBreadcrumb.maxMessageLength].

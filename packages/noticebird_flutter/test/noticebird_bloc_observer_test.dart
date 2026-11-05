@@ -28,6 +28,38 @@ final class _Box<T> extends Cubit<T?> {
   _Box() : super(null);
 }
 
+enum _Status { loading, loaded }
+
+final class _Profile {
+  _Profile(this.status, this.records, this.spaceId, this.query);
+
+  final _Status status;
+  final List<int> records;
+  final String spaceId;
+  final String query;
+}
+
+final class _ProfileCubit extends Cubit<_Profile?> {
+  _ProfileCubit() : super(null);
+}
+
+final class _Open extends _CounterEvent {
+  _Open(this.spaceId);
+
+  final String spaceId;
+}
+
+/// A freezed case holding what a user typed, whose text shows it.
+// ignore: camel_case_types
+final class _$ReauthenticateWithPasswordImpl extends _CounterEvent {
+  _$ReauthenticateWithPasswordImpl(this.password);
+
+  final String password;
+
+  @override
+  String toString() => 'Reauthenticate(password: $password)';
+}
+
 void main() {
   late RecordingCrashTransport transport;
   late NoticebirdClient reporter;
@@ -107,7 +139,7 @@ void main() {
       ('_', '', 'bloc'),
     ]) {
       test('$type is $message, its action $action', () {
-        expect(blocTypeName(type), message);
+        expect(BreadcrumbFields.typeName(type), message);
         expect(blocActionName(type), action);
         for (final step in ['change', 'event']) {
           expect(
@@ -227,6 +259,141 @@ void main() {
 
     expect(transport.events, isEmpty);
     cubit.close();
+  });
+
+  group('the tables', () {
+    late NoticebirdBlocObserver described;
+
+    setUp(() {
+      described = NoticebirdBlocObserver(
+        client: reporter,
+        stateFields: BreadcrumbFields([
+          BreadcrumbField<_Profile>.literal('status', (s) => s.status),
+          BreadcrumbField<_Profile>.count('records', (s) => s.records),
+          BreadcrumbField<_Profile>.id('spaceId', (s) => s.spaceId),
+          BreadcrumbField<_Profile>.presence('query', (s) => s.query),
+        ]),
+        eventFields: BreadcrumbFields([
+          BreadcrumbField.id('spaceId', (s) => s.spaceId),
+          BreadcrumbField.presence('password', (s) => s.password),
+        ]),
+      );
+    });
+
+    test('a change step\'s data is the next state, by the state table', () {
+      final cubit = _ProfileCubit();
+      addTearDown(cubit.close);
+      described.onChange(
+        cubit,
+        Change(
+          currentState: _Profile(_Status.loading, const [], 'space-a', ''),
+          nextState: _Profile(_Status.loaded, const [1, 2], 'space-a', 'Al'),
+        ),
+      );
+
+      final step = reporter.recentBreadcrumbs.single;
+      expect(step.message, 'ProfileCubit changed');
+      expect(step.data, {
+        'status': 'loaded',
+        'records.count': 2,
+        'spaceId': 'id1',
+        'query': true,
+      });
+    });
+
+    test('an event step\'s data is the event, by the event table; a '
+        'password is its presence only', () {
+      final bloc = _CounterBloc();
+      addTearDown(bloc.close);
+      described.onEvent(bloc, _$ReauthenticateWithPasswordImpl('hunter2'));
+
+      final step = reporter.recentBreadcrumbs.single;
+      expect(step.message, 'CounterBloc got ReauthenticateWithPassword');
+      expect(step.data, {'password': true});
+      expect('${step.data}', isNot(contains('hunter2')));
+    });
+
+    test('an id reads as one alias in a state and an event of the run', () {
+      final cubit = _ProfileCubit();
+      final bloc = _CounterBloc();
+      addTearDown(cubit.close);
+      addTearDown(bloc.close);
+      described
+        ..onChange(
+          cubit,
+          Change(
+            currentState: _Profile(_Status.loading, const [], 'space-a', ''),
+            nextState: _Profile(_Status.loaded, const [], 'space-b', ''),
+          ),
+        )
+        ..onEvent(bloc, _Open('space-b'));
+
+      expect(
+        [for (final step in reporter.recentBreadcrumbs) step.data['spaceId']],
+        ['id2', 'id2'],
+        reason: 'space-a, the state before, was seen first',
+      );
+    });
+
+    test('a change that describes as the state before it leaves no step', () {
+      final cubit = _ProfileCubit();
+      addTearDown(cubit.close);
+      described.onChange(
+        cubit,
+        Change(
+          currentState: _Profile(_Status.loaded, const [1], 'space-a', 'x'),
+          nextState: _Profile(_Status.loaded, const [2], 'space-a', 'y'),
+        ),
+      );
+
+      expect(reporter.recentBreadcrumbs, isEmpty);
+    });
+
+    test('a state no field describes still leaves its step, by name', () {
+      final cubit = _CounterCubit();
+      addTearDown(cubit.close);
+      described.onChange(cubit, const Change(currentState: 0, nextState: 1));
+
+      expect(reporter.recentBreadcrumbs.single.message, 'CounterCubit changed');
+      expect(reporter.recentBreadcrumbs.single.data, isEmpty);
+    });
+
+    test('a reader that throws costs the step nothing but its field', () {
+      final throwing = NoticebirdBlocObserver(
+        client: reporter,
+        eventFields: BreadcrumbFields([
+          BreadcrumbField.literal('fails', (s) => throw StateError('boom')),
+          BreadcrumbField.type('event', (s) => s),
+        ]),
+      );
+      final bloc = _CounterBloc();
+      addTearDown(bloc.close);
+      throwing.onEvent(bloc, _Increment());
+
+      expect(reporter.recentBreadcrumbs.single.data, {'event': 'Increment'});
+    });
+
+    test('the step reaches an event with its data', () async {
+      final cubit = _ProfileCubit();
+      addTearDown(cubit.close);
+      described.onChange(
+        cubit,
+        Change(
+          currentState: _Profile(_Status.loading, const [], 'space-a', ''),
+          nextState: _Profile(_Status.loaded, const [1], 'space-a', ''),
+        ),
+      );
+
+      await reporter.captureException(StateError('boom'), StackTrace.empty);
+
+      final step = (transport.events.single['breadcrumbs']! as List).single;
+      expect((step as Map)['data'], {
+        'status': 'loaded',
+        'records.count': 1,
+        'spaceId': 'id1',
+        'query': false,
+      });
+    });
   });
 
   test('an UntracedBloc leaves no breadcrumb, and its errors are still '

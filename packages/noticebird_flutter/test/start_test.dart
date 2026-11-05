@@ -421,6 +421,43 @@ void main() {
     },
   );
 
+  test('the bloc tables reach the observer the start makes', () async {
+    final states = BreadcrumbFields([
+      BreadcrumbField<int>.literal('value', (s) => s),
+    ]);
+    final events = BreadcrumbFields([]);
+    final noticebird = await NoticebirdFlutter.start(
+      apiUrl: _api,
+      publishableKey: _key,
+      appName: 'example_app',
+      httpClient: httpClient,
+      blocStateFields: states,
+      blocEventFields: events,
+    );
+    started = noticebird;
+    expect(noticebird.blocObserver.stateFields, same(states));
+    expect(noticebird.blocObserver.eventFields, same(events));
+
+    final cubit = _Counter();
+    addTearDown(cubit.close);
+    cubit.emit(1);
+    expect(noticebird.client.recentBreadcrumbs.last.data, {'value': 1});
+  });
+
+  test('bloc tables beside a blocObserver of the host\'s own throw', () async {
+    await expectLater(
+      NoticebirdFlutter.start(
+        apiUrl: _api,
+        publishableKey: _key,
+        appName: 'example_app',
+        httpClient: httpClient,
+        blocObserver: NoticebirdBlocObserver(),
+        blocStateFields: BreadcrumbFields([]),
+      ),
+      throwsArgumentError,
+    );
+  });
+
   test('a handler the host set after the start stays at close', () async {
     final noticebird = await start();
     void mine(FlutterErrorDetails _) {}

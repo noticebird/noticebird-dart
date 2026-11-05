@@ -19,6 +19,10 @@ Breaking changes:
   `TypedBreadcrumb`, with `isDataName`, `isDataValue`, `dataEntryText`,
   `trailBytes` and `encodedBytes`. A character is a UTF-16 code unit, a
   byte a byte of the canonical JSON in UTF-8.
+- `PrivacyPatterns.extraKeyViolation` names more identifiers: a key that
+  contains `passport`, `nationalid` or `socialsecurity`, and one with `bsn`,
+  `ssn` or `iban` as a word of its own (`customerBsn`, `IBAN`; not
+  `className`).
 - `BreadcrumbCategory` and `TypedBreadcrumb.clamped` are removed;
   `AllowedTag`, `isTagValue` and `clampTagValue` are an event's `tags`
   only.

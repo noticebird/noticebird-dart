@@ -17,6 +17,16 @@ Breaking changes:
   category `navigation`), with the route on top after the step as `route`
   and the one before it as `from`.
 
+Changes:
+
+- `NoticebirdBlocObserver(stateFields:, eventFields:)` and
+  `NoticebirdFlutter.start(blocStateFields:, blocEventFields:)`: a change
+  step's data describes the next state, an event step's the event, by the
+  app's `BreadcrumbFields`. A change whose next state describes as the
+  state before it leaves no step; a state the table describes as nothing
+  still leaves its step by name. Passing the tables beside a `blocObserver`
+  of the host's own is an `ArgumentError`.
+
 ## 0.7.0
 
 Moves with `noticebird` 0.7.0 and `noticebird_protocol` 0.7.0.

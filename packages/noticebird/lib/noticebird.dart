@@ -1,3 +1,4 @@
+export 'src/breadcrumbs/breadcrumb_fields.dart';
 export 'src/protocol/crash_http_transport.dart'
     hide ApiRoutes, apiRoute, crashHttpConnection;
 export 'src/protocol/file_crash_offline_store.dart';

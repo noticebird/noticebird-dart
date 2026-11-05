@@ -23,6 +23,15 @@ Breaking changes:
 
 Changes:
 
+- `BreadcrumbFields` and `BreadcrumbField` describe a subject (a bloc's
+  state, an event) as a step's data by a table the app gives: per field a
+  name, a reader and a kind — `literal` (an enum's name, a bool, a finite
+  number, anything else its presence), `vocabulary` (a word of a closed
+  set, anything else `true`), `count` (`<name>.count`), `type` (the
+  runtime type's name), `presence` and `id` (a run-local alias `id1`,
+  `id2`, … from `NoticebirdClient.breadcrumbIds`, a `BreadcrumbIds`).
+  Never an object's `toString()`; a reader that fails is skipped.
+  `BreadcrumbFields.typeName` is the name rule of a type in a breadcrumb.
 - An event kept offline by 0.7.0 (schema 5) and a feedback report kept by
   0.7.0 (schema 2) are still sent as they were written.
 

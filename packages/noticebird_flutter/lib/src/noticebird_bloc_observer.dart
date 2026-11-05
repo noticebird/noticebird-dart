@@ -26,8 +26,16 @@ import 'bloc_names.dart';
 /// share its action. A name is the runtime type's, without type arguments
 /// and leading underscores, a freezed `_$…Impl` reduced to its middle, and
 /// every character outside `[A-Za-z0-9_]` (a minified web name's `:`) a
-/// `_`; in the action it starts in lower case, with `bloc` in front of a
-/// name that does not start with a letter.
+/// `_` ([BreadcrumbFields.typeName]); in the action it starts in lower
+/// case, with `bloc` in front of a name that does not start with a letter.
+///
+/// The facts of a step are its data, from the app's tables: a change's
+/// [stateFields] describe the next state (`status: loaded`,
+/// `collections.count: 6`), an event's [eventFields] the event. Without a
+/// table a step has no data. A change whose next state describes as the
+/// state before it — an emit that changed nothing the trail can show —
+/// leaves no step; one whose states describe as nothing at all (a state the
+/// table has no field for) still does, by its name.
 ///
 /// A bloc [traces] declines leaves no breadcrumb — by default one that is an
 /// [UntracedBloc]; its errors are still captured, and it is still counted. A
@@ -38,9 +46,20 @@ import 'bloc_names.dart';
 /// the host reports elsewhere is not reported here again. It goes to
 /// [client], or the client attached to `Noticebird` when there is none.
 class NoticebirdBlocObserver extends BlocObserver {
-  NoticebirdBlocObserver({NoticebirdClient? client, DateTime Function()? clock})
-    : _client = client,
-      _clock = clock ?? DateTime.now;
+  NoticebirdBlocObserver({
+    NoticebirdClient? client,
+    DateTime Function()? clock,
+    this.stateFields,
+    this.eventFields,
+  }) : _client = client,
+       _clock = clock ?? DateTime.now;
+
+  /// What a change step says of the next state, as its data; null for no
+  /// data.
+  final BreadcrumbFields? stateFields;
+
+  /// What an event step says of the event, as its data; null for no data.
+  final BreadcrumbFields? eventFields;
 
   final NoticebirdClient? _client;
   final DateTime Function() _clock;
@@ -94,14 +113,22 @@ class NoticebirdBlocObserver extends BlocObserver {
     _note(
       bloc,
       'event',
-      (name) => '$name got ${blocTypeName('${event.runtimeType}')}',
+      (name) =>
+          '$name got ${BreadcrumbFields.typeName('${event.runtimeType}')}',
+      (ids) => eventFields?.describe(event, ids: ids) ?? const {},
     );
   }
 
   @override
   void onChange(BlocBase<dynamic> bloc, Change<dynamic> change) {
     super.onChange(bloc, change);
-    _note(bloc, 'change', (name) => '$name changed');
+    _note(bloc, 'change', (name) => '$name changed', (ids) {
+      final fields = stateFields;
+      if (fields == null) return const {};
+      final before = fields.describe(change.currentState, ids: ids);
+      final after = fields.describe(change.nextState, ids: ids);
+      return after.isNotEmpty && mapEquals(after, before) ? null : after;
+    });
   }
 
   @override
@@ -139,21 +166,27 @@ class NoticebirdBlocObserver extends BlocObserver {
 
   /// Leaves the breadcrumb of a step of a bloc [traces] takes, its action
   /// the bloc's name and [step], its message what [message] makes of the
-  /// bloc's name; [traces] is asked inside the guard, since a subclass's may
-  /// throw.
+  /// bloc's name, its data what [data] describes with the client's id
+  /// aliases — no breadcrumb when [data] answers null; [traces] is asked
+  /// inside the guard, since a subclass's may throw.
   void _note(
     BlocBase<dynamic> bloc,
     String step,
     String Function(String name) message,
+    Map<String, Object>? Function(BreadcrumbIds ids) data,
   ) {
     try {
-      if (!traces(bloc)) return;
+      final reporter = _reporter;
+      if (reporter == null || !traces(bloc)) return;
+      final facts = data(reporter.breadcrumbIds);
+      if (facts == null) return;
       final type = '${bloc.runtimeType}';
-      _reporter?.addBreadcrumb(
-        message(blocTypeName(type)),
+      reporter.addBreadcrumb(
+        message(BreadcrumbFields.typeName(type)),
         action: '${blocActionName(type)}.$step',
         category: 'bloc',
         level: BreadcrumbLevel.info,
+        data: facts,
         at: _clock(),
       );
     } catch (_) {

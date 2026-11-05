@@ -96,6 +96,11 @@ final class NoticebirdFlutter {
   ///   host whose breadcrumbs say more passes a subclass of
   ///   [NoticebirdBlocObserver] as [blocObserver]; a host with a zone of
   ///   its own passes [reportZoneError] as its handler;
+  /// - writes the facts of a bloc's steps as their data by the app's tables:
+  ///   a change by [blocStateFields] (the next state), an event by
+  ///   [blocEventFields] ([NoticebirdBlocObserver.stateFields],
+  ///   [NoticebirdBlocObserver.eventFields]). A host that passes its own
+  ///   [blocObserver] gives it the tables itself;
   /// - keeps what does not get through in the app's support directory
   ///   (`noticebird/crashes` and `noticebird/feedback`), unless the host
   ///   passes [crashStore] or [feedbackStore]. None on the web, and none
@@ -122,7 +127,8 @@ final class NoticebirdFlutter {
   /// [ArgumentError] only for arguments no start can work with, as
   /// [NoticebirdConfig] does: an [appName] the protocol refuses, a
   /// [breadcrumbBuffer] out of range, an unencrypted store passed under
-  /// `regulatedStrict`.
+  /// `regulatedStrict`, a [blocObserver] together with [blocStateFields] or
+  /// [blocEventFields].
   static Future<NoticebirdFlutter> start({
     required String appName,
     Uri? apiUrl,
@@ -140,6 +146,8 @@ final class NoticebirdFlutter {
     bool installErrorHandlers = true,
     bool observeBlocs = true,
     NoticebirdBlocObserver? blocObserver,
+    BreadcrumbFields? blocStateFields,
+    BreadcrumbFields? blocEventFields,
     bool background = false,
   }) {
     final starting = _starting;
@@ -161,6 +169,8 @@ final class NoticebirdFlutter {
       installErrorHandlers: installErrorHandlers,
       observeBlocs: observeBlocs,
       blocObserver: blocObserver,
+      blocStateFields: blocStateFields,
+      blocEventFields: blocEventFields,
       background: background,
     );
     _starting = start;
@@ -191,8 +201,17 @@ final class NoticebirdFlutter {
     required bool installErrorHandlers,
     required bool observeBlocs,
     required NoticebirdBlocObserver? blocObserver,
+    required BreadcrumbFields? blocStateFields,
+    required BreadcrumbFields? blocEventFields,
     required bool background,
   }) async {
+    if (blocObserver != null &&
+        (blocStateFields != null || blocEventFields != null)) {
+      throw ArgumentError(
+        'A blocObserver of the host takes its tables itself: '
+        'NoticebirdBlocObserver(stateFields:, eventFields:)',
+      );
+    }
     final binding = WidgetsFlutterBinding.ensureInitialized();
 
     CrashHttpTransport? ingest;
@@ -232,7 +251,12 @@ final class NoticebirdFlutter {
     final defaultCrashStore = storeIn('crashes');
     final defaultFeedbackStore = storeIn('feedback');
 
-    final observer = blocObserver ?? NoticebirdBlocObserver();
+    final observer =
+        blocObserver ??
+        NoticebirdBlocObserver(
+          stateFields: blocStateFields,
+          eventFields: blocEventFields,
+        );
     final NoticebirdConfig config;
     try {
       config = NoticebirdConfig(
