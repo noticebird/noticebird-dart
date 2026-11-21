@@ -9,7 +9,7 @@ import 'support/crash_events.dart';
 void main() {
   group('toJson', () {
     test('writes every field it has', () {
-      expect(v6Breadcrumb().toJson(), {
+      expect(v7Breadcrumb().toJson(), {
         'at': '2026-07-11T10:14:59.000Z',
         'message': 'Opened page',
         'action': 'route.push',
@@ -59,12 +59,12 @@ void main() {
         'می\u200Cخواهم',
       ]) {
         expect(TypedBreadcrumb.controlPattern.hasMatch(message), isFalse);
-        v6Breadcrumb(message: message).check();
+        v7Breadcrumb(message: message).check();
       }
     });
 
     test('a message of 1 to 200 characters, on one line', () {
-      v6Breadcrumb(message: 'm' * TypedBreadcrumb.maxMessageLength).check();
+      v7Breadcrumb(message: 'm' * TypedBreadcrumb.maxMessageLength).check();
       for (final message in [
         '',
         'm' * (TypedBreadcrumb.maxMessageLength + 1),
@@ -90,7 +90,7 @@ void main() {
         'lone \ude00 low',
       ]) {
         refused(
-          v6Breadcrumb(message: message),
+          v7Breadcrumb(message: message),
           ProtocolViolation.invalidValue,
           r'$.breadcrumbs[].message',
         );
@@ -99,9 +99,9 @@ void main() {
 
     test('a character is a UTF-16 code unit', () {
       // 100 emoji are 200 code units: at the limit, and one more is over.
-      v6Breadcrumb(message: '😀' * 100, details: const {}).check();
+      v7Breadcrumb(message: '😀' * 100, details: const {}).check();
       refused(
-        v6Breadcrumb(message: '${'😀' * 100}a', details: const {}),
+        v7Breadcrumb(message: '${'😀' * 100}a', details: const {}),
         ProtocolViolation.invalidValue,
         r'$.breadcrumbs[].message',
       );
@@ -114,9 +114,9 @@ void main() {
         'sync.write_held-2',
         'a' * TypedBreadcrumb.maxActionLength,
       ]) {
-        v6Breadcrumb(action: action).check();
+        v7Breadcrumb(action: action).check();
       }
-      v6Breadcrumb(action: null).check();
+      v7Breadcrumb(action: null).check();
       for (final action in [
         '',
         'Route.push',
@@ -126,7 +126,7 @@ void main() {
         'a' * (TypedBreadcrumb.maxActionLength + 1),
       ]) {
         refused(
-          v6Breadcrumb(action: action),
+          v7Breadcrumb(action: action),
           ProtocolViolation.invalidValue,
           r'$.breadcrumbs[].action',
         );
@@ -139,9 +139,9 @@ void main() {
         'sync_2',
         'c' * TypedBreadcrumb.maxCategoryLength,
       ]) {
-        v6Breadcrumb(category: category).check();
+        v7Breadcrumb(category: category).check();
       }
-      v6Breadcrumb(category: null).check();
+      v7Breadcrumb(category: null).check();
       for (final category in [
         '',
         'Bloc',
@@ -151,7 +151,7 @@ void main() {
         'c' * (TypedBreadcrumb.maxCategoryLength + 1),
       ]) {
         refused(
-          v6Breadcrumb(category: category),
+          v7Breadcrumb(category: category),
           ProtocolViolation.invalidValue,
           r'$.breadcrumbs[].category',
         );
@@ -160,7 +160,7 @@ void main() {
 
     test('a level is optional', () {
       for (final level in [null, ...BreadcrumbLevel.values]) {
-        final step = v6Breadcrumb(level: level);
+        final step = v7Breadcrumb(level: level);
         step.check();
         expect(step.toJson()['level'], level?.name);
       }
@@ -170,9 +170,9 @@ void main() {
       Map<String, Object> entries(int count) => {
         for (var i = 0; i < count; i++) 'n$i': i,
       };
-      v6Breadcrumb(details: entries(TypedBreadcrumb.maxDetails)).check();
+      v7Breadcrumb(details: entries(TypedBreadcrumb.maxDetails)).check();
       refused(
-        v6Breadcrumb(details: entries(TypedBreadcrumb.maxDetails + 1)),
+        v7Breadcrumb(details: entries(TypedBreadcrumb.maxDetails + 1)),
         ProtocolViolation.oversized,
         r'$.breadcrumbs[].details',
       );
@@ -188,7 +188,7 @@ void main() {
         'n' * TypedBreadcrumb.maxDetailNameLength,
       ]) {
         expect(TypedBreadcrumb.isDetailName(name), isTrue, reason: name);
-        v6Breadcrumb(details: {name: 1}).check();
+        v7Breadcrumb(details: {name: 1}).check();
       }
       for (final name in [
         '',
@@ -204,7 +204,7 @@ void main() {
       ]) {
         expect(TypedBreadcrumb.isDetailName(name), isFalse, reason: name);
         refused(
-          v6Breadcrumb(details: {name: 1}),
+          v7Breadcrumb(details: {name: 1}),
           ProtocolViolation.invalidValue,
           '\$.breadcrumbs[].details.$name',
         );
@@ -227,7 +227,7 @@ void main() {
         -TypedBreadcrumb.maxDetailNumber,
       ]) {
         expect(TypedBreadcrumb.isDetailValue(value), isTrue, reason: '$value');
-        v6Breadcrumb(details: {'value': value}).check();
+        v7Breadcrumb(details: {'value': value}).check();
       }
       for (final (value, violation) in <(Object, ProtocolViolation)>[
         ('', ProtocolViolation.invalidValue),
@@ -251,7 +251,7 @@ void main() {
       ]) {
         expect(TypedBreadcrumb.isDetailValue(value), isFalse, reason: '$value');
         refused(
-          v6Breadcrumb(details: {'value': value}),
+          v7Breadcrumb(details: {'value': value}),
           violation,
           r'$.breadcrumbs[].details.value',
         );
@@ -261,13 +261,13 @@ void main() {
     test('a step takes at most 512 bytes encoded', () {
       // A 200-character message of three-byte characters and full details
       // entries: every field within its own limit, the step over 512 bytes.
-      final over = v6Breadcrumb(
+      final over = v7Breadcrumb(
         message: '€' * TypedBreadcrumb.maxMessageLength,
         details: {for (var i = 0; i < 4; i++) 'name$i': 'v' * 64},
       );
       expect(over.encodedBytes, greaterThan(TypedBreadcrumb.maxEncodedBytes));
       refused(over, ProtocolViolation.oversized, r'$.breadcrumbs[]');
-      final fitting = v6Breadcrumb(message: '€' * 100);
+      final fitting = v7Breadcrumb(message: '€' * 100);
       expect(
         fitting.encodedBytes,
         lessThanOrEqualTo(TypedBreadcrumb.maxEncodedBytes),
@@ -277,7 +277,7 @@ void main() {
   });
 
   test('trailBytes counts the canonical JSON array in UTF-8', () {
-    final step = v6Breadcrumb(message: 'é');
+    final step = v7Breadcrumb(message: 'é');
     expect(TypedBreadcrumb.trailBytes(const []), 2);
     expect(TypedBreadcrumb.trailBytes([step]), step.encodedBytes + 2);
     expect(TypedBreadcrumb.trailBytes([step, step]), 2 * step.encodedBytes + 3);

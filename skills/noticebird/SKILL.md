@@ -15,7 +15,8 @@ description: >
   sends nothing", "capture a handled error", "test code that reports crashes", "send
   user feedback", "add a report-a-bug button", "attach a screenshot to feedback",
   "who sent this report", "my own zone", "my own bloc observer", "show what a report
-  sends", "scrub a breadcrumb", "reset Noticebird between tests".
+  sends", "scrub a breadcrumb", "reset Noticebird between tests", "the database timed
+  out", "declare a dependency failure", "bundle an outage into one incident".
   Triggers on: noticebird_flutter, NoticebirdFlutter, NoticebirdFlutter.start,
   reportZoneError, installErrorHandlers, background start,
   apiUrl, hostedApiUrl, NoticebirdNavigatorObserver, BlocObserver, ProviderObserver,
@@ -28,7 +29,8 @@ description: >
   FeedbackRejection, FeedbackContact, FeedbackUserContext, FeedbackDiagnostics,
   contextDiagnostics, feedbackContextDiagnostics, onSettled, onFeedbackSettled,
   FeedbackSettled, FeedbackOfflineStore, FileFeedbackOfflineStore, pendingFeedbackCount,
-  shouldCapture, filtered, hostPlatformMetadata, processSessionId,
+  shouldCapture, filtered, CrashDependency, DependencyFailure, dependencyOf, dependency,
+  incident, hostPlatformMetadata, processSessionId,
   uploadCrashes, platformReadFailures, PlatformReadFailure, tracksRouteTemplate, addBreadcrumb, TypedBreadcrumb,
   BreadcrumbLevel, AllowedTag, setRouteTemplate, isRouteTemplate, setUser, setUserId,
   CrashPrivacyProfile, regulatedStrict, CrashHttpTransport, noticebird_pk_, crash_pk_,
@@ -66,8 +68,9 @@ and it changes how you use the API:
   silently dropping every event later.
 - The deliberate exceptions throw **in debug builds only**, to surface an integration
   mistake while you are looking: a raw route in `setRouteTemplate` or `feedbackMoment`,
-  and a value `captureFeedback` refuses (an empty message, a contact address, a user
-  context, a related event id). Release builds drop the value or reject the report.
+  a `dependency` passed to `captureException` that the protocol refuses, and a value
+  `captureFeedback` refuses (an empty message, a contact address, a user context, a
+  related event id). Release builds drop the value or reject the report.
 
 ## Four packages
 
@@ -129,7 +132,8 @@ feedback; the SDK never picks an API by itself.
 
 The other options: `httpClient` (the host's HTTP stack),
 `uploadCrashes: false` (crash events `discarded`, feedback still sent), `privacyProfile`,
-`pii`, `breadcrumbBuffer`, `beforeBreadcrumb` (*Breadcrumbs*), `onFeedbackSettled`,
+`pii`, `dependencyOf` (*Capturing*), `breadcrumbBuffer`, `beforeBreadcrumb`
+(*Breadcrumbs*), `onFeedbackSettled`,
 `feedbackContextDiagnostics` (groups of the app's state taken with each report's
 moment), `crashStore` and `feedbackStore` (your own stores), `installErrorHandlers`,
 `background`.
@@ -166,6 +170,11 @@ final result = await noticebird.client.captureException(
   tags: {AllowedTag.feature: 'lists'},
   extra: {'listCount': 12},
   groupingKey: ['lists', 'load', 'E42'],            // optional: the host's own issue
+  dependency: const CrashDependency(                // optional: a service that failed
+    name: 'database',
+    failure: DependencyFailure.timeout,
+    code: '57014',
+  ),
 );
 ```
 
@@ -227,6 +236,51 @@ channel added later cannot report such an error twice. The live-debug sync is ne
 filtered; a filter that throws counts as `true`, so a failing filter never costs a report.
 The SDK stays generic: the predicate is the host's, the SDK only asks it. A user's own
 report is `captureFeedback` (*Feedback*), never an event.
+
+### A dependency that failed
+
+When an error is the failure of a service the app depends on — the database timed out,
+the auth server answered 503 — and not a bug of the app's own, declare it with a
+`CrashDependency`. Issues stay one per place in the code; the platform shows the issues
+whose events name the same failed service within a few minutes of each other as one
+incident, notified once.
+
+- `name` is **the service that failed**, never the endpoint, the table or the call:
+  `database`, `auth`, `payments`. The name is what bundles issues into one incident, so
+  every failure of one service carries the same name (an app on Supabase names every
+  failure of its database `database`). A service's name and nothing else — never a user
+  or any other personal value: `CrashDependency.namePattern`, a lowercase letter, then at
+  most 47 of `a-z0-9_.-`.
+- `failure` (`DependencyFailure`): `timeout` (no answer in time), `unavailable` (it
+  answered it cannot serve now: 503, an aborted transaction after a statement timeout,
+  too many connections), `connection` (refused, reset, DNS), `rateLimited` (429),
+  `error` (any other failure on its side, such as a 500).
+- `code` (optional) is the dependency's own code: a SQLSTATE (`25P02`, `57014`) or an
+  HTTP status (`503`), 1–8 letters and digits (`CrashDependency.codePattern`).
+
+An error the app causes itself (a unique violation, a refused permission, an invalid
+request) is no dependency failure. For errors that reach the global handlers, map the
+client library's exceptions once with the start's `dependencyOf` — asked on every
+channel, like `shouldCapture`, and the explicit captures without a `dependency` of their
+own; an explicit `dependency` wins over it:
+
+```dart
+await NoticebirdFlutter.start(
+  // …
+  dependencyOf: (error) => switch (error) {
+    PostgrestException(code: '57014') => const CrashDependency(
+      name: 'database', failure: DependencyFailure.timeout, code: '57014'),
+    TimeoutException() => const CrashDependency(
+      name: 'database', failure: DependencyFailure.timeout),
+    _ => null,
+  },
+);
+```
+
+A dependency never costs the event: one the protocol refuses is left out (an explicit
+one throws in a debug build), and so is one whose name or code reads as a phone number,
+an id, an IP address or a credential; a `dependencyOf` that throws gives none. It is no
+part of the grouping and no part of the client's deduplication.
 
 Set `handled: true` for anything you caught and turned into an error state. Leave it
 `false` only for errors that actually reached a global handler.
@@ -700,6 +754,8 @@ Native capture: implement `NativeCrashCollector` with a fake that emits
 | Every event is `dropped` | A `sessionIdFactory` or `eventIdFactory` whose id the protocol refuses. |
 | Nothing sends, no error | No client attached to the facade — every `Noticebird.*` call is a silent no-op until the start. |
 | A breadcrumb never arrives | `beforeBreadcrumb` answered `null` or threw for it. |
+| An event arrives without its `dependency` | The protocol refused it — a name with a capital, a space or past 48 characters, a code past 8 letters and digits — its name or code reads as a phone number, an id, an IP address or a credential, or `dependencyOf` threw or answered `null`. An explicit one the protocol refuses throws in a debug build. |
+| One outage shows as separate issues, not one incident | Their events name no `dependency`, or name the service differently (`db` here, `database` there): name the service, the same everywhere. |
 | A route shows as `MaterialPageRoute` | Its name is a raw path or none: give the observer a `describe`, or name routes by their template. |
 | A feedback report names the sheet's route, or the trail is full of typing | The moment was taken at send rather than when the sheet opened; the observer you wrote does not skip the sheet's state. |
 | Stack trace is `<no-app-frames>` | Only app frames are kept — `package:` frames and, on the web, the frames of the compiled `<name>.dart.js` and its parts — and the trace held none, such as one from the engine or `canvaskit.js` alone. |

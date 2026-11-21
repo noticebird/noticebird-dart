@@ -71,6 +71,7 @@ final class NoticebirdConfig {
     this.offlineStore,
     this.pii = const CrashPiiConfig(),
     this.shouldCapture,
+    this.dependencyOf,
     this.nativeCrashes,
     this.feedback,
     this.locale,
@@ -183,6 +184,24 @@ final class NoticebirdConfig {
   ///
   /// `null` (the default) captures everything.
   final bool Function(Object error)? shouldCapture;
+
+  /// The failure of a service the app depends on that an error is, if it
+  /// is one: asked once per capture on every channel, as [shouldCapture]
+  /// is — an explicit `captureException` without a `dependency` of its own,
+  /// and every channel of `noticebird_flutter`: its error handlers and its
+  /// zone handler. It answers `null` for an error of the app's own. A
+  /// native crash report ([nativeCrashes]) is no such error, and never asks
+  /// it.
+  ///
+  /// It is how an error that reaches a global handler (a timeout nothing
+  /// caught) still says which service failed: map the client library's
+  /// exceptions to a [CrashDependency] once, here. A `dependency` passed to
+  /// `captureException` wins over it. One that throws, or answers a
+  /// dependency [CrashDependency.check] refuses, gives the event none; the
+  /// event still goes.
+  ///
+  /// `null` (the default) declares none.
+  final CrashDependency? Function(Object error)? dependencyOf;
 
   /// Collects the crash reports the operating system keeps about earlier
   /// runs — native crashes, watchdog and ANR kills, foreground low-memory

@@ -664,11 +664,20 @@ final class NoticebirdClient {
   /// is still no tag value ([isTagValue]), such as a NaN or an infinite
   /// number, is left out alone.
   ///
+  /// [dependency] declares that [error] is the failure of a service the app
+  /// depends on (`CrashDependency(name: 'database', failure:
+  /// DependencyFailure.timeout, code: '57014')`); without one,
+  /// [NoticebirdConfig.dependencyOf] is asked. A dependency
+  /// [CrashDependency.check] refuses throws an [ArgumentError] in a debug
+  /// build; in a release build it is left out, as if none was passed. One
+  /// whose name or code a redaction pattern matches is left out
+  /// ([sanitizeDependency]). The event goes either way.
+  ///
   /// The [CaptureResult] carries the event's id
   /// ([CaptureResult.eventId]), for a feedback report about this error;
   /// [eventIdOf] answers it later from the error alone. A capture the
   /// filter ignores is no capture: [eventIdOf] keeps answering the error's
-  /// earlier one. Never throws.
+  /// earlier one. Otherwise it never throws.
   Future<CaptureResult> captureException(
     Object error,
     StackTrace stackTrace, {
@@ -677,8 +686,10 @@ final class NoticebirdClient {
     Map<AllowedTag, TagScalar> tags = const {},
     Map<String, Object?> extra = const {},
     List<String>? groupingKey,
+    CrashDependency? dependency,
     bool filtered = true,
   }) {
+    final declared = dependency == null ? null : _declared(dependency);
     if (filtered && !_accepts(error)) {
       return Future.value(const CaptureResult(CaptureOutcome.ignored));
     }
@@ -690,6 +701,7 @@ final class NoticebirdClient {
       tags: tags,
       extra: extra,
       groupingKey: groupingKey,
+      dependency: declared ?? _dependencyOf(error),
     );
     try {
       if (_canKey(error)) _captures[error] = capture;
@@ -698,6 +710,36 @@ final class NoticebirdClient {
       // not kept, the capture goes on.
     }
     return capture;
+  }
+
+  /// [dependency] when [CrashDependency.check] takes it. One it refuses is
+  /// the host's mistake: it throws while someone looks ([hostMistakesThrow])
+  /// and is left out otherwise, never the event.
+  static CrashDependency? _declared(CrashDependency dependency) {
+    try {
+      dependency.check();
+      return dependency;
+    } on ProtocolException catch (refusal) {
+      if (hostMistakesThrow) {
+        throw ArgumentError.value(dependency, 'dependency', refusal.message);
+      }
+      return null;
+    }
+  }
+
+  /// What [NoticebirdConfig.dependencyOf] answers for [error], when
+  /// [CrashDependency.check] takes it; `null` for none, and when it throws
+  /// or answers one the check refuses: it runs inside the error channels,
+  /// where a throw would cost the event.
+  CrashDependency? _dependencyOf(Object error) {
+    final dependencyOf = _config.dependencyOf;
+    if (dependencyOf == null || error is _LiveBreadcrumbSync) return null;
+    try {
+      return dependencyOf(error)?..check();
+    } catch (failure) {
+      _debugNote('dependency left out: $failure');
+      return null;
+    }
   }
 
   /// The id of the event the last capture of [error] made
@@ -736,6 +778,7 @@ final class NoticebirdClient {
     required Map<AllowedTag, TagScalar> tags,
     required Map<String, Object?> extra,
     required List<String>? groupingKey,
+    required CrashDependency? dependency,
   }) async {
     final transport = _transport;
     if (transport == null) return const CaptureResult(CaptureOutcome.discarded);
@@ -752,6 +795,7 @@ final class NoticebirdClient {
         tags: tags,
         extra: extra,
         groupingKey: groupingKey,
+        dependency: dependency,
       );
       // Written, and so checked, at capture time: an invalid event (a
       // session id the protocol refuses) is dropped instead of poisoning the
@@ -1106,6 +1150,7 @@ final class NoticebirdClient {
     required Map<AllowedTag, TagScalar> tags,
     required Map<String, Object?> extra,
     List<String>? groupingKey,
+    CrashDependency? dependency,
   }) {
     final strict =
         _config.privacyProfile == CrashPrivacyProfile.regulatedStrict;
@@ -1163,6 +1208,7 @@ final class NoticebirdClient {
           ? null
           : sanitizeGroupingKey(groupingKey),
       breadcrumbDrops: trail.drops.isEmpty ? null : trail.drops,
+      dependency: dependency == null ? null : sanitizeDependency(dependency),
     );
   }
 

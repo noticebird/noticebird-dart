@@ -1,3 +1,8 @@
+## 0.9.0
+
+- Moves with `noticebird` 0.9.0 and `noticebird_protocol` 0.9.0. A native
+  crash carries no dependency: `dependencyOf` is not asked about one.
+
 ## 0.8.0
 
 - Moves with `noticebird` 0.8.0 and `noticebird_protocol` 0.8.0. The run

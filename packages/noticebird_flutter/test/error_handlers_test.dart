@@ -1,7 +1,8 @@
 // The global error handlers NoticebirdFlutter.start installs: each reports
-// to the client through its capture filter and chains to the one it
-// replaces, an uncaught platform error without a previous handler is
-// printed and handled, and what they replaced comes back.
+// to the client through its capture filter, with the dependency its
+// dependencyOf gives, and chains to the one it replaces, an uncaught
+// platform error without a previous handler is printed and handled, and
+// what they replaced comes back.
 
 import 'dart:convert';
 
@@ -22,6 +23,11 @@ final class _Transport implements CrashTransport {
 
 final class _ReportedElsewhere implements Exception {
   const _ReportedElsewhere();
+}
+
+/// A timeout of the app's database client.
+final class _DatabaseTimeout implements Exception {
+  const _DatabaseTimeout();
 }
 
 void main() {
@@ -50,6 +56,13 @@ void main() {
         ),
         deduplicationWindow: Duration.zero,
         shouldCapture: (error) => error is! _ReportedElsewhere,
+        dependencyOf: (error) => error is _DatabaseTimeout
+            ? const CrashDependency(
+                name: 'database',
+                failure: DependencyFailure.timeout,
+                code: '57014',
+              )
+            : null,
       ),
       transport: transport,
     );
@@ -143,6 +156,31 @@ void main() {
     restore();
 
     expect(FlutterError.onError, same(previous));
+  });
+
+  test('every handler declares the dependency dependencyOf gives', () async {
+    PlatformDispatcher.instance.onError = null;
+    installErrorHandlers(client);
+
+    FlutterError.onError!(
+      FlutterErrorDetails(exception: const _DatabaseTimeout()),
+    );
+    PlatformDispatcher.instance.onError!(
+      const _DatabaseTimeout(),
+      StackTrace.current,
+    );
+    reportZoneError(client, const _DatabaseTimeout(), StackTrace.current);
+    FlutterError.onError!(FlutterErrorDetails(exception: StateError('own')));
+    await pumpEventQueue();
+
+    expect(
+      [for (final event in transport.events) event['dependency']],
+      [
+        for (var i = 0; i < 3; i++)
+          {'name': 'database', 'failure': 'timeout', 'code': '57014'},
+        null,
+      ],
+    );
   });
 
   test('a zone error is fatal and printed', () async {

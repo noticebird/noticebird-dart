@@ -38,6 +38,7 @@ the trail of a feedback report) and keeps the other defaults.
 | breadcrumb `action` / `category` | `^[a-z][A-Za-z0-9_.-]*$`, at most 100 / `^[a-z][a-z0-9_]*$`, at most 32 | left out alone, and counted; the step is kept |
 | breadcrumb `details` | at most 16 entries; names `^[a-z][A-Za-z0-9_]*(\.[a-z][A-Za-z0-9_]*)*$`, at most 48; a finite number of at most 2^53, a boolean or a string of at most 64 `[A-Za-z0-9_.:/+-]` | an entry whose name or value the protocol refuses, whose name names a credential, health measure or identity, or that reads as one together with its value (`name: value`), is left out alone and counted; under `regulatedStrict` every string |
 | `groupingKey` | at most 8 parts of at most 100 characters | each part redacted and cut, empty parts left out, the first 8 kept; none left is no key |
+| `dependency` (`CrashDependency`) | `name` `^[a-z][a-z0-9_.-]{0,47}$`, a service's name and nothing else; `code` `^[A-Za-z0-9]{1,8}$` | an explicit one throws in a debug build; otherwise the dependency is left out and the event sent. One whose name or code a redaction pattern matches (a digit run of ten or more, a UUID, an IPv4 address, a name ending in a credential word) is left out too |
 | `extra` | below | left out or cut, silently |
 | the whole event | 65,536 bytes (64 KiB) of canonical JSON | the event is `dropped`; a large `extra` is the usual cause |
 
@@ -133,6 +134,7 @@ type's name instead, and any other type keeps its minified name.
 | tag strings | redacted and shortened to 100 chars in an event (ellipsis included) | the same |
 | breadcrumb message and details | the message redacted and cut to 200 chars, details per entry (above); `recentBreadcrumbs` keeps a step as recorded, its message up to 1000 | detail strings left out |
 | `groupingKey` | each part redacted and cut to 100 chars, empty parts left out, the first 8 kept; none left is no key | the same |
+| `dependency` | as declared, when the protocol takes it | the same |
 | offline store | any | must report `isEncrypted: true` or the config throws |
 
 ## Keys

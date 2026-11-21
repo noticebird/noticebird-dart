@@ -11,16 +11,16 @@ import 'support/crash_events.dart';
 void main() {
   group('toJson', () {
     test('the fixture built from its values is the fixture', () {
-      expect(v6Event().toJson(), v6Fixture());
+      expect(v7Event().toJson(), v7Fixture());
     });
 
     test('writes the current schema version', () {
-      expect(CrashEvent.schemaVersion, 6);
-      expect(v6Event().toJson()['schemaVersion'], CrashEvent.schemaVersion);
+      expect(CrashEvent.schemaVersion, 7);
+      expect(v7Event().toJson()['schemaVersion'], CrashEvent.schemaVersion);
     });
 
     test('toCanonicalJson encodes toJson', () {
-      final event = v6Event(
+      final event = v7Event(
         extra: const {
           'zone': 'eu',
           'attempt': {'retry': true, 'count': 2},
@@ -31,7 +31,7 @@ void main() {
     });
 
     test('an event without its optional fields leaves them out', () {
-      final json = v6Event(
+      final json = v7Event(
         routeTemplate: null,
         user: null,
         tags: const {},
@@ -39,6 +39,7 @@ void main() {
         breadcrumbs: const [],
         groupingKey: null,
         breadcrumbDrops: null,
+        dependency: null,
       ).toJson();
       expect(json.keys, isNot(contains('routeTemplate')));
       expect(json.keys, isNot(contains('user')));
@@ -47,6 +48,7 @@ void main() {
       expect(json.keys, isNot(contains('breadcrumbs')));
       expect(json.keys, isNot(contains('groupingKey')));
       expect(json.keys, isNot(contains('breadcrumbDrops')));
+      expect(json.keys, isNot(contains('dependency')));
     });
   });
 
@@ -63,7 +65,7 @@ void main() {
   group('every rule of an event', () {
     test('the event id has a UUID\'s shape', () {
       expectRefused(
-        v6Event(eventId: 'not-an-event-id'),
+        v7Event(eventId: 'not-an-event-id'),
         ProtocolViolation.invalidValue,
         r'$.eventId',
       );
@@ -105,7 +107,7 @@ void main() {
         ),
       ]) {
         expectRefused(
-          v6Event(exception: exception),
+          v7Event(exception: exception),
           ProtocolViolation.invalidValue,
           '\$.exception.$field',
         );
@@ -124,7 +126,7 @@ void main() {
         refusedWith(ProtocolViolation.invalidValue, r'$.app.name'),
       );
       expectRefused(
-        v6Event(app: longName),
+        v7Event(app: longName),
         ProtocolViolation.invalidValue,
         r'$.app.name',
       );
@@ -139,17 +141,17 @@ void main() {
         refusedWith(ProtocolViolation.invalidValue, r'$.platform.osVersion'),
       );
       expectRefused(
-        v6Event(platform: noOs),
+        v7Event(platform: noOs),
         ProtocolViolation.invalidValue,
         r'$.platform.osVersion',
       );
-      v6App.check();
-      v6Platform.check();
+      v7App.check();
+      v7Platform.check();
     });
 
     test('the session id matches its pattern', () {
       expectRefused(
-        v6Event(sessionId: 'short'),
+        v7Event(sessionId: 'short'),
         ProtocolViolation.invalidValue,
         r'$.sessionId',
       );
@@ -161,7 +163,7 @@ void main() {
         '/${'a' * CrashEvent.maxRouteTemplateLength}',
       ]) {
         expectRefused(
-          v6Event(routeTemplate: route),
+          v7Event(routeTemplate: route),
           ProtocolViolation.invalidValue,
           r'$.routeTemplate',
         );
@@ -174,7 +176,7 @@ void main() {
         refusedWith(ProtocolViolation.invalidValue, r'$.user'),
       );
       expectRefused(
-        v6Event(user: const CrashUser()),
+        v7Event(user: const CrashUser()),
         ProtocolViolation.invalidValue,
         r'$.user',
       );
@@ -189,7 +191,7 @@ void main() {
         (const CrashUser(name: ''), 'name'),
       ]) {
         expectRefused(
-          v6Event(user: user),
+          v7Event(user: user),
           ProtocolViolation.invalidValue,
           '\$.user.$field',
         );
@@ -204,12 +206,12 @@ void main() {
 
     test('a tag is a bounded scalar', () {
       expectRefused(
-        v6Event(tags: {AllowedTag.feature: 'x' * (maxTagValueLength + 1)}),
+        v7Event(tags: {AllowedTag.feature: 'x' * (maxTagValueLength + 1)}),
         ProtocolViolation.oversized,
         r'$.tags.feature',
       );
       expectRefused(
-        v6Event(
+        v7Event(
           tags: const {
             AllowedTag.feature: {'patient': 'forbidden'},
           },
@@ -219,7 +221,7 @@ void main() {
       );
       for (final number in [double.nan, double.infinity, -double.infinity]) {
         expectRefused(
-          v6Event(tags: {AllowedTag.retryCount: number}),
+          v7Event(tags: {AllowedTag.retryCount: number}),
           ProtocolViolation.invalidValue,
           r'$.tags.retryCount',
         );
@@ -235,7 +237,7 @@ void main() {
         true,
       ]) {
         expect(isTagValue(value), isTrue, reason: '$value');
-        v6Event(tags: {AllowedTag.feature: value}).toJson();
+        v7Event(tags: {AllowedTag.feature: value}).toJson();
       }
       for (final value in <TagScalar>[
         'x' * (maxTagValueLength + 1),
@@ -247,7 +249,7 @@ void main() {
       ]) {
         expect(isTagValue(value), isFalse, reason: '$value');
         expect(
-          () => v6Event(tags: {AllowedTag.feature: value}).toJson(),
+          () => v7Event(tags: {AllowedTag.feature: value}).toJson(),
           throwsA(isA<ProtocolException>()),
         );
       }
@@ -309,12 +311,12 @@ void main() {
       for (final MapEntry(key: name, value: (extra, violation, path))
           in cases.entries) {
         expect(
-          v6Event(extra: extra).toJson,
+          v7Event(extra: extra).toJson,
           refusedWith(violation, path),
           reason: name,
         );
       }
-      v6Event(
+      v7Event(
         extra: const {
           'http_status': 503,
           'request': {
@@ -328,10 +330,10 @@ void main() {
 
     test('at most 50 breadcrumbs, each checked as its check does', () {
       expectRefused(
-        v6Event(
+        v7Event(
           breadcrumbs: List.filled(
             CrashEvent.maxBreadcrumbs + 1,
-            v6Breadcrumb(),
+            v7Breadcrumb(),
           ),
         ),
         ProtocolViolation.oversized,
@@ -339,26 +341,26 @@ void main() {
       );
       for (final (breadcrumb, violation, path) in [
         (
-          v6Breadcrumb(action: 'Route.Push'),
+          v7Breadcrumb(action: 'Route.Push'),
           ProtocolViolation.invalidValue,
           r'$.breadcrumbs[].action',
         ),
         (
-          v6Breadcrumb(details: {'route': 'r' * 65}),
+          v7Breadcrumb(details: {'route': 'r' * 65}),
           ProtocolViolation.oversized,
           r'$.breadcrumbs[].details.route',
         ),
       ]) {
         expect(breadcrumb.check, refusedWith(violation, path));
-        expectRefused(v6Event(breadcrumbs: [breadcrumb]), violation, path);
+        expectRefused(v7Event(breadcrumbs: [breadcrumb]), violation, path);
       }
-      v6Breadcrumb().check();
+      v7Breadcrumb().check();
     });
 
     test('the breadcrumbs take at most 16 KiB together', () {
       // Steps of about 400 bytes: 50 or fewer of them, each under 512
       // bytes, already take more than 16 KiB together.
-      final step = v6Breadcrumb(
+      final step = v7Breadcrumb(
         message: 'm' * 200,
         details: {for (var i = 0; i < 3; i++) 'name$i': 'v' * 40},
       );
@@ -370,14 +372,14 @@ void main() {
         TypedBreadcrumb.trailBytes(atLimit),
         lessThanOrEqualTo(CrashEvent.maxBreadcrumbsBytes),
       );
-      v6Event(breadcrumbs: atLimit).toJson();
+      v7Event(breadcrumbs: atLimit).toJson();
       final over = List.filled(fitting + 1, step);
       expect(
         TypedBreadcrumb.trailBytes(over),
         greaterThan(CrashEvent.maxBreadcrumbsBytes),
       );
       expectRefused(
-        v6Event(breadcrumbs: over),
+        v7Event(breadcrumbs: over),
         ProtocolViolation.oversized,
         r'$.breadcrumbs',
       );
@@ -385,7 +387,7 @@ void main() {
 
     test('breadcrumbDrops counts what the client left out', () {
       expect(
-        v6Event(
+        v7Event(
           breadcrumbDrops: const BreadcrumbDrops(stepsDropped: 2),
         ).toJson()['breadcrumbDrops'],
         {'detailsDropped': 0, 'stepsDropped': 2},
@@ -396,7 +398,7 @@ void main() {
         BreadcrumbDrops(stepsDropped: -1),
       ]) {
         expectRefused(
-          v6Event(breadcrumbDrops: drops),
+          v7Event(breadcrumbDrops: drops),
           ProtocolViolation.invalidValue,
           r'$.breadcrumbDrops',
         );
@@ -410,7 +412,7 @@ void main() {
 
     test('the encoded event is at most 64 KiB', () {
       expectRefused(
-        v6Event(
+        v7Event(
           extra: {
             for (var i = 0; i < 4; i++)
               'k$i': List.filled(20, 'x' * CrashEvent.maxExtraStringLength),

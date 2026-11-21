@@ -95,8 +95,9 @@ final class NoticebirdFlutter {
   ///   back to the foreground, and when the connection returns;
   /// - fills each feedback report's locale with the platform's.
   ///
-  /// [privacyProfile], [pii], [shouldCapture], [breadcrumbBuffer] and
-  /// [beforeBreadcrumb] are the client's ([NoticebirdConfig]);
+  /// [privacyProfile], [pii], [shouldCapture], [dependencyOf],
+  /// [breadcrumbBuffer] and [beforeBreadcrumb] are the client's
+  /// ([NoticebirdConfig]);
   /// [onFeedbackSettled] and [feedbackContextDiagnostics] are its
   /// feedback's ([FeedbackConfig.onSettled],
   /// [FeedbackConfig.contextDiagnostics]).
@@ -121,6 +122,7 @@ final class NoticebirdFlutter {
     CrashPrivacyProfile privacyProfile = CrashPrivacyProfile.privacyDefault,
     CrashPiiConfig pii = const CrashPiiConfig(),
     bool Function(Object error)? shouldCapture,
+    CrashDependency? Function(Object error)? dependencyOf,
     int breadcrumbBuffer = FeedbackReport.maxTrailItems,
     NativeCrashCollector? nativeCrashes,
     void Function(FeedbackSettled settled)? onFeedbackSettled,
@@ -142,6 +144,7 @@ final class NoticebirdFlutter {
       privacyProfile: privacyProfile,
       pii: pii,
       shouldCapture: shouldCapture,
+      dependencyOf: dependencyOf,
       breadcrumbBuffer: breadcrumbBuffer,
       nativeCrashes: nativeCrashes,
       onFeedbackSettled: onFeedbackSettled,
@@ -172,6 +175,7 @@ final class NoticebirdFlutter {
     required CrashPrivacyProfile privacyProfile,
     required CrashPiiConfig pii,
     required bool Function(Object error)? shouldCapture,
+    required CrashDependency? Function(Object error)? dependencyOf,
     required int breadcrumbBuffer,
     required NativeCrashCollector? nativeCrashes,
     required void Function(FeedbackSettled settled)? onFeedbackSettled,
@@ -230,6 +234,7 @@ final class NoticebirdFlutter {
         app: _app(appName, packageInfo),
         pii: pii,
         shouldCapture: shouldCapture,
+        dependencyOf: dependencyOf,
         breadcrumbBuffer: breadcrumbBuffer,
         beforeBreadcrumb: beforeBreadcrumb,
         nativeCrashes: nativeCrashes,

@@ -8,7 +8,7 @@ environment:
   flutter: ">=3.32.0"
 
 dependencies:
-  noticebird_flutter: ^0.8.0
+  noticebird_flutter: ^0.9.0
   flutter:
     sdk: flutter
 

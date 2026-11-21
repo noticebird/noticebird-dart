@@ -143,8 +143,8 @@ void main() {
           sanitizedMessage: 'SIGSEGV',
           stackTrace: '<no-app-frames>',
         ),
-        app: v6App,
-        platform: v6Platform,
+        app: v7App,
+        platform: v7Platform,
         routeTemplate: null,
         sessionId: 'run_000640c9e21a4f3b8d17c2a95e04b6f1',
         nativeCrash: metricKitCrash,
@@ -158,7 +158,7 @@ void main() {
 
     test('the marker needs a native block', () {
       expectRefused(
-        v6Event(
+        v7Event(
           exception: const CrashException(
             type: 'StateError',
             sanitizedMessage: 'Bad state',

@@ -31,6 +31,13 @@ final client = NoticebirdClient(
     // Optional: errors the app reports at a report point of its own, which
     // captures them with `filtered: false`. Every channel honours it.
     shouldCapture: (error) => error is! MyDomainError,
+    // Optional: the service an error is the failure of, on every channel.
+    dependencyOf: (error) => error is TimeoutException
+        ? const CrashDependency(
+            name: 'database',
+            failure: DependencyFailure.timeout,
+          )
+        : null,
     // Optional: where an event that did not get through waits.
     offlineStore: FileCrashOfflineStore(directory),
   ),
@@ -53,7 +60,10 @@ stay unclaimed, for a build that uploads.
 `discarded`), its `eventId` the id of the event that stands for the error.
 `eventIdOf(error)` answers that id later from the error alone, also for an
 error a global handler captured without waiting; a later capture the filter
-ignores (the error rethrown after the host reported it) leaves it.
+ignores (the error rethrown after the host reported it) leaves it. Its
+`dependency` (a `CrashDependency`: the service that failed, how, and its own
+code) wins over the config's `dependencyOf`; the platform shows the issues
+whose events name the same failed service within minutes as one incident.
 
 `reportedContext` says what the client tells about the app and the device:
 the app, the platform (operating system, its version, the device class) and

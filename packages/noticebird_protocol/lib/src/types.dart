@@ -170,6 +170,91 @@ final class PlatformMetadata {
   }
 }
 
+/// How a dependency failed ([CrashDependency.failure]), a closed set: a
+/// reader refuses a name it does not know, so a value added later would
+/// break every older reader.
+enum DependencyFailure {
+  /// It did not answer in time.
+  timeout,
+
+  /// It answered that it cannot serve now: an HTTP 503, an aborted
+  /// transaction after a statement timeout, too many connections.
+  unavailable,
+
+  /// No connection was made, or it broke: refused, reset, a name that did
+  /// not resolve.
+  connection,
+
+  /// It refused the call for its rate: an HTTP 429.
+  rateLimited,
+
+  /// Any other failure on its side, such as an HTTP 500.
+  error,
+}
+
+/// A failure of a service the app depends on, declared by the app where it
+/// knows the error is that service's and not its own bug: an event's
+/// `dependency` (schema 7), such as
+/// `CrashDependency(name: 'database', failure: DependencyFailure.timeout,
+/// code: '57014')`.
+///
+/// [name] names the service that failed, never the endpoint or the call:
+/// the platform shows the events that name the same service within a few
+/// minutes of each other as one incident. It is a service's name and
+/// nothing else: [namePattern] keeps out free text and spaces, and
+/// [codePattern] long numbers too, not every personal value.
+final class CrashDependency {
+  const CrashDependency({required this.name, required this.failure, this.code});
+
+  /// The service that failed (`database`, `auth`, `payments`), by
+  /// [namePattern].
+  final String name;
+
+  /// How it failed.
+  final DependencyFailure failure;
+
+  /// The dependency's own code for the failure, such as a SQLSTATE
+  /// (`25P02`) or an HTTP status (`503`), by [codePattern].
+  final String? code;
+
+  /// A name: a lowercase letter first, then at most 47 lowercase letters,
+  /// digits, `_`, `.` and `-`.
+  static final namePattern = RegExp(r'^[a-z][a-z0-9_.-]{0,47}$');
+
+  /// A code: 1 to 8 letters and digits, so no phone number fits.
+  static final codePattern = RegExp(r'^[A-Za-z0-9]{1,8}$');
+
+  Map<String, Object?> toJson() => {
+    'name': name,
+    'failure': failure.name,
+    'code': ?code,
+  };
+
+  /// Refuses this dependency as an event's `dependency` refuses it, with a
+  /// [ProtocolException] at `$.dependency`: [name] by [namePattern] and
+  /// [code] by [codePattern].
+  void check() {
+    if (!namePattern.hasMatch(name)) {
+      throw const ProtocolException(
+        ProtocolViolation.invalidValue,
+        r'$.dependency.name',
+        'Invalid dependency name',
+      );
+    }
+    if (code case final code? when !codePattern.hasMatch(code)) {
+      throw const ProtocolException(
+        ProtocolViolation.invalidValue,
+        r'$.dependency.code',
+        'Invalid dependency code',
+      );
+    }
+  }
+
+  @override
+  String toString() =>
+      'CrashDependency(name: $name, failure: ${failure.name}, code: $code)';
+}
+
 /// Longest string a tag value may carry.
 ///
 /// A tag is a label to filter and group by, not a place for a sentence — the

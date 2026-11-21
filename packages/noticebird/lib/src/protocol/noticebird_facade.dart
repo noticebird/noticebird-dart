@@ -51,6 +51,7 @@ final class Noticebird {
     Map<AllowedTag, TagScalar> tags = const {},
     Map<String, Object?> extra = const {},
     List<String>? groupingKey,
+    CrashDependency? dependency,
     bool filtered = true,
   }) => _instance?.captureException(
     error,
@@ -60,6 +61,7 @@ final class Noticebird {
     tags: tags,
     extra: extra,
     groupingKey: groupingKey,
+    dependency: dependency,
     filtered: filtered,
   );
 

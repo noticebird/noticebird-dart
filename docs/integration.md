@@ -137,6 +137,7 @@ for (final failure in noticebird.platformReadFailures) {
 | `privacyProfile` | `privacyDefault` | §9. |
 | `pii` | all identity fields | §5. |
 | `shouldCapture` | none (capture everything) | The capture filter every channel asks; §4. |
+| `dependencyOf` | none | The service an error is the failure of, asked on every channel; §4. |
 | `breadcrumbBuffer` | 100 | The breadcrumbs kept in memory (50–200): the trail of a feedback report. |
 | `beforeBreadcrumb` | none | The app's own look at every breadcrumb: change it, or `null` to leave it out; §4. |
 | `nativeCrashes` | none (off) | `NativeCrashCapture()` from `noticebird_native`; §11. |
@@ -384,6 +385,94 @@ Noticebird.captureException(error, stack, handled: true, filtered: false);
 
 A filter that throws counts as `true`.
 
+### A dependency that failed
+
+When an error is the failure of a service the app depends on — the database
+timed out, the auth server answered 503 — and not a bug of the app's own,
+declare it. Noticebird keeps one issue per place in the code, and shows the
+issues whose events name the same failed service within a few minutes of
+each other as one incident, notified once:
+
+```dart
+await Noticebird.captureException(
+  error,
+  stack,
+  handled: true,
+  dependency: const CrashDependency(
+    name: 'database',
+    failure: DependencyFailure.timeout,
+    code: '57014',
+  ),
+);
+```
+
+- **`name`: the service that failed**, never the endpoint, the table or the
+  call: `database`, `auth`, `payments`. The name is what bundles issues into
+  one incident, so every failure of one service carries the same name (an
+  app on Supabase names every failure of its database `database`). It is a
+  service's name and nothing else: never a user, an account or any other
+  personal value. A lowercase letter, then at most 47 lowercase letters,
+  digits, `_`, `.` and `-` (`CrashDependency.namePattern`).
+- **`failure`**, one of five:
+
+  | `failure` | When |
+  |---|---|
+  | `timeout` | It did not answer in time. |
+  | `unavailable` | It answered that it cannot serve now: an HTTP 503, an aborted transaction after a statement timeout (`25P02`), too many connections (`53300`). |
+  | `connection` | No connection was made, or it broke: refused, reset, a name that did not resolve. |
+  | `rateLimited` | It refused the call for its rate: an HTTP 429. |
+  | `error` | Any other failure on its side, such as an HTTP 500. |
+
+- **`code`** (optional): the dependency's own code for the failure, such as
+  a SQLSTATE (`25P02`, `57014`) or an HTTP status (`503`); 1 to 8 letters and
+  digits (`CrashDependency.codePattern`).
+
+An error the app causes itself — a unique violation, a refused permission, a
+request the service rejects as invalid — is no dependency failure: declare
+none for it.
+
+For the errors that reach the global handlers, map the client library's
+exceptions once, with `dependencyOf`: every channel asks it, the explicit
+captures without a `dependency` of their own included, and a `dependency`
+passed to `captureException` wins over it. For Supabase:
+
+```dart
+await NoticebirdFlutter.start(
+  // …
+  dependencyOf: (error) => switch (error) {
+    PostgrestException(code: '57014') => const CrashDependency(
+      name: 'database',
+      failure: DependencyFailure.timeout,
+      code: '57014',
+    ),
+    PostgrestException(:final code?) when code == '25P02' || code == '53300' =>
+      CrashDependency(
+        name: 'database',
+        failure: DependencyFailure.unavailable,
+        code: code,
+      ),
+    TimeoutException() => const CrashDependency(
+      name: 'database',
+      failure: DependencyFailure.timeout,
+    ),
+    SocketException() => const CrashDependency(
+      name: 'database',
+      failure: DependencyFailure.connection,
+    ),
+    _ => null,
+  },
+);
+```
+
+A dependency never costs the event: one the protocol refuses is left out
+and the event sent without it, as if none was passed. A `dependency` passed
+to `captureException` throws an `ArgumentError` in a debug build instead, so
+the mistake shows while you look; a `dependencyOf` that throws or answers an
+invalid one gives the event none. One whose name or code reads as a phone
+number, an id, an IP address or a credential is left out too. The
+dependency is no part of an issue's grouping, and no part of the client's
+deduplication.
+
 ## 5. Optional user identity (PII)
 
 PII is only sent when your application explicitly calls `setUser` or
@@ -625,8 +714,9 @@ checks every event again when it arrives.
 `package:noticebird_flutter/testing.dart` (`package:noticebird/testing.dart`
 outside Flutter) holds `NoticebirdRecorder`: a real client whose events are
 recorded instead of sent, without a network. Its client builds, sanitizes and
-encodes each event as the app's does, and does not deduplicate, so a test sees
-a report made twice. The app's code and the navigator observer report to it
+encodes each event as the app's does, asks the `shouldCapture` and
+`dependencyOf` you give it as the app's client does, and does not
+deduplicate, so a test sees a report made twice. The app's code and the navigator observer report to it
 as they do in the app:
 
 ```dart

@@ -1,3 +1,15 @@
+## 0.9.0
+
+Moves with `noticebird` 0.9.0 and `noticebird_protocol` 0.9.0: crash events
+are of schema 7, which only a platform that reads it accepts.
+
+Changes:
+
+- `NoticebirdFlutter.start(dependencyOf:)` (the client's
+  `NoticebirdConfig.dependencyOf`): the service an error is the failure of,
+  for the error handlers, `reportZoneError` and every capture without a
+  `dependency` of its own.
+
 ## 0.8.0
 
 Moves with `noticebird` 0.8.0 and `noticebird_protocol` 0.8.0.

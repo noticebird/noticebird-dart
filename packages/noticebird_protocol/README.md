@@ -9,15 +9,17 @@ It provides typed metadata, the named limits and patterns of the fields a
 client writes, canonical JSON, a writer that checks an event before it
 returns it (`toJson`, `toCanonicalJson`, at most 64 KiB), the checks of a
 single value (`AppMetadata.check`, `PlatformMetadata.check`,
-`CrashUser.check`, `TypedBreadcrumb.check`, `NativeCrashInfo.check`), and
-the `PrivacyPatterns` a client redacts by.
+`CrashUser.check`, `TypedBreadcrumb.check`, `NativeCrashInfo.check`,
+`CrashDependency.check`), and the `PrivacyPatterns` a client redacts by.
 
-A crash event carries allowlisted scalar tags, breadcrumbs (a message first,
-with optional details: `TypedBreadcrumb`, schema 6), bounded
+A crash event (schema 7) carries allowlisted scalar tags, breadcrumbs (a
+message first, with optional details: `TypedBreadcrumb`), bounded
 free-form `extra` context, a bounded explicit `user` object, an optional,
 fully enumerated `native` block for crashes the operating system reported
 about an earlier run (frames as image offsets, never absolute addresses),
-and an optional `groupingKey`, the app's own grouping of an event. A client
+an optional `groupingKey`, the app's own grouping of an event, and an
+optional `dependency` (`CrashDependency`: the service that failed, a
+`DependencyFailure`, and its own code), which the app declares. A client
 writes the current schema version. The project, environment, and privacy
 profile are not accepted from event payloads; they come from the key.
 

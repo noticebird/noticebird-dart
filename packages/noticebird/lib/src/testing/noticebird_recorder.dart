@@ -42,17 +42,19 @@ final class RecordingCrashTransport implements CrashTransport {
 /// expect(recorder.events.single['handled'], isTrue);
 /// ```
 final class NoticebirdRecorder {
-  /// A recorder whose client asks [shouldCapture] as the host's does, under
-  /// [privacyProfile] and [pii], and stamps its events by [clock] when
-  /// given; a breadcrumb carries the time its observer gave it.
+  /// A recorder whose client asks [shouldCapture] and [dependencyOf] as the
+  /// host's does, under [privacyProfile] and [pii], and stamps its events by
+  /// [clock] when given; a breadcrumb carries the time its observer gave it.
   NoticebirdRecorder({
     bool Function(Object error)? shouldCapture,
+    CrashDependency? Function(Object error)? dependencyOf,
     CrashPrivacyProfile privacyProfile = CrashPrivacyProfile.privacyDefault,
     CrashPiiConfig pii = const CrashPiiConfig(),
     DateTime Function()? clock,
   }) : this._(
          RecordingCrashTransport(),
          shouldCapture,
+         dependencyOf,
          privacyProfile,
          pii,
          clock,
@@ -61,6 +63,7 @@ final class NoticebirdRecorder {
   NoticebirdRecorder._(
     this.transport,
     bool Function(Object error)? shouldCapture,
+    CrashDependency? Function(Object error)? dependencyOf,
     CrashPrivacyProfile privacyProfile,
     CrashPiiConfig pii,
     DateTime Function()? clock,
@@ -71,6 +74,7 @@ final class NoticebirdRecorder {
           platform: platform,
           pii: pii,
           shouldCapture: shouldCapture,
+          dependencyOf: dependencyOf,
           deduplicationWindow: Duration.zero,
         ),
         transport: transport,

@@ -1,3 +1,28 @@
+## 0.9.0
+
+Moves with `noticebird` 0.9.0, `noticebird_flutter` 0.9.0 and
+`noticebird_native` 0.9.0. The crash event's schema moves to 7; the
+feedback report's (3) is unchanged.
+
+An app on 0.9.0 sends crash schema 7, which only a platform that reads it
+accepts: an older platform refuses the event as an unsupported schema
+version. The hosted platform reads schema 7 before 0.9.0 is meant for
+release use.
+
+Changes:
+
+- `CrashDependency({required name, required failure, code})`, an event's
+  optional `dependency`: the failure of a service the app depends on,
+  declared by the app. `name` is the service that failed
+  (`CrashDependency.namePattern`, `^[a-z][a-z0-9_.-]{0,47}$`), `failure` a
+  `DependencyFailure` (`timeout`, `unavailable`, `connection`,
+  `rateLimited`, `error`, written by name), and `code` the dependency's own
+  code (`CrashDependency.codePattern`, `^[A-Za-z0-9]{1,8}$`).
+  `CrashDependency.check` refuses a name or a code outside its pattern at
+  `$.dependency.name` / `$.dependency.code`.
+- `CrashEvent.schemaVersion` is 7, and `CrashEvent.dependency` is written
+  as `{"name", "failure", "code"?}` when set.
+
 ## 0.8.0
 
 Moves with `noticebird` 0.8.0, `noticebird_flutter` 0.8.0 and

@@ -100,7 +100,7 @@ The SDK never picks an API by itself.
 | Concern | Options |
 |---|---|
 | Where it sends | `apiUrl` and `publishableKey` (above), `httpClient` (the host's HTTP stack), `uploadCrashes` (`false`: crash events are discarded, feedback is still sent) |
-| What an event carries | `privacyProfile`, `pii`, `shouldCapture`, `breadcrumbBuffer`, `beforeBreadcrumb` (the app's own scrubbing of every breadcrumb; `null` leaves one out) |
+| What an event carries | `privacyProfile`, `pii`, `shouldCapture`, `dependencyOf` (the service an error is the failure of, as a `CrashDependency`), `breadcrumbBuffer`, `beforeBreadcrumb` (the app's own scrubbing of every breadcrumb; `null` leaves one out) |
 | Feedback | `onFeedbackSettled`, `feedbackContextDiagnostics` (groups of the app's state taken with each report's moment) |
 | Native crashes | `nativeCrashes`: `NativeCrashCapture()` of `noticebird_native` |
 | Storage | `crashStore`, `feedbackStore`: the host's own stores in place of the default ones |

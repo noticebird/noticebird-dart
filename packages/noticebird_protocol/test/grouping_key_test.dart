@@ -7,7 +7,7 @@ import 'support/crash_events.dart';
 
 void main() {
   test('the key is written as given, its parts in order', () {
-    expect(v6Event().toJson()['groupingKey'], [
+    expect(v7Event().toJson()['groupingKey'], [
       'sync-refusal',
       '23505',
       'collections',
@@ -15,17 +15,17 @@ void main() {
   });
 
   test('an event without a key writes none', () {
-    expect(v6Event(groupingKey: null).toJson(), isNot(contains('groupingKey')));
+    expect(v7Event(groupingKey: null).toJson(), isNot(contains('groupingKey')));
   });
 
   test('a key has one to eight parts', () {
     expectRefused(
-      v6Event(groupingKey: const []),
+      v7Event(groupingKey: const []),
       ProtocolViolation.invalidValue,
       r'$.groupingKey',
     );
     expect(
-      v6Event(
+      v7Event(
         groupingKey: [
           for (var i = 0; i < CrashEvent.maxGroupingKeyParts; i++) 'part$i',
         ],
@@ -33,7 +33,7 @@ void main() {
       hasLength(CrashEvent.maxGroupingKeyParts),
     );
     expectRefused(
-      v6Event(
+      v7Event(
         groupingKey: [
           for (var i = 0; i <= CrashEvent.maxGroupingKeyParts; i++) 'part$i',
         ],
@@ -45,18 +45,18 @@ void main() {
 
   test('each part is a non-empty string of at most 100 characters', () {
     expectRefused(
-      v6Event(groupingKey: const ['sync-refusal', '']),
+      v7Event(groupingKey: const ['sync-refusal', '']),
       ProtocolViolation.invalidValue,
       r'$.groupingKey[]',
     );
     expect(
-      v6Event(
+      v7Event(
         groupingKey: ['a' * CrashEvent.maxGroupingKeyPartLength],
       ).toJson()['groupingKey'],
       ['a' * CrashEvent.maxGroupingKeyPartLength],
     );
     expectRefused(
-      v6Event(groupingKey: ['a' * (CrashEvent.maxGroupingKeyPartLength + 1)]),
+      v7Event(groupingKey: ['a' * (CrashEvent.maxGroupingKeyPartLength + 1)]),
       ProtocolViolation.oversized,
       r'$.groupingKey[]',
     );

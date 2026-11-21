@@ -1,6 +1,8 @@
 // The test support a host imports from package:noticebird/testing.dart: a
 // recorder whose real client reports to memory.
 
+import 'dart:async';
+
 import 'package:noticebird/noticebird.dart';
 import 'package:noticebird/testing.dart';
 import 'package:test/test.dart';
@@ -54,6 +56,25 @@ void main() {
     expect((await recorder.eventOf(error))?['eventId'], result.eventId);
     expect(await recorder.eventOf(ignored), isNull);
     expect(recorder.events, hasLength(1));
+  });
+
+  test('declares the dependency dependencyOf gives, as the host\'s client '
+      'does', () async {
+    final recorder = NoticebirdRecorder(
+      dependencyOf: (error) => error is TimeoutException
+          ? const CrashDependency(
+              name: 'database',
+              failure: DependencyFailure.timeout,
+            )
+          : null,
+    );
+
+    await recorder.client.captureException(TimeoutException('slow'), _stack);
+
+    expect(recorder.events.single['dependency'], {
+      'name': 'database',
+      'failure': 'timeout',
+    });
   });
 
   test('attaches to the facade, and detaches when closed', () async {

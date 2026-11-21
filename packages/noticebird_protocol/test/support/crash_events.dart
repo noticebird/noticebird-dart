@@ -1,5 +1,5 @@
 // Events built as a client builds them, for the crash event's tests: each
-// argument defaults to the value of `test/fixtures/v6_event.json`.
+// argument defaults to the value of `test/fixtures/v7_event.json`.
 
 import 'dart:convert';
 import 'dart:io';
@@ -7,31 +7,31 @@ import 'dart:io';
 import 'package:noticebird_protocol/noticebird_protocol.dart';
 import 'package:test/test.dart';
 
-/// `test/fixtures/v6_event.json`, decoded.
-Map<String, Object?> v6Fixture() => Map<String, Object?>.from(
-  jsonDecode(File('test/fixtures/v6_event.json').readAsStringSync()) as Map,
+/// `test/fixtures/v7_event.json`, decoded.
+Map<String, Object?> v7Fixture() => Map<String, Object?>.from(
+  jsonDecode(File('test/fixtures/v7_event.json').readAsStringSync()) as Map,
 );
 
-const v6Exception = CrashException(
+const v7Exception = CrashException(
   type: 'SyncRefused',
   sanitizedMessage: 'Refused: 23505 on collections',
   stackTrace: '#0 SyncWriter.push (package:app_sync/sync_writer.dart:88:5)',
 );
 
-const v6App = AppMetadata(
+const v7App = AppMetadata(
   name: 'justorganize',
   version: '1.0.0',
   build: '100',
   release: 'justorganize@1.0.0+100',
 );
 
-const v6Platform = PlatformMetadata(
+const v7Platform = PlatformMetadata(
   platform: CrashPlatform.macos,
   osVersion: '15.5',
   deviceClass: 'desktop',
 );
 
-TypedBreadcrumb v6Breadcrumb({
+TypedBreadcrumb v7Breadcrumb({
   String message = 'Opened page',
   String? action = 'route.push',
   String? category = 'navigation',
@@ -52,17 +52,17 @@ TypedBreadcrumb v6Breadcrumb({
 );
 
 /// The fixture's second step: a time and a message, nothing else.
-final v6MinimalBreadcrumb = TypedBreadcrumb(
+final v7MinimalBreadcrumb = TypedBreadcrumb(
   at: DateTime.utc(2026, 7, 11, 10, 14, 59, 500),
   message: 'Synced the list',
 );
 
 /// The fixture's event, with any field replaced.
-CrashEvent v6Event({
+CrashEvent v7Event({
   String eventId = '0197f232-2bd8-7000-8000-000000000005',
-  CrashException exception = v6Exception,
-  AppMetadata app = v6App,
-  PlatformMetadata platform = v6Platform,
+  CrashException exception = v7Exception,
+  AppMetadata app = v7App,
+  PlatformMetadata platform = v7Platform,
   String? routeTemplate = '/lists/:listId',
   String sessionId = 'random_session_123456',
   CrashUser? user = const CrashUser(id: 'user_abc123'),
@@ -75,6 +75,11 @@ CrashEvent v6Event({
   NativeCrashInfo? nativeCrash,
   List<String>? groupingKey = const ['sync-refusal', '23505', 'collections'],
   BreadcrumbDrops? breadcrumbDrops = const BreadcrumbDrops(detailsDropped: 1),
+  CrashDependency? dependency = const CrashDependency(
+    name: 'database',
+    failure: DependencyFailure.unavailable,
+    code: '25P02',
+  ),
 }) => CrashEvent(
   eventId: eventId,
   occurredAt: DateTime.utc(2026, 7, 11, 10, 15),
@@ -88,10 +93,11 @@ CrashEvent v6Event({
   user: user,
   tags: tags,
   extra: extra,
-  breadcrumbs: breadcrumbs ?? [v6Breadcrumb(), v6MinimalBreadcrumb],
+  breadcrumbs: breadcrumbs ?? [v7Breadcrumb(), v7MinimalBreadcrumb],
   nativeCrash: nativeCrash,
   groupingKey: groupingKey,
   breadcrumbDrops: breadcrumbDrops,
+  dependency: dependency,
 );
 
 /// A native crash as MetricKit reports one: a frame in no image, two in the
@@ -125,8 +131,8 @@ const metricKitCrash = NativeCrashInfo(
 );
 
 /// A native event, as a client builds one of [native]: the marker as its
-/// stack trace, and no grouping key.
-CrashEvent nativeEvent([NativeCrashInfo native = metricKitCrash]) => v6Event(
+/// stack trace, and no grouping key or dependency.
+CrashEvent nativeEvent([NativeCrashInfo native = metricKitCrash]) => v7Event(
   exception: const CrashException(
     type: 'EXC_BAD_ACCESS/SIGBUS',
     sanitizedMessage: 'EXC_BAD_ACCESS (SIGBUS) code 0x32',
@@ -134,6 +140,7 @@ CrashEvent nativeEvent([NativeCrashInfo native = metricKitCrash]) => v6Event(
   ),
   nativeCrash: native,
   groupingKey: null,
+  dependency: null,
 );
 
 /// Refused with [violation] at [path].

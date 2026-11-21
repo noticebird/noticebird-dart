@@ -1,7 +1,8 @@
 // NoticebirdFlutter.start against fake platforms and a fake HTTP client: what
 // it wires (the client on the facade, the app's version, the default stores,
-// the handlers, the breadcrumb hook, delivery when the connection returns),
-// a key that cannot work, a background start, and close.
+// the handlers, the breadcrumb hook, the dependency of an error, delivery
+// when the connection returns), a key that cannot work, a background start,
+// and close.
 
 import 'dart:convert';
 import 'dart:io';
@@ -401,6 +402,28 @@ void main() {
       ['List opened'],
     );
     expect((report['diagnostics']! as Map)['sync'], {'pending': 2});
+  });
+
+  test('dependencyOf reaches the client the start makes', () async {
+    started = await NoticebirdFlutter.start(
+      apiUrl: _api,
+      publishableKey: _key,
+      appName: 'example_app',
+      httpClient: httpClient,
+      dependencyOf: (error) => error is SocketException
+          ? const CrashDependency(
+              name: 'database',
+              failure: DependencyFailure.connection,
+            )
+          : null,
+    );
+
+    await Noticebird.captureException(const SocketException('refused'), _stack);
+
+    expect(envelopes().single['dependency'], {
+      'name': 'database',
+      'failure': 'connection',
+    });
   });
 
   test('a handler the host set after the start stays at close', () async {

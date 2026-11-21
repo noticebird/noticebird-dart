@@ -1,3 +1,30 @@
+## 0.9.0
+
+Moves with `noticebird_protocol` 0.9.0: crash events are of schema 7. An
+app on 0.9.0 needs a platform that reads schema 7; an older one refuses its
+events as an unsupported schema version. The hosted platform reads it
+before 0.9.0 is meant for release use.
+
+Changes:
+
+- `captureException(..., dependency:)`, and the facade's the same: a
+  `CrashDependency` declares that the error is the failure of a service the
+  app depends on (`database`, `auth`, `payments`). The platform keeps one
+  issue per place in the code and shows the issues whose events name the
+  same failed service within minutes as one incident.
+- `NoticebirdConfig.dependencyOf(Object error)`: the dependency of an error
+  on every channel, as `shouldCapture` is asked; a `dependency` passed to
+  `captureException` wins over it.
+- A dependency never costs the event: one `CrashDependency.check` refuses
+  is left out and the event sent, as if none was passed. A `dependency`
+  passed to `captureException` throws an `ArgumentError` in a debug build
+  instead; a `dependencyOf` that throws or answers an invalid one gives
+  none. One whose name or code a redaction pattern matches (a digit run of
+  ten or more, a UUID, an IPv4 address, a name ending in a credential word)
+  is left out whole. The dependency is no part of the client's
+  deduplication, and a queued event keeps it.
+- `NoticebirdRecorder(dependencyOf:)`, asked as the app's client asks it.
+
 ## 0.8.0
 
 Moves with `noticebird_protocol` 0.8.0: a breadcrumb is a message first,

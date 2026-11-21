@@ -13,8 +13,8 @@ import 'types.dart';
 /// [ProtocolException] whose path names the offending value. The checks of
 /// a value a client sets before an event is built are public on its type:
 /// [AppMetadata.check], [PlatformMetadata.check], [CrashUser.check],
-/// [TypedBreadcrumb.check], [BreadcrumbDrops.check] and
-/// [NativeCrashInfo.check].
+/// [TypedBreadcrumb.check], [BreadcrumbDrops.check],
+/// [NativeCrashInfo.check] and [CrashDependency.check].
 final class CrashEvent {
   const CrashEvent({
     required this.eventId,
@@ -33,10 +33,11 @@ final class CrashEvent {
     this.nativeCrash,
     this.groupingKey,
     this.breadcrumbDrops,
+    this.dependency,
   });
 
   /// The schema version [toJson] writes, the only one it writes.
-  static const schemaVersion = 6;
+  static const schemaVersion = 7;
   static const maxEncodedBytes = 65536;
 
   /// An event id: 36 hex digits and dashes, a UUID's shape.
@@ -107,6 +108,11 @@ final class CrashEvent {
   /// absent when it left out nothing.
   final BreadcrumbDrops? breadcrumbDrops;
 
+  /// The failure of a service the app depends on that this event reports
+  /// (schema 7), declared by the app: absent for an error of the app's own.
+  /// No part of the grouping: one issue per place in the code stays.
+  final CrashDependency? dependency;
+
   /// This event as the wire's JSON object at [schemaVersion], checked by
   /// every rule of an event, then the [maxEncodedBytes] of its encoding. An
   /// event the platform would refuse for its shape throws a
@@ -133,6 +139,7 @@ final class CrashEvent {
       if (nativeCrash != null) 'native': nativeCrash!.toJson(),
       if (groupingKey != null) 'groupingKey': groupingKey,
       if (breadcrumbDrops != null) 'breadcrumbDrops': breadcrumbDrops!.toJson(),
+      if (dependency != null) 'dependency': dependency!.toJson(),
     };
     if (utf8.encode(canonicalJsonEncode(json)).length > maxEncodedBytes) {
       throw const ProtocolException(
@@ -212,6 +219,7 @@ final class CrashEvent {
       );
     }
     breadcrumbDrops?.check();
+    dependency?.check();
   }
 
   /// The [nativeCrash] and the [nativeStackTraceMarker] require each other.

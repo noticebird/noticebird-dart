@@ -119,6 +119,17 @@ List<String>? sanitizeGroupingKey(List<String> groupingKey) {
   return parts.isEmpty ? null : List.unmodifiable(parts);
 }
 
+/// [dependency] as an event carries it, or `null` when a redaction pattern
+/// matches its name or its code (a phone-number-like digit run, a UUID, an
+/// IPv4 address, a name that ends in a credential word): a name is a
+/// service's and nothing else, so such a dependency is left out whole rather
+/// than redacted, never the event.
+CrashDependency? sanitizeDependency(CrashDependency dependency) =>
+    _holdsMatch(dependency.name) ||
+        (dependency.code != null && _holdsMatch(dependency.code!))
+    ? null
+    : dependency;
+
 /// [breadcrumb] as an event or a feedback report carries it, and how many
 /// of its values were left out ([SanitizedBreadcrumb]); its `step` is
 /// `null` when the protocol refuses it even so ([TypedBreadcrumb.check]),
