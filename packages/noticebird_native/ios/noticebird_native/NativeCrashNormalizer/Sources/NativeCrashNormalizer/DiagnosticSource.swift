@@ -2,7 +2,9 @@ import Foundation
 
 /// One diagnostic as the operating system delivered it, before
 /// normalization. It lives in memory only: the raw JSON is never persisted.
-public struct DiagnosticReport: Sendable {
+/// Not `DiagnosticReport`: MetricKit declares a type of that name since the
+/// iOS 27 SDK, and the plugin imports both modules.
+public struct NativeDiagnosticReport: Sendable {
     public var kind: DiagnosticKind
     /// The delivering payload's `timeStampBegin`.
     public var occurredAtMs: Int64
@@ -35,7 +37,7 @@ public struct DiagnosticReport: Sendable {
 public protocol DiagnosticSource: AnyObject {
     /// Starts delivering reports to [handler], on any thread. Called once per
     /// process.
-    func start(_ handler: @escaping ([DiagnosticReport]) -> Void)
+    func start(_ handler: @escaping ([NativeDiagnosticReport]) -> Void)
 }
 
 /// Milliseconds since the epoch of [date], or nil when it has none.

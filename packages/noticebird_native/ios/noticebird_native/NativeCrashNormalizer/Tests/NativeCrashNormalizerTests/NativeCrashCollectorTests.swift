@@ -8,9 +8,9 @@ import XCTest
 final class NativeCrashCollectorTests: XCTestCase {
     private final class FakeSource: DiagnosticSource {
         private(set) var starts = 0
-        private(set) var handler: (([DiagnosticReport]) -> Void)?
+        private(set) var handler: (([NativeDiagnosticReport]) -> Void)?
 
-        func start(_ handler: @escaping ([DiagnosticReport]) -> Void) {
+        func start(_ handler: @escaping ([NativeDiagnosticReport]) -> Void) {
             starts += 1
             self.handler = handler
         }
@@ -102,8 +102,8 @@ final class NativeCrashCollectorTests: XCTestCase {
         wait(for: [done], timeout: 5)
     }
 
-    private func report(at occurredAtMs: Int64) -> DiagnosticReport {
-        DiagnosticReport(kind: .crash, occurredAtMs: occurredAtMs, json: Data("{}".utf8))
+    private func report(at occurredAtMs: Int64) -> NativeDiagnosticReport {
+        NativeDiagnosticReport(kind: .crash, occurredAtMs: occurredAtMs, json: Data("{}".utf8))
     }
 
     private func run(_ letter: Character) -> RunInfo {

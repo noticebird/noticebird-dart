@@ -268,7 +268,7 @@ final class NativeCrashStore {
     /// Normalizes and records what a delivery holds, under the current
     /// state; returns how many records it added to the inbox. A dormant run
     /// drops it unread.
-    func ingest(_ reports: [DiagnosticReport], inAppBinaryNames: Set<String>, nowMs: Int64) -> Int {
+    func ingest(_ reports: [NativeDiagnosticReport], inAppBinaryNames: Set<String>, nowMs: Int64) -> Int {
         guard !dormant else { return 0 }
         let state = loadState()
         guard state.enabled else { return 0 }

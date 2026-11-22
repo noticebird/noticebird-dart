@@ -1,3 +1,8 @@
+## 0.9.1
+
+Moves with `noticebird_native` 0.9.1, which builds with the iOS 27 SDK. No
+change in this package.
+
 ## 0.9.0
 
 Moves with `noticebird` 0.9.0, `noticebird_flutter` 0.9.0 and

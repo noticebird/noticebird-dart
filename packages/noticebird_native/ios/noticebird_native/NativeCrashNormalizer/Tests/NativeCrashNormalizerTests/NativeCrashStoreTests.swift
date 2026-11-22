@@ -66,12 +66,12 @@ final class NativeCrashStoreTests: XCTestCase {
 
     /// A report whose record carries only the required fields: distinct per
     /// time, so distinct per id.
-    private func bare(_ occurredAtMs: Int64, _ kind: DiagnosticKind = .crash) -> DiagnosticReport {
-        DiagnosticReport(kind: kind, occurredAtMs: occurredAtMs, json: Data("{}".utf8))
+    private func bare(_ occurredAtMs: Int64, _ kind: DiagnosticKind = .crash) -> NativeDiagnosticReport {
+        NativeDiagnosticReport(kind: kind, occurredAtMs: occurredAtMs, json: Data("{}".utf8))
     }
 
-    private func fixture(_ name: String, _ kind: DiagnosticKind = .crash, at occurredAtMs: Int64) throws -> DiagnosticReport {
-        DiagnosticReport(kind: kind, occurredAtMs: occurredAtMs, json: try fixtureData(name), hangDurationMs: 2500)
+    private func fixture(_ name: String, _ kind: DiagnosticKind = .crash, at occurredAtMs: Int64) throws -> NativeDiagnosticReport {
+        NativeDiagnosticReport(kind: kind, occurredAtMs: occurredAtMs, json: try fixtureData(name), hangDurationMs: 2500)
     }
 
     private func json(_ path: String) -> JSONValue? {

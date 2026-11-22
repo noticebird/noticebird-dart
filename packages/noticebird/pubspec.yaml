@@ -1,6 +1,6 @@
 name: noticebird
 description: Privacy-safe crash reporting and user feedback for Dart, the client of Noticebird. A Flutter app starts it with noticebird_flutter.
-version: 0.9.0
+version: 0.9.1
 publish_to: 'none'
 resolution: workspace
 repository: https://github.com/noticebird/noticebird-dart

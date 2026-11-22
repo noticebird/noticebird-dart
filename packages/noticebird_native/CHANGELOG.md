@@ -1,3 +1,11 @@
+## 0.9.1
+
+- Builds with the iOS 27 SDK (Xcode 27): the diagnostic the MetricKit
+  collector hands the normalizer is `NativeDiagnosticReport`, since MetricKit
+  now declares a `DiagnosticReport` of its own and the plugin's Swift no
+  longer compiled ("'DiagnosticReport' is ambiguous for type lookup"). No
+  change to what is collected or sent.
+
 ## 0.9.0
 
 - Moves with `noticebird` 0.9.0 and `noticebird_protocol` 0.9.0. A native

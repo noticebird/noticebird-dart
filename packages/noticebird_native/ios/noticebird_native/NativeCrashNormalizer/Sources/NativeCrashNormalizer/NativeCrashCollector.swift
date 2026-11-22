@@ -121,7 +121,7 @@ public final class NativeCrashCollector {
 
     // MARK: - Deliveries
 
-    private func receive(_ reports: [DiagnosticReport]) {
+    private func receive(_ reports: [NativeDiagnosticReport]) {
         queue.async { [self] in
             guard let store = currentStore() else { return }
             let added = store.ingest(reports, inAppBinaryNames: inAppBinaryNames(), nowMs: clock())

@@ -1,6 +1,6 @@
 name: noticebird_flutter
 description: Noticebird for Flutter apps — one start installs crash reporting, breadcrumbs, offline delivery and user feedback.
-version: 0.9.0
+version: 0.9.1
 publish_to: 'none'
 resolution: workspace
 repository: https://github.com/noticebird/noticebird-dart
